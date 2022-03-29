@@ -3,9 +3,9 @@ This document is created for intern use only in the Terralization Company.
 
 Structure for the mods folder at the solder server
 Example 1
-    Mods
-        [modslug]
-            [modslug-ver].zip
+    + Mods
+        + [modslug]
+            + [modslug-ver].zip
 Structure for zipped files
 Example 1 (Regular mods):
     [modslug-mcver-modver].zip
