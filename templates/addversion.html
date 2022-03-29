@@ -1,7 +1,21 @@
 {%extends "layout.html"%} {%block head%}
 <title>Thorfusion</title>
 
-{%endblock%}{%block header%} {%endblock%}{%block main%} {% endblock %} {%block
+{%endblock%}{%block header%} {%endblock%}{%block main%}
+<form>
+    <p>selected mod</p>
+    <label for="modver">Mod Version:</label><br>
+    <input type="text" id="modver" name="modver"><br>
+    <p>drop jar file</p>
+    <p>md5 hash</p>
+    <p>file size</p>
+    <input type="submit" value="submit"><br>
+    <p>file location</p>
+    <p>selected mod</p>
+</form>
+
+
+{% endblock %} {%block
 aside%}
 <aside></aside>
 {% endblock %}
