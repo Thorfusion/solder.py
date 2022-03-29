@@ -1,12 +1,12 @@
 import os 
-from os.path import basename
+import io
 from db_config import add_modversion_db, select_all_mods, select_mod
 from flask import Flask, render_template, request, request_started, url_for
 from zipfile import ZipFile
-
+from werkzeug.utils import secure_filename
 
 app=Flask(__name__)
-app.config["UPLOAD_FOLDER"] = "/temp/"
+app.config["UPLOAD_FOLDER"] = "./mods/"
 
 def createFolder(dirName):
         if not os.path.exists(dirName):
@@ -29,14 +29,15 @@ def addversion(id):
                 modver = request.form["modver"]
                 jarfile = request.files["jarfile"]
                 if (modver!="" and jarfile!=""):
+                        jarfile.save(secure_filename(jarfile.filename))
                         size=len(jarfile.read())
                         name=jarfile.filename.strip(".jar")
                      #   createFolder("/mods")
-                        createFolder("/mods/"+modSlug)                        
-                        zipObj = ZipFile(modSlug+"-"+modver, 'w')
-                        filePath = os.path.join("mods", name+".jar")
-                        zipObj.write(filePath, basename(filePath))
-                       
+                        createFolder("mods/"+modSlug)                        
+                        #zipObj = ZipFile(modSlug+"-"+modver, 'w')
+                     
+                        #zipObj.write(jarfile.read())
+                        #zipObj.close()
                         
                         #add_modversion_db(id,modver,hash,size)
                         
