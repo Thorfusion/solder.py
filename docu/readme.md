@@ -2,5 +2,5 @@
 
 Zipfile structure examples
 + [Official docs](https://docs.solder.io/docs/zip-file-structure)
-+ [Thorfusion](/modslug.md)
++ [Thorfusion](/docu/modslug.md)
 + Examplemod folder
