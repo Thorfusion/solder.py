@@ -1,5 +1,4 @@
 Solder structure
-This document is created for intern use only in the Terralization Company.
 
 ## Structure for the mods folder at the solder server
 ### Example 1
