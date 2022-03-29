@@ -1,0 +1,20 @@
+{%extends "layout.html"%} {%block head%}
+<title>Thorfusion</title>
+
+{%endblock%}{%block header%} {%endblock%}{%block main%}
+
+<table>
+  {%for mod in mods%}
+  <tr>
+    <td>{{mod.name}}</td>
+    <td>{{mod.desc}}</td>
+    <td>{{mod.author}}</td>
+    <td>{{mod.link}}</td>
+  </tr>
+
+  {%endfor%}
+</table>
+
+{% endblock %} {%block aside%}
+<aside></aside>
+{% endblock %}

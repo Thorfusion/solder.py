@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="{{url_for('static',filename='css/index.css')}}"
+    />
+    <link
+      rel="shortcut icon"
+      href="{{url_for('static', filename='images/THORFUSION_OFFICIALfav.png')}}"
+      type="image/x-icon"
+    />
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <header>
+      <a href="/">
+        <div>
+          <h1>PoldenTek</h1>
+          <h2>Based in Norway</h2>
+        </div>
+      </a>
+      <span> {% block header %} {% endblock %} </span>
+    </header>
+
+    <main>{%block main%}{% endblock %}</main>
+    {%block aside%}<!-- aside skal egentligt ligge i main ifølge w3c-->{%
+    endblock %}
+    <footer>Thorfusion Copyright 2022.</footer>
+  </body>
+</html>
