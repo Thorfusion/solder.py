@@ -2,10 +2,11 @@
 <title>Thorfusion</title>
 
 {%endblock%}{%block header%} {%endblock%}{%block main%}
-<form method="POST">
-  <p>selected mod</p>
+<form enctype="multipart/form-data" method="POST">
+  <h3>{{modSlug}}</h3>
   <label for="modver">Mod Version:</label><br />
   <input type="text" id="modver" name="modver" /><br />
+  <input type="file" id="jarfile" name="jarfile" />
   <p>drop jar file</p>
   <p>md5 hash</p>
   <p>file size</p>

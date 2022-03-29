@@ -34,6 +34,16 @@ def select_all_mods():
                  "link": link})
         conn.close()
         return mods
+def select_mod(id):
+        conn=connect()
+        cur = conn.cursor()
+        sql=("SELECT * FROM mods WHERE id=?")
+        try:
+                cur.execute(sql,([id]))
+                return cur.fetchall()[0][1]
+        except Exception as e:
+                message("feil ved å hente enkel mod", e)
+       
 
 def add_modversion_db(mod_id,version,hash,filesize):
         conn=connect()
