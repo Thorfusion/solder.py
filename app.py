@@ -5,10 +5,12 @@ app=Flask(__name__)
 @app.route("/")
 def index():
         
-        mods=select_all_mods();
-        
+        mods=select_all_mods()
         return render_template("index.html",mods=mods )
-
+@app.route("/addversion/<id>")
+def addversion(id):
+        return render_template("addversion.html" )
+        
 @app.errorhandler(404)
 def page_not_found(e):
   return render_template('404.html',error=e), 404

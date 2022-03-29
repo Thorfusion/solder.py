@@ -19,7 +19,7 @@ def connect():
 def select_all_mods():
         conn=connect()
         cur = conn.cursor()
-        cur.execute("SELECT * FROM mods")
+        cur.execute("SELECT * FROM mods ORDER ASC")
         mods = []
         for (id, name, description, author, link, created_at, created_at , created_at) in cur:
                 mods.append({
@@ -31,4 +31,10 @@ def select_all_mods():
         conn.close()
         return mods
 
-        
+def add_modversion(mod_id):
+        conn=connect()
+        cur = conn.cursor()
+        sql=("INSERT INTO modversions(mod_id,version) VALUES=?")
+
+        conn.close()
+        return mods
