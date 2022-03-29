@@ -1,5 +1,10 @@
 # Solder structure
 
+Because Solder doesn't do any file handling yet you will need to manually manage your set of mods in your repository. The mod repository structure is very strict and must match your Solder data exact. An example of your mod directory structure will be listed below:
+
++ /mods/[modslug]/
++ /mods/[modslug]/[modslug]-[version].zip
+
 ## Structure for the mods folder at the solder server
 ### Example 1
 
