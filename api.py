@@ -58,7 +58,7 @@ def modpack():
                 fulldata["latest"] = info["latest"]
                 builds: list = []
                 for version in info["builds"]:
-                    builds.apiend(version["version"])
+                    builds.append(version["version"])
                 fulldata["builds"] = builds
                 modpacks[filename.removesuffix(".json")] = fulldata
             else:
@@ -86,7 +86,7 @@ def modpack_slug(slug: str):
             modpack["latest"] = info["latest"]
             builds = []
             for version in info["builds"]:
-                builds.apiend(version["version"])
+                builds.append(version["version"])
             modpack["builds"] = builds
             return jsonify(modpack)
     except FileNotFoundError:
