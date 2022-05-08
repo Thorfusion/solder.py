@@ -1,14 +1,7 @@
 import json
 import os
-from os import getenv
 
-from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
-
-load_dotenv(".env")
-
-api_key = getenv("API_KEY")
-mirror_url = getenv("URL")
 
 api = Blueprint("api", __name__)
 
