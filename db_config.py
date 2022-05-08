@@ -108,6 +108,7 @@ def init_db() -> None:
                 modpacks_create BOOLEAN DEFAULT 0,
                 modpacks_manage BOOLEAN DEFAULT 0,
                 modpacks_delete BOOLEAN DEFAULT 0,
+                modpacks TEXT
                 )"""
     )
     cur.execute(
