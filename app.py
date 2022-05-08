@@ -15,8 +15,7 @@ app.config["UPLOAD_FOLDER"] = "./mods/"
 
 
 def createFolder(dirName):
-    if not os.path.exists(dirName):
-        os.makedirs(dirName)
+        os.makedirs(dirName, exist_ok=True)
 
 
 @app.route("/")
