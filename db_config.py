@@ -204,3 +204,13 @@ def add_modversion_db(mod_id, version, hash, filesize):
     except Exception as e:
         message("en feil oppstod ved å legge inn ny modverisjon", e)
     conn.close()
+
+def get_api_key(key: str) -> list[str]:
+        conn = connect()
+        cur = conn.cursor()
+        sql = "SELECT * FROM keys WHERE api_key=?"
+        try:
+                cur.execute(sql, (key))
+                return cur.fetchall()
+        except Exception as e:
+                message("An error occurred whilst trying to fetch an API key", e)
