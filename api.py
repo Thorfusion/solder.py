@@ -23,6 +23,7 @@ def verify(key: str = None):
 @api.route("/api/verify/<key>")
 def verify_key(key: str = None):
     key = get_api_key(key)
+    print(key)
     if key:
         return jsonify(
             {

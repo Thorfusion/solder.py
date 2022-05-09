@@ -206,10 +206,10 @@ def add_modversion_db(mod_id, version, hash, filesize):
 
 def get_api_key(key: str) -> list[str]:
         conn = connect()
-        cur = conn.cursor()
-        sql = "SELECT * FROM keys WHERE api_key=?"
+        cur = conn.cursor(dictionary=True)
+        sql = "SELECT * FROM `keys` WHERE api_key = %s"
         try:
-                cur.execute(sql, (key))
-                return cur.fetchall()
+                cur.execute(sql, (key,))
+                return cur.fetchone()
         except Exception as e:
                 message("An error occurred whilst trying to fetch an API key", e)
