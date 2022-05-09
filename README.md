@@ -1,4 +1,4 @@
-# solder.py
+# ![solder.py](https://files.thorfusion.com/images/solder.py.png)
 
 
 # virtual environment local version of flask and other "dependencies"
