@@ -134,3 +134,6 @@ dmypy.json
 
 # Database dumps
 *.sql
+
+# Private files
+.env

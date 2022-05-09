@@ -1,13 +1,17 @@
 import json
 import os
-
+from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
+
+from db_config import get_api_key, select_all_modpacks
 
 api = Blueprint("api", __name__)
 
+load_dotenv(".env")
+mirror_url = os.getenv("SOLDER_MIRROR_URL")
 
 @api.route("/api/")
-def api():
+def api_info():
     return jsonify({"api": "solder.py", "version": "v0.0.1a", "stream": "DEV"})
 
 
@@ -18,11 +22,12 @@ def verify(key: str = None):
 
 @api.route("/api/verify/<key>")
 def verify_key(key: str = None):
-    if key == api_key:
+    key = get_api_key(key)
+    if key:
         return jsonify(
             {
                 "valid": "Key validated.",
-                "name": "API KEY",
+                "name": key['name'],
                 "created_at": "1970-01-01T00:00:00+00:00",
             }
         )
@@ -32,31 +37,7 @@ def verify_key(key: str = None):
 
 @api.route("/api/modpack")
 def modpack():
-    modpacks: dict = {}
-    for filename in os.listdir("./modpacks"):
-        with open(f"modpacks/{filename}", "r") as f:
-            info = json.load(f)
-            if request.args.get("include") == "full":
-                fulldata: dict = {}
-                fulldata["name"] = filename.removesuffix(".json")
-                fulldata["display_name"] = info["display_name"]
-                fulldata["url"] = info["url"]
-                fulldata["icon"] = info["icon"]
-                fulldata["icon_md5"] = info["icon_md5"]
-                fulldata["logo"] = info["logo"]
-                fulldata["logo_md5"] = info["logo_md5"]
-                fulldata["background"] = info["background"]
-                fulldata["background_md5"] = info["background_md5"]
-                fulldata["recommended"] = info["recommended"]
-                fulldata["latest"] = info["latest"]
-                builds: list = []
-                for version in info["builds"]:
-                    builds.append(version["version"])
-                fulldata["builds"] = builds
-                modpacks[filename.removesuffix(".json")] = fulldata
-            else:
-                modpacks[filename.removesuffix(".json")] = info["display_name"]
-    return jsonify({"modpacks": modpacks, "mirror_url": mirror_url})
+    return jsonify({"modpacks": select_all_modpacks(), "mirror_url": mirror_url})
 
 
 @api.route("/api/modpack/<slug>")
