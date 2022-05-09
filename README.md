@@ -1,8 +1,7 @@
-# solder-uploader
+# solder.py
 
-An upload manager for technic solder
 
-# virtual enviroment lokal verisjon av flask og andre "dependencies"
+# virtual environment local version of flask and other "dependencies"
 
 pip install virtualenv
 virtualenv env
