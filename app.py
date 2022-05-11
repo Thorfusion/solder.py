@@ -50,8 +50,10 @@ def createFolder(dirName):
 @app.route("/")
 def index():
     if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
     else:
+        # New or invalid session, create new one
         session["key"] = secrets.token_hex()
         app.sessions[session["key"]] = datetime.utcnow()
 
