@@ -1,36 +1,66 @@
+from concurrent.futures import thread
 import os
 from zipfile import ZipFile
 from dotenv import load_dotenv
 
 from flask import Flask, render_template, request, request_started, url_for
+from flask import session, request
 from werkzeug.utils import secure_filename
+
+import secrets
 
 from db_config import add_modversion_db, select_all_mods, select_mod, init_db
 from mysql import connector
 
 from api import api
 
+from datetime import datetime
+import time
+import threading
+
 load_dotenv(".env")
 host = os.getenv("APP_URL")
 port = os.getenv("APP_PORT")
 
-app = Flask(__name__)
+app: Flask = Flask(__name__)
 app.register_blueprint(api)
 
 app.config["UPLOAD_FOLDER"] = "./mods/"
 
+app.secret_key = secrets.token_hex()
+app.sessions = {}
+
+def sessionLoop() -> None:
+    while True:
+        to_delete = []
+        for key in app.sessions:
+            if (datetime.utcnow() - app.sessions[key]).total_seconds() > 10:
+                print(key)
+                to_delete.append(key)
+        for key in to_delete:
+            del app.sessions[key]
+        time.sleep(1)
+
+t = threading.Thread(target=sessionLoop)
+t.start()
+
 def createFolder(dirName):
         os.makedirs(dirName, exist_ok=True)
 
-
 @app.route("/")
 def index():
+    if "key" in session and session["key"] in app.sessions:
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        session["key"] = secrets.token_hex()
+        app.sessions[session["key"]] = datetime.utcnow()
+
     try:
         mods = select_all_mods()
     except connector.ProgrammingError as e:
         init_db()
         mods = []
-    return render_template("index.html", mods=mods)
+    return render_template("index.html", mods=mods, session_key=session["key"])
 
 
 @app.route("/addversion/<id>", methods=["GET", "POST"])
