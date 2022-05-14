@@ -32,6 +32,12 @@ app.secret_key = secrets.token_hex()
 app.sessions = {}
 
 def hasher(pw: str, salt: str) -> str:
+    """
+    Hashes a password with a salt. Uses sha512
+    :param pw: Password to hash
+    :param salt: Salt to hash with. This should be the username
+    :return: Hashed password
+    """
     return hashlib.sha512((pw + salt).encode("utf-8")).hexdigest()
 
 def sessionLoop() -> None:
@@ -94,6 +100,13 @@ def login():
 
 @app.route("/addversion/<id>", methods=["GET", "POST"])
 def addversion(id):
+    if "key" in session and session["key"] in app.sessions:
+        # Valid ession, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
     modSlug = select_mod(id)
     name = ""
     size = ""
