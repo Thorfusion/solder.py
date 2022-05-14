@@ -213,3 +213,13 @@ def get_api_key(key: str) -> list[str]:
                 return cur.fetchone()
         except Exception as e:
                 message("An error occurred whilst trying to fetch an API key", e)
+
+def get_user_info(user_or_email: str) -> dict:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    sql = "SELECT * FROM users WHERE username = %s OR email = %s"
+    try:
+        cur.execute(sql, (user_or_email, user_or_email))
+        return cur.fetchone()
+    except Exception as e:
+        message("An error occurred whilst trying to fetch a user", e)

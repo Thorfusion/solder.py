@@ -3,13 +3,14 @@ import os
 from zipfile import ZipFile
 from dotenv import load_dotenv
 
-from flask import Flask, render_template, request, request_started, url_for
+from flask import Flask, redirect, render_template, request, request_started, url_for
 from flask import session, request
 from werkzeug.utils import secure_filename
 
 import secrets
+import hashlib
 
-from db_config import add_modversion_db, select_all_mods, select_mod, init_db
+from db_config import add_modversion_db, select_all_mods, select_mod, init_db, get_user_info
 from mysql import connector
 
 from api import api
@@ -20,7 +21,7 @@ import threading
 
 load_dotenv(".env")
 host = os.getenv("APP_URL")
-port = os.getenv("APP_PORT")
+port = os.getenv("APP_PORT")1
 
 app: Flask = Flask(__name__)
 app.register_blueprint(api)
@@ -29,6 +30,9 @@ app.config["UPLOAD_FOLDER"] = "./mods/"
 
 app.secret_key = secrets.token_hex()
 app.sessions = {}
+
+def hasher(pw: str, salt: str) -> str:
+    return hashlib.sha512((pw + salt).encode("utf-8")).hexdigest()
 
 def sessionLoop() -> None:
     while True:
@@ -53,9 +57,8 @@ def index():
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
     else:
-        # New or invalid session, create new one
-        session["key"] = secrets.token_hex()
-        app.sessions[session["key"]] = datetime.utcnow()
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
 
     try:
         mods = select_all_mods()
@@ -63,6 +66,30 @@ def index():
         init_db()
         mods = []
     return render_template("index.html", mods=mods, session_key=session["key"])
+
+@app.route("/login", methods=["GET"])
+def login_page():
+    if "key" in session and session["key"] in app.sessions:
+        return redirect(url_for("index"))
+    else:
+        return render_template("login.html", failed=False)
+
+@app.route("/login", methods=["POST"])
+def login():
+    # already logged in
+    if "key" in session and session["key"] in app.sessions:
+        return redirect(url_for("index"))
+    else:
+        user = get_user_info(request.form["username"])
+        if user is None:
+            return render_template("login.html", failed=True)
+        else:
+            if user["password"] == hasher(request.form["password"], user["username"]):
+                session["key"] = secrets.token_hex()
+                app.sessions[session["key"]] = datetime.utcnow()
+                return redirect(url_for("index"))
+            else:
+                return render_template("login.html", failed=True)
 
 
 @app.route("/addversion/<id>", methods=["GET", "POST"])
