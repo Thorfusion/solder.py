@@ -137,3 +137,5 @@ dmypy.json
 
 # Private files
 .env
+pyvenv.cfg
+Scripts/
