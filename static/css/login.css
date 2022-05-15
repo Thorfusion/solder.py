@@ -1,0 +1,72 @@
+html,
+
+
+.center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+
+  transform: translate(-50%, -50%);
+
+  width: 40%;
+  height: 50%;
+}
+
+.container {
+padding: 1em;
+justify-self: center;
+}
+
+.imgcontainer {
+  justify-self: center;
+  padding: 1em;
+  grid-row: 1;
+}
+
+form {
+  justify-self: center;
+}
+
+form input {
+
+padding: 1em;
+
+}
+
+.wrapper {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr;
+  grid-template-rows: auto 1fr auto;
+  gap: 10px;
+}
+
+.wrapper2 {
+  display: grid;
+  grid-template-columns: auto;
+  grid-template-rows: 2fr 1fr 1fr 1fr;
+  gap: 10px;
+}
+.one {
+  grid-column: 2;
+  grid-row: 2;
+  max-height: 50px;
+}
+
+
+.user {
+  text-align: center;
+  justify-self: center;
+  padding: 1em;
+  grid-row: 2;
+}
+.pass {
+  text-align: center;
+  justify-self: center;
+  padding: 1em;
+  grid-row: 3;
+}
+.login {
+  justify-self: center;
+  padding: 1em;
+  grid-row: 4;
+}

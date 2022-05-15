@@ -131,3 +131,11 @@ dmypy.json
 # Idea
 
 /.idea
+
+# Database dumps
+*.sql
+
+# Private files
+.env
+pyvenv.cfg
+Scripts/

@@ -1,7 +1,9 @@
 {%extends "layout.html"%} {%block head%}
-<title>Thorfusion</title>
+<title>solder.py</title>
 
 {%endblock%}{%block header%} {%endblock%}{%block main%}
+
+{{session_key}}
 
 <table>
   {%for mod in mods%}
@@ -11,13 +13,11 @@
     <td>{{mod.author}}</td>
     <td>{{mod.link}}</td>
     <td>
-      <a href="./addversion/{{mod.id}}"><button>Add version</button></a>
+      <a href="./addversion/{{mod.id}}"></a><button type="button" class="btn btn-secondary">View</button></a>
     </td>
   </tr>
 
   {%endfor%}
 </table>
 
-{% endblock %} {%block aside%}
-<aside></aside>
 {% endblock %}
