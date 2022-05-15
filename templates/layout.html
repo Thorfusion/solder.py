@@ -13,20 +13,20 @@
       href="{{url_for('static', filename='images/THORFUSION_OFFICIALfav.png')}}"
       type="image/x-icon"
     />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
     {% block head %}{% endblock %}
   </head>
-  <body>
+  <body class="wrapper">
     <main>{%block main%}{% endblock %}</main>
-    <aside>
-      <header>
-        <a href="/">
-          <div>
-            <img src="static/images/solderwhite.py.svg">
-          </div>
-        </a>
-        <span> {% block header %} {% endblock %} </span>
-      </header>
-      <footer>Thorfusion Copyright 2022.</footer>
+    
+    <aside class="bg-dark">
+        <div class="imgcontainer">
+          <a href="/">
+            <div>
+              <img src="static/images/solderwhite.py.svg">
+            </div>
+          </a>
+        </div>
     </aside>
   </body>
 </html>
