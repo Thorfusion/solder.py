@@ -50,27 +50,10 @@ Well we dont have your database name nor username so go get it!
 
 ## Hosting
 
-## Windows
-pip install virtualenv
-.\scripts\activate
-virtualenv env
-env\scripts\activate
+## Dev Enviroment
 
-pip install flask flask-sqlalchemy python-dotenv mysql-connector-python
-
-# virtual environment local version of flask and other "dependencies"
-
-pip install virtualenv
-virtualenv env
-source env/bin/activate
-
-pip install flask flask-sqlalchemy
-
-# browser
-
-CTRL-f5 for force reload browser(including cache)
-
-#git
-
-endre "branch remote" <br >
-git push --set-upstream origin new-branch
+```bash
+python -m pip install pipenv
+python -m pipenv install
+python -m pipenv run app
+```
