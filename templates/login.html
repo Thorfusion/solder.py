@@ -14,14 +14,20 @@
             type="image/x-icon"
     />
 </head>
-    <form action="" method="POST" class="center">
+<body>
+  <div class="wrapper">
+    <div class="one">
+      <form action="" method="POST" class="wrapper2">
         <div class="imgcontainer">
             <img src="static/images/solderwhite.py.svg">
         </div>
         <input type="text" placeholder="Username" name="username" value="{{
-          request.form.username }}"><br />
+          request.form.username }}" class="user"><br />
         <input type="password" placeholder="Password" name="password" value="{{
-          request.form.password }}"><br />
-        <input type="submit" value="Login"><br />
+          request.form.password }}" class="pass"><br />
+        <input type="submit" value="Login" class="login"><br />
     </form>
+    </div>
+  </div>
+  </body>
 </html>
