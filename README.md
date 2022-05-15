@@ -50,6 +50,14 @@ Well we dont have your database name nor username so go get it!
 
 ## Hosting
 
+## Windows
+pip install virtualenv
+.\scripts\activate
+virtualenv env
+env\scripts\activate
+
+pip install flask flask-sqlalchemy python-dotenv mysql-connector-python
+
 # virtual environment local version of flask and other "dependencies"
 
 pip install virtualenv

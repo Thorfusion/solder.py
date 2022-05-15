@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+            rel="stylesheet"
+            href="{{url_for('static',filename='css/login.css')}}"
+    />
+    <link
+            rel="shortcut icon"
+            href="{{url_for('static', filename='images/THORFUSION_OFFICIALfav.png')}}"
+            type="image/x-icon"
+    />
+</head>
+    <form action="" method="POST" class="center">
+        <div class="imgcontainer">
+            <img src="static/images/solderwhite.py.svg">
+        </div>
+        <input type="text" placeholder="Username" name="username" value="{{
+          request.form.username }}"><br />
+        <input type="password" placeholder="Password" name="password" value="{{
+          request.form.password }}"><br />
+        <input type="submit" value="Login"><br />
+    </form>
+</html>

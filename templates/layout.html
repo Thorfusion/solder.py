@@ -16,19 +16,17 @@
     {% block head %}{% endblock %}
   </head>
   <body>
-    <header>
-      <a href="/">
-        <div>
-          <h1>solder.py</h1>
-          <h2>European frog soup</h2>
-        </div>
-      </a>
-      <span> {% block header %} {% endblock %} </span>
-    </header>
-
     <main>{%block main%}{% endblock %}</main>
-    {%block aside%}<!-- aside skal egentligt ligge i main ifølge w3c-->{%
-    endblock %}
-    <footer>Thorfusion Copyright 2022.</footer>
+    <aside>
+      <header>
+        <a href="/">
+          <div>
+            <img src="static/images/solderwhite.py.svg">
+          </div>
+        </a>
+        <span> {% block header %} {% endblock %} </span>
+      </header>
+      <footer>Thorfusion Copyright 2022.</footer>
+    </aside>
   </body>
 </html>

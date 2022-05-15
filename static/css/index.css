@@ -1,6 +1,7 @@
 /*! normalize.css v3.0.2 | MIT License | git.io/normalize */
 @import url("https://fonts.googleapis.com/css?family=Open+Sans:400,700&display=swap");
 html,
+
 body {
   font-size: 1em;
   font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -14,10 +15,10 @@ body {
 body {
   display: -ms-grid;
   display: grid;
-  -ms-grid-columns: [header-start main-start] 5fr [main-end aside-start] 1fr [aside-end header-end];
-      grid-template-columns: [header-start main-start] 5fr [main-end aside-start] 1fr [aside-end header-end];
-  -ms-grid-rows: [header-start] 150px [header-end main-start aside-start] auto [aside-end main-end footer-start] 40px [footer-end];
-      grid-template-rows: [header-start] 150px [header-end main-start aside-start] auto [aside-end main-end footer-start] 40px [footer-end];
+  -ms-grid-columns: [aside-start] 1fr [aside-end main-start] 5fr [main-end];
+      grid-template-columns: [aside-start] 1fr [aside-end main-start] 5fr [main-end];
+  -ms-grid-rows: [aside-start main-start] auto [aside-end main-end];
+      grid-template-rows: [aside-start main-start] auto [aside-end main-end];
 }
 
 header,
@@ -80,6 +81,8 @@ header h2 {
   margin-left: 5px;
   font-size: 0.8em;
 }
+
+
 
 main {
   grid-column: main;
