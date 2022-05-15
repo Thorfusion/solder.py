@@ -21,11 +21,9 @@ justify-self: center;
   justify-self: center;
   padding: 1em;
   grid-row: 1;
-  background-color: #730000
 }
 
 form {
-  border: 2px solid #730000;
   justify-self: center;
 }
 
@@ -51,15 +49,18 @@ padding: 1em;
 .one {
   grid-column: 2;
   grid-row: 2;
+  max-height: 50px;
 }
 
 
 .user {
+  text-align: center;
   justify-self: center;
   padding: 1em;
   grid-row: 2;
 }
 .pass {
+  text-align: center;
   justify-self: center;
   padding: 1em;
   grid-row: 3;

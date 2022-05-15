@@ -13,19 +13,20 @@
             href="{{url_for('static', filename='images/THORFUSION_OFFICIALfav.png')}}"
             type="image/x-icon"
     />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
 </head>
 <body>
   <div class="wrapper">
     <div class="one">
       <form action="" method="POST" class="wrapper2">
         <div class="imgcontainer">
-            <img src="static/images/solderwhite.py.svg">
+            <img src="static/images/solder.py.svg">
         </div>
         <input type="text" placeholder="Username" name="username" value="{{
-          request.form.username }}" class="user"><br />
+          request.form.username }}" class="user form-control"><br />
         <input type="password" placeholder="Password" name="password" value="{{
-          request.form.password }}" class="pass"><br />
-        <input type="submit" value="Login" class="login"><br />
+          request.form.password }}" class="pass form-control"><br />
+        <input type="submit" value="Login" class="login w-100 btn btn-lg btn-primary"><br />
     </form>
     </div>
   </div>
