@@ -1,15 +1,16 @@
-{%extends "layout.html"%} {%block head%}
+{%extends "layout.html"%} 
+{% set active_page = "index" %}
+{%block head%}
 <title>solder.py</title>
-
+<link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}"/>
 {%endblock%}{%block main%}
 
 {{session_key}}
 
-<table>
+<table class="table" style="width:100%">
   {%for mod in mods%}
   <tr>
     <td>{{mod.name}}</td>
-    <td>{{mod.desc}}</td>
     <td>{{mod.author}}</td>
     <td>{{mod.link}}</td>
     <td>

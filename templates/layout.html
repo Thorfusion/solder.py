@@ -5,7 +5,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
-    <link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}"/>
+    <link rel="stylesheet" href="{{ url_for('static',filename='css/layout.css') }}"/>
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/THORFUSION_OFFICIALfav.png') }}" type="image/x-icon"/>
     
     {% block head %}{% endblock %}
@@ -14,6 +14,7 @@
     <main>{%block main%}{% endblock %}</main>
     
     <aside class="bg-dark">
+      <div class="sidenav">
         <div class="imgcontainer">
           <a href="/">
             <div>
@@ -21,6 +22,29 @@
             </div>
           </a>
         </div>
+        <nav class="flex-column flex-shrink-0 p-3 text-white navcontainer">
+          <ul class="nav nav-pills flex-column mb-auto">
+            <li class="nav-item">
+              <a href="{{ url_for('index') }}" class="nav-link text-white {{ 'active' if active_page == 'index' else '' }}">Dashboard</a>
+            </li>
+            <li>
+              <a href="#" class="nav-link text-white">Modpacks</a>
+            </li>
+            <li>
+              <a href="{{ url_for('newmodpack') }}" class="nav-link text-white {{ 'active' if active_page == 'newmodpack' else '' }}">New Modpack</a>
+            </li>
+            <li>
+              <a href="#" class="nav-link text-white">Mod library</a>
+            </li>
+            <li> 
+              <a href="{{ url_for('newmod') }}" class="nav-link text-white {{ 'active' if active_page == 'newmod' else '' }}">Add mod</a>
+            </li>
+            <li>
+              <a href="{{ url_for('addversion', id='1') }}" class="nav-link text-white {{ 'active' if active_page == 'addversion' else '' }}">New mod version</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
     </aside>
   </body>
 </html>
