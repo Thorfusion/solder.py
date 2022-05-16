@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 import secrets
 import hashlib
 
-from db_config import add_modversion_db, select_all_mods, select_mod, init_db, get_user_info
+from db_config import add_modversion_db, select_all_mods, select_all_modpacks, select_mod, init_db, get_user_info
 from mysql import connector
 
 from api import api
@@ -166,6 +166,23 @@ def modlibrary():
         mods = []
 
     return render_template("modlibrary.html", mods=mods)
+
+@app.route("/viewmodpack")
+def viewmodpack():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        modpacks = select_all_modpacks()
+    except connector.ProgrammingError as e:
+        init_db()
+        modpacks = []
+
+    return render_template("viewmodpack.html", modpacks=modpacks)
 
 @app.errorhandler(404)
 def page_not_found(e):
