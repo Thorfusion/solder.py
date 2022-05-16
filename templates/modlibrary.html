@@ -1,0 +1,24 @@
+{%extends "layout.html"%} 
+{% set active_page = "index" %}
+{%block head%}
+<title>solder.py</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}"/>
+{%endblock%}{%block main%}
+
+{{session_key}}
+
+<table class="table" style="width:100%">
+  {%for mod in mods%}
+  <tr>
+    <td>{{mod.name}}</td>
+    <td>{{mod.author}}</td>
+    <td>{{mod.link}}</td>
+    <td>
+      <a href="./addversion/{{mod.id}}"><button type="button" class="btn btn-secondary">View</button></a>
+    </td>
+  </tr>
+
+  {%endfor%}
+</table>
+
+{% endblock %}
