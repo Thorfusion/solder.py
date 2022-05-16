@@ -50,12 +50,12 @@ padding: 1em;
   grid-template-rows: 2fr 1fr 1fr 1fr;
   gap: 10px;
 }
+
 .one {
   grid-column: 2;
   grid-row: 2;
   max-height: 50px;
 }
-
 
 .user {
   text-align: center;
@@ -73,4 +73,8 @@ padding: 1em;
   justify-self: center;
   padding: 1em;
   grid-row: 4;
+}
+
+.loginfail {
+  padding: 1em;
 }

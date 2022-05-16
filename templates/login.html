@@ -18,20 +18,21 @@
 <body>
   <div class="wrapper">
     <div class="one">
-      {% if failed %}
-      <div class="login-failed">
-        <p>Login failed!</p>
-      </div>
-      {% endif %}
+      
       <form action="" method="POST" class="wrapper2">
         <div class="imgcontainer">
-            <img src="static/images/solder.py.png" class="image">
+            <img src="{{ url_for('static', filename='images/solder.py.png') }}" class="image">
         </div>
         <input type="text" placeholder="Username" name="username" value="{{
           request.form.username }}" class="user form-control"><br />
         <input type="password" placeholder="Password" name="password" value="{{
           request.form.password }}" class="pass form-control"><br />
         <input type="submit" value="Login" class="login w-100 btn btn-lg btn-primary"><br />
+        {% if failed %}
+      <div class="alert alert-danger loginfail mx-auto" role="alert">
+        <p>Login failed!</p>
+      </div>
+      {% endif %}
     </form>
     </div>
   </div>
