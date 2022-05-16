@@ -165,7 +165,7 @@ def select_all_mods():
         link,
         created_at,
         created_at,
-        created_at,
+        pretty_name,
     ) in cur:
         mods.append(
             {
@@ -174,6 +174,7 @@ def select_all_mods():
                 "desc": description,
                 "author": author,
                 "link": link,
+                "pretty_name": pretty_name,
             }
         )
     conn.close()
