@@ -18,6 +18,11 @@
 <body>
   <div class="wrapper">
     <div class="one">
+      {% if failed %}
+      <div class="login-failed">
+        <p>Login failed!</p>
+      </div>
+      {% endif %}
       <form action="" method="POST" class="wrapper2">
         <div class="imgcontainer">
             <img src="static/images/solder.py.svg">
