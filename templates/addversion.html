@@ -10,19 +10,19 @@
   <h3>{{modSlug}}</h3>
   <label for="modver">Mod Version:</label><br />
   <!--Select mod, puts jar file in mods folder inside a zip file-->
-  <input type="radio" id="mod" name="fav_language" value="MOD" />
+  <input type="radio" id="mod" name="fav_language" value="MOD" class="form-check-input"/>
   <label for="mod">MOD</label><br />
   <!--Select mod loader, puts jar or json file inside a bin folder inside a zip file-->
-  <input type="radio" id="loader" name="fav_language" value="MOD-LOADER" />
+  <input type="radio" id="loader" name="fav_language" value="MOD-LOADER" class="form-check-input"/>
   <label for="loader">MOD-LOADER</label><br />
   <!--Select zip file, uploads the zip file-->
-  <input type="radio" id="zip" name="fav_language" value="ZIP" />
+  <input type="radio" id="zip" name="fav_language" value="ZIP" class="form-check-input"/>
   <label for="zip">ZIP</label><br />
-  <input type="file" id="jarfile" name="jarfile" /><br />
-  <input type="text" id="modver" name="modver" /><br />
+  <input type="file" id="jarfile" name="jarfile" class="form-select"/><br />
+  <input type="text" id="modver" name="modver" class="form-text" /><br />
   <p>md5 hash</p>
   <p>file size</p>
-  <input type="submit" value="submit" /><br />
+  <input type="submit" value="submit" class="btn btn-primary"/><br />
   <p>file location</p>
 </form>
 </div>
