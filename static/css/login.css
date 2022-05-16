@@ -23,6 +23,10 @@ justify-self: center;
   grid-row: 1;
 }
 
+.image {
+  height: 6vh;
+}
+
 form {
   justify-self: center;
 }
