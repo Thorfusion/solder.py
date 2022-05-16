@@ -70,7 +70,7 @@ def index():
     except connector.ProgrammingError as e:
         init_db()
         mods = []
-    return render_template("index.html", mods=mods, session_key=session["key"])
+    return render_template("index.html", mods=mods)
 
 @app.route("/login", methods=["GET"])
 def login_page():
