@@ -4,6 +4,7 @@ html,
   display: grid;
   grid-template-columns: minmax(min-content, max-content) auto;
   grid-template-rows: auto;
+  gap: 1em;
 }
 
 aside {
