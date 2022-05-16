@@ -18,7 +18,8 @@ main {
 }
 
 .image {
-  height: 5vh;
+  max-height: 5vh;
+  min-height: 40px;
 }
 
 .sidenav {
