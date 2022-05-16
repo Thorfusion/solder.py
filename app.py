@@ -44,7 +44,7 @@ def sessionLoop() -> None:
     while True:
         to_delete = []
         for key in app.sessions:
-            if (datetime.utcnow() - app.sessions[key]).total_seconds() > 10:
+            if (datetime.utcnow() - app.sessions[key]).total_seconds() > 420:
                 to_delete.append(key)
         for key in to_delete:
             del app.sessions[key]
