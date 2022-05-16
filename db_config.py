@@ -185,10 +185,10 @@ def select_mod(id):
     cur = conn.cursor()
     sql = "SELECT * FROM mods WHERE id=?"
     try:
-        cur.execute(sql, ([id]))
+        cur.execute(sql, (id,))
         return cur.fetchall()[0][1]
     except Exception as e:
-        message("feil ved å hente enkel mod", e)
+        message("Error whilst fetching mod info", e)
 
 
 def add_modversion_db(mod_id, version, hash, filesize):
@@ -201,7 +201,7 @@ def add_modversion_db(mod_id, version, hash, filesize):
         )
         conn.commit()
     except Exception as e:
-        message("en feil oppstod ved å legge inn ny modverisjon", e)
+        message("Error whilst adding a mod version to the database", e)
     conn.close()
 
 def get_api_key(key: str) -> list[str]:
