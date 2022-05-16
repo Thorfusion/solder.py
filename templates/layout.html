@@ -34,7 +34,7 @@
               <a href="{{ url_for('newmodpack') }}" class="nav-link text-white {{ 'active' if active_page == 'newmodpack' else '' }}">New Modpack</a>
             </li>
             <li>
-              <a href="#" class="nav-link text-white">Mod library</a>
+              <a href="{{ url_for('modlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'modlibrary' else '' }}">Mod library</a>
             </li>
             <li> 
               <a href="{{ url_for('newmod') }}" class="nav-link text-white {{ 'active' if active_page == 'newmod' else '' }}">Add mod</a>

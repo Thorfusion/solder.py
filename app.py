@@ -65,12 +65,8 @@ def index():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    try:
-        mods = select_all_mods()
-    except connector.ProgrammingError as e:
-        init_db()
-        mods = []
-    return render_template("index.html", mods=mods)
+
+    return render_template("index.html")
 
 @app.route("/login", methods=["GET"])
 def login_page():
@@ -153,6 +149,23 @@ def newmodpack():
         return redirect(url_for("login"))
 
     return render_template("newmodpack.html")
+
+@app.route("/modlibrary")
+def modlibrary():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        mods = select_all_mods()
+    except connector.ProgrammingError as e:
+        init_db()
+        mods = []
+
+    return render_template("modlibrary.html", mods=mods)
 
 @app.errorhandler(404)
 def page_not_found(e):
