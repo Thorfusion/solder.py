@@ -133,6 +133,27 @@ def addversion(id):
 
     return render_template("addversion.html", modSlug=modSlug, name=name, size=size)
 
+@app.route("/newmod")
+def newmod():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    return render_template("newmod.html")
+
+@app.route("/newmodpack")
+def newmodpack():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    return render_template("newmodpack.html")
 
 @app.errorhandler(404)
 def page_not_found(e):
