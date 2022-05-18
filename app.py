@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 import secrets
 import hashlib
 
-from db_config import add_modversion_db, select_all_mods, select_mod, init_db, get_user_info
+from db_config import add_modversion_db, select_all_mods, select_all_modpacks, select_mod, init_db, get_user_info
 from mysql import connector
 
 from api import api
@@ -65,12 +65,8 @@ def index():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    try:
-        mods = select_all_mods()
-    except connector.ProgrammingError as e:
-        init_db()
-        mods = []
-    return render_template("index.html", mods=mods)
+
+    return render_template("index.html")
 
 @app.route("/login", methods=["GET"])
 def login_page():
@@ -97,8 +93,8 @@ def login():
                 return render_template("login.html", failed=True)
 
 
-@app.route("/addversion/<id>", methods=["GET", "POST"])
-def addversion(id):
+@app.route("/modversion/<id>", methods=["GET", "POST"])
+def modversion(id):
     if "key" in session and session["key"] in app.sessions:
         # Valid ession, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -130,7 +126,7 @@ def addversion(id):
         else:
             print("error")
 
-    return render_template("addversion.html", modSlug=modSlug, name=name, size=size)
+    return render_template("modversion.html", modSlug=modSlug, name=name, size=size)
 
 @app.route("/newmod")
 def newmod():
@@ -153,6 +149,40 @@ def newmodpack():
         return redirect(url_for("login"))
 
     return render_template("newmodpack.html")
+
+@app.route("/modlibrary")
+def modlibrary():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        mods = select_all_mods()
+    except connector.ProgrammingError as e:
+        init_db()
+        mods = []
+
+    return render_template("modlibrary.html", mods=mods)
+
+@app.route("/modpacks")
+def modpacks():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        modpacks = select_all_modpacks()
+    except connector.ProgrammingError as e:
+        init_db()
+        modpacks = []
+
+    return render_template("modpacks.html", modpacks=modpacks)
 
 @app.errorhandler(404)
 def page_not_found(e):

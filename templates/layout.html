@@ -28,19 +28,16 @@
               <a href="{{ url_for('index') }}" class="nav-link text-white {{ 'active' if active_page == 'index' else '' }}">Dashboard</a>
             </li>
             <li>
-              <a href="#" class="nav-link text-white">Modpacks</a>
+              <a href="{{ url_for('modpacks') }}" class="nav-link text-white {{ 'active' if active_page == 'viewmodpack' else '' }}">Modpacks</a>
             </li>
             <li>
-              <a href="{{ url_for('newmodpack') }}" class="nav-link text-white {{ 'active' if active_page == 'newmodpack' else '' }}">New Modpack</a>
+              <a href="{{ url_for('newmodpack') }}" class="nav-link text-white {{ 'active' if active_page == 'newmodpack' else '' }}">New modpack</a>
             </li>
             <li>
-              <a href="#" class="nav-link text-white">Mod library</a>
+              <a href="{{ url_for('modlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'modlibrary' else '' }}">Mod library</a>
             </li>
             <li> 
-              <a href="{{ url_for('newmod') }}" class="nav-link text-white {{ 'active' if active_page == 'newmod' else '' }}">Add mod</a>
-            </li>
-            <li>
-              <a href="{{ url_for('addversion', id='1') }}" class="nav-link text-white {{ 'active' if active_page == 'addversion' else '' }}">New mod version</a>
+              <a href="{{ url_for('newmod') }}" class="nav-link text-white {{ 'active' if active_page == 'newmod' else '' }}">New mod</a>
             </li>
           </ul>
         </nav>

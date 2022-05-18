@@ -2,14 +2,14 @@ html,
 
 .wrapper {
   display: grid;
-  grid-template-columns: 1fr 4fr;
+  grid-template-columns: minmax(min-content, max-content) minmax(min-content, max-content);
   grid-template-rows: auto;
+  gap: 1em;
 }
 
 aside {
   grid-column: 1;
   grid-row: 1;
-  
 }
 
 main {
@@ -18,8 +18,9 @@ main {
 }
 
 .image {
-  max-height: 5vh;
-  min-height: 40px;
+  width: 12vw;
+  max-width: 24em;
+  min-width: 12em;
 }
 
 .sidenav {
@@ -38,14 +39,13 @@ main {
   justify-self: center;
   padding: 1em;
   grid-row: 1;
+  
 }
 
 .navcontainer {
   padding: 1em;
 }
 
-.one {
-  grid-column: 2;
-  grid-row: 2;
-  max-height: 50px;
+.minwidth {
+  min-width: 20vw;
 }

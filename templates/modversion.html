@@ -1,10 +1,12 @@
 {%extends "layout.html"%}
-{% set active_page = "newmod" %}
+{% set active_page = "modversion" %}
 {%block head%}
 <title>solder.py</title>
-
+<link rel="stylesheet" href="{{ url_for('static',filename='css/modversion.css') }}"/>
 {%endblock%}{%block main%}
-<div class="minwidth">
+
+<div class="wrappermod">
+  <div class="placeone">
     <form method="post" action="">
         <div class="mb-3"">
             <label for="pretty_name" class="form-label">Mod Name</label>
@@ -26,7 +28,25 @@
             <label for="link" class="form-label">Mod Website</label>
             <input type="text" class="form-control" name="link" id="link">
         </div>
-        <input class="btn btn-success" type="submit" value="Add Mod">
+        <input class="btn btn-success" type="submit" value="Save changes">
+        <input class="btn btn-danger" type="submit" value="Delete Mod">
     </form>
+</div>
+  <table class="table placetwo">
+    {%for mod in mods%}
+    <tr>
+      <td>{{mod.versiob}}</td>
+      <td>{{mod.md5}}</td>
+      <td>{{mod.url}}</td>
+      <td>
+        <a href="#"><button type="button" class="btn btn-primary">Rehash</button></a>
+      </td>
+      <td>
+        <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+      </td>
+    </tr>
+
+    {%endfor%}
+  </table>
 </div>
 {% endblock %}
