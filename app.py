@@ -232,12 +232,12 @@ def modpacks():
         return redirect(url_for("login"))
 
     try:
-        modpacks = select_all_modpacks()
+        mods = select_all_mods()
     except connector.ProgrammingError as e:
         init_db()
-        modpacks = []
+        mods = []
 
-    return render_template("modpacks.html", modpacks=modpacks)
+    return render_template("modpacks.html", mods=mods)
 
 @app.errorhandler(404)
 def page_not_found(e):
