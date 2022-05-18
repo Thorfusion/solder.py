@@ -7,15 +7,14 @@
         <thead class="table-light sticky-md-top">
             <tr>
                 <th scope="col">ID</th>
-                <th scope="col">Name (Slug)</th>
-                <th scope="col">Author</th>
+                <th scope="col">Build</th>
+                <th scope="col">MC Version</th>
+                <th scope="col">Mod count</th>
                 <th scope="col">Rec</th>
                 <th scope="col">Latest</th>
-                <td>
-                    <div class="">
-                        <a href="{{ url_for('newmodpack') }}"><button type="button" class="btn btn-success tablewidth2">New modpack</button></a>
-                    </div>
-                </td>
+                <th scope="col">Published</th>
+                <th scope="col">Private</th>
+                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody class="">
@@ -26,10 +25,12 @@
                 <td>{{mod.author}}</td>
                 <td>{{mod.author}}</td>
                 <td>{{mod.author}}</td>
+                <td>{{mod.id}}</td>
+                <td>{{mod.id}}</td>
+                <td>{{mod.id}}</td>
                 <td>
                     <div class="tablewidth">
-                        <a href="{{ url_for('viewmodpack') }}"><button type="button" class="btn btn-primary">Manage</button></a>
-                        <a href="{{ url_for('editmodpack') }}"><button type="button" class="btn btn-secondary">Edit</button></a>
+                        <a href="{{ url_for('modpackbuild') }}"><button type="button" class="btn btn-primary">Manage</button></a>
                     </div>
                 </td>
             </tr>
