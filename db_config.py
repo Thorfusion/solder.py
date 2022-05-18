@@ -28,7 +28,6 @@ def init_db() -> None:
                 forge VARCHAR(65535),
                 recommended VARCHAR(65535),
                 latest VARCHAR(65535),
-                url VARCHAR(65535),
                 `order` INT DEFAULT(0),
                 hidden BOOLEAN DEFAULT(1),
                 private BOOLEAN DEFAULT(0)
@@ -65,7 +64,7 @@ def init_db() -> None:
                 )"""
     )
     cur.execute(
-        """CREATE TABLE IF NOT EXISTS build_modversions (
+        """CREATE TABLE IF NOT EXISTS build_modversion (
                 id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                 modversion_id INT NOT NULL,
                 buildversion_id INT NOT NULL
@@ -147,61 +146,87 @@ def connect():
 def select_all_modpacks() -> list:
     conn = connect()
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT * FROM modpacks ORDER BY id ASC")
+    cur.execute("SELECT * FROM modpacks WHERE hidden = 0 ORDER BY id ASC")
     return cur.fetchall()
 
-def select_modpack(slug) -> dict:
+def select_all_modpacks_cid(cid: str) -> list:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM modpacks WHERE hidden = 0")
+    packs = cur.fetchall()
+    toremove = []
+    for pack in packs:
+        if pack["private"]:
+            cur.execute("SELECT * FROM client_modpack WHERE client_id IN (SELECT id FROM clients WHERE uuid = %s) AND modpack_id = %s", (cid, pack["id"]))
+            if not cur.fetchone():
+                toremove.append(pack)
+    for pack in toremove:
+        packs.remove(pack)
+    return packs
+
+def select_modpack(slug: str) -> dict:
     conn = connect()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
     return cur.fetchone()
 
+def select_modpack_cid(slug: str, cid: str) -> dict:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
+    pack = cur.fetchone()
+    if pack is not None and pack["private"]:
+        if cid is None:
+            return
+            
+        cur.execute("SELECT * FROM client_modpack WHERE client_id IN (SELECT client_id FROM clients WHERE uuid = %s) AND modpack_id = %s", (cid, pack["id"]))
+        if cur.fetchone() is None:
+            return
+        else:
+            return pack
+    return pack
+
 
 def select_all_mods():
     conn = connect()
-    cur = conn.cursor()
+    cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM mods ORDER BY id ASC")
-    mods = []
-    for (
-        id,
-        name,
-        description,
-        author,
-        link,
-        created_at,
-        created_at,
-        pretty_name,
-    ) in cur:
-        mods.append(
-            {
-                "id": id,
-                "name": name,
-                "desc": description,
-                "author": author,
-                "link": link,
-                "pretty_name": pretty_name,
-            }
-        )
-    conn.close()
-    return mods
+    return cur.fetchall()
 
+def select_mod_versions(build: int) -> list:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    sql = "SELECT * FROM modversions WHERE id IN (SELECT modversion_id FROM build_modversion WHERE build_id = %s)"
+    try:
+        cur.execute(sql, (build,))
+        return cur.fetchall()
+    except Exception as e:
+        message("Error whilst fetching mods for modpack", e)
 
 def select_mod(id):
     conn = connect()
-    cur = conn.cursor()
-    sql = "SELECT * FROM mods WHERE id=?"
+    cur = conn.cursor(dictionary=True)
+    sql = "SELECT * FROM mods WHERE id=%s"
     try:
         cur.execute(sql, (id,))
-        return cur.fetchall()[0][1]
+        return cur.fetchone()
     except Exception as e:
         message("Error whilst fetching mod info", e)
 
 def select_builds(modpack_id: int) -> dict:
     conn = connect()
     cur = conn.cursor(dictionary=True)
-    cur.execute("SELECT * FROM builds WHERE modpack_id = %s", (modpack_id,))
+    try:
+        cur.execute("SELECT * FROM builds WHERE modpack_id = %s AND is_published = 1", (modpack_id,))
+    except Exception as e:
+        message("Error whilst fetching builds", e)
     return cur.fetchall()
 
+def select_modpack_build(modpack: str, build: str) -> dict:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM builds WHERE modpack_id = %s AND version = %s AND is_published = 1", (modpack, build))
+    return cur.fetchone()
 
 def add_modversion_db(mod_id, version, hash, filesize):
     conn = connect()
