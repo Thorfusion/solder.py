@@ -2,49 +2,51 @@
 {% set active_page = "modversion" %}
 {%block head%}
 <title>solder.py</title>
-
+<link rel="stylesheet" href="{{ url_for('static',filename='css/modversion.css') }}"/>
 {%endblock%}{%block main%}
 
-<div class="">
-  <form method="post" action="">
-      <div class="mb-3">
-        <label for="formFile" class="form-label">Select file</label>
-        <input class="form-control" type="file" id="formFile">
-      </div>
-      <div class="mb-3"">
-          <label for="pretty_name" class="form-label">md5</label>
-          <input type="text" class="form-control" name="pretty_name" id="pretty_name" disabled readonly>
-      </div>
-      <label>Select type</label>
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" checked>
-        <label class="form-check-label" for="flexRadioDefault2">
-          MOD.JAR
-        </label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1">
-        <label class="form-check-label" for="flexRadioDefault1">
-          Launcher
-        </label>
-      </div>
-      <div class="form-check">
-        <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1">
-        <label class="form-check-label" for="flexRadioDefault1">
-          ZIP
-        </label>
-      </div>
-      <div>
-        <label for="select" class="form-label">Select mod</label>
-        <select class="form-select" aria-label="Default select" name="select">
-          <option selected>Open this select menu</option>
-        </select>
-      </div>
-      <div class="mb-3"">
-          <label for="author" class="form-label">Version number</label>
-          <input type="text" class="form-control" name="author" id="author">
-      </div>
-      <input class="btn btn-success" type="submit" value="Add Version">
-  </form>
+<div class="wrappermod">
+  <div class="placeone">
+    <form method="post" action="">
+        <div class="mb-3"">
+            <label for="pretty_name" class="form-label">Mod Name</label>
+            <input type="text" class="form-control" name="pretty_name" id="pretty_name">
+        </div>
+        <div class="mb-3"">
+            <label for="name" class="form-label">Mod Slug</label>
+            <input type="text" class="form-control" name="name" id="name">
+        </div>
+        <div class="mb-3"">
+            <label for="author" class="form-label">Author</label>
+            <input type="text" class="form-control" name="author" id="author">
+        </div>
+        <div class="mb-3"">
+            <label for="description" class="form-label">Description</label>
+            <textarea name="description" id="description" class="form-control" rows="5"></textarea>
+        </div>
+        <div class="mb-3"">
+            <label for="link" class="form-label">Mod Website</label>
+            <input type="text" class="form-control" name="link" id="link">
+        </div>
+        <input class="btn btn-success" type="submit" value="Save changes">
+        <input class="btn btn-danger" type="submit" value="Delete Mod">
+    </form>
+</div>
+  <table class="table placetwo">
+    {%for mod in mods%}
+    <tr>
+      <td>{{mod.versiob}}</td>
+      <td>{{mod.md5}}</td>
+      <td>{{mod.url}}</td>
+      <td>
+        <a href="#"><button type="button" class="btn btn-primary">Rehash</button></a>
+      </td>
+      <td>
+        <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+      </td>
+    </tr>
+
+    {%endfor%}
+  </table>
 </div>
 {% endblock %}
