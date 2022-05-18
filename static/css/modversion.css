@@ -2,7 +2,7 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     grid-template-rows: auto;
-    gap: 1em;
+    gap: 0.5vw;
   }
   
   
@@ -18,3 +18,4 @@
     top: 0;
     height: 100vh;
   }
+

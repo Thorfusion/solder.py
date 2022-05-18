@@ -2,9 +2,9 @@ html,
 
 .wrapper {
   display: grid;
-  grid-template-columns: minmax(min-content, max-content) minmax(min-content, max-content);
+  grid-template-columns: minmax(min-content, max-content) 1fr;
   grid-template-rows: auto;
-  gap: 1em;
+  gap: 0.5vw;
 }
 
 aside {
@@ -54,9 +54,9 @@ main {
 }
 
 .minwidth {
-  min-width: 20vw;
+  min-width: 15vw;
 }
 
 .maxwidth {
-  min-width: 30vw;
+  min-width: 20vw;
 }
