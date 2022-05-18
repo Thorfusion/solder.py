@@ -1,9 +1,10 @@
+from dataclasses import dataclass
 import json
 import os
 from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 
-from db_config import get_api_key, select_all_modpacks
+from db_config import get_api_key, select_all_modpacks, select_modpack, select_builds
 
 api = Blueprint("api", __name__)
 
@@ -16,7 +17,7 @@ def api_info():
 
 
 @api.route("/api/verify")
-def verify(key: str = None):
+def verify():
     return jsonify({"error": "No API key provided."})
 
 
@@ -37,33 +38,23 @@ def verify_key(key: str = None):
 
 @api.route("/api/modpack")
 def modpack():
-    return jsonify({"modpacks": select_all_modpacks(), "mirror_url": mirror_url})
+    data = select_all_modpacks()
+    modpacks = {}
+    for pack in data:
+
+        modpacks[pack["slug"]] = pack["name"]
+    return jsonify({"modpacks": modpacks, "mirror_url": mirror_url})
 
 
 @api.route("/api/modpack/<slug>")
 def modpack_slug(slug: str):
-    try:
-        with open(f"modpacks/{slug}.json", "r") as f:
-            info = json.load(f)
-            modpack: dict = {}
-
-            modpack["name"] = slug
-            modpack["display_name"] = info["display_name"]
-            modpack["url"] = info["url"]
-            modpack["icon"] = info["icon"]
-            modpack["icon_md5"] = info["icon_md5"]
-            modpack["logo"] = info["logo"]
-            modpack["logo_md5"] = info["logo_md5"]
-            modpack["background"] = info["background"]
-            modpack["background_md5"] = info["background_md5"]
-            modpack["recommended"] = info["recommended"]
-            modpack["latest"] = info["latest"]
-            builds = []
-            for version in info["builds"]:
-                builds.append(version["version"])
-            modpack["builds"] = builds
-            return jsonify(modpack)
-    except FileNotFoundError:
+    data = select_modpack(slug)
+    if data:
+        builds_data = select_builds(data["id"])
+        builds = [build["version"] for build in builds_data]
+        data["builds"] = builds
+        return jsonify(data)
+    else:
         return jsonify({"error": "Modpack does not exist/Build does not exist"})
 
 

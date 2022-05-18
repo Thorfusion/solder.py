@@ -144,12 +144,17 @@ def connect():
         print("-" * 70 + "\n Error connecting to database \n" + "-" * 70 + "\n" + str(e))
     return conn
 
-def select_all_modpacks():
+def select_all_modpacks() -> list:
     conn = connect()
-    cur = conn.cursor()
+    cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM modpacks ORDER BY id ASC")
-    conn.close()
     return cur.fetchall()
+
+def select_modpack(slug) -> dict:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
+    return cur.fetchone()
 
 
 def select_all_mods():
@@ -190,6 +195,12 @@ def select_mod(id):
         return cur.fetchall()[0][1]
     except Exception as e:
         message("Error whilst fetching mod info", e)
+
+def select_builds(modpack_id: int) -> dict:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM builds WHERE modpack_id = %s", (modpack_id,))
+    return cur.fetchall()
 
 
 def add_modversion_db(mod_id, version, hash, filesize):
