@@ -54,7 +54,7 @@ t = threading.Thread(target=sessionLoop)
 t.start()
 
 def createFolder(dirName):
-        os.makedirs(dirName, exist_ok=True)
+    os.makedirs(dirName, exist_ok=True)
 
 @app.route("/")
 def index():
