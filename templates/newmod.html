@@ -4,5 +4,29 @@
 <title>solder.py</title>
 
 {%endblock%}{%block main%}
-<p>Hello</p>
+<div class="">
+    <form method="post" action="">
+        <div class="mb-3"">
+            <label for="pretty_name" class="form-label">Mod Name</label>
+            <input type="text" class="form-control" name="pretty_name" id="pretty_name">
+        </div>
+        <div class="mb-3"">
+            <label for="name" class="form-label">Mod Slug</label>
+            <input type="text" class="form-control" name="name" id="name">
+        </div>
+        <div class="mb-3"">
+            <label for="author" class="form-label">Author</label>
+            <input type="text" class="form-control" name="author" id="author">
+        </div>
+        <div class="mb-3"">
+            <label for="description" class="form-label">Description</label>
+            <textarea name="description" id="description" class="form-control" rows="5"></textarea>
+        </div>
+        <div class="mb-3"">
+            <label for="link" class="form-label">Mod Website</label>
+            <input type="text" class="form-control" name="link" id="link">
+        </div>
+        <input class="btn btn-success" type="submit" value="Add Mod">
+    </form>
+</div>
 {% endblock %}
