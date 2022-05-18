@@ -32,6 +32,15 @@
         <input class="btn btn-danger" type="submit" value="Delete Mod">
     </form>
 </div>
+<div class="placetwo">
+  <form method="post" action="">
+      <div class="mb-3"">
+          <label for="author" class="form-label">Version number</label>
+          <input type="text" class="form-control" name="author" id="author">
+      </div>
+      <input class="btn btn-success" type="submit" value="Add Version">
+  </form>
+</div>
   <table class="table placetwo">
     {%for mod in mods%}
     <tr>
