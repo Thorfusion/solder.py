@@ -167,8 +167,8 @@ def modlibrary():
 
     return render_template("modlibrary.html", mods=mods)
 
-@app.route("/viewmodpack")
-def viewmodpack():
+@app.route("/modpacks")
+def modpacks():
     if "key" in session and session["key"] in app.sessions:
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -182,7 +182,7 @@ def viewmodpack():
         init_db()
         modpacks = []
 
-    return render_template("viewmodpack.html", modpacks=modpacks)
+    return render_template("modpacks.html", modpacks=modpacks)
 
 @app.errorhandler(404)
 def page_not_found(e):
