@@ -1,21 +1,19 @@
 .wrappermod {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 2fr 1fr;
     grid-template-rows: auto;
     gap: 0.5vw;
-  }
-  
-  
-  .placeone {
+}
+
+.placeone {
     grid-column: 1;
     grid-row: 1;
-  }
+}
 
-  .placetwo {
+.placetwo {
     grid-column: 2;
     grid-row: 1;
     position: sticky;
     top: 0;
     height: 100vh;
-  }
-
+}

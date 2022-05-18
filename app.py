@@ -126,7 +126,13 @@ def modversion(id):
         else:
             print("error")
 
-    return render_template("modversion.html", modSlug=modSlug, name=name, size=size)
+    try:
+        mods = select_all_mods()
+    except connector.ProgrammingError as e:
+        init_db()
+        mods = []
+
+    return render_template("modversion.html", modSlug=modSlug, name=name, size=size, mods=mods)
 
 @app.route("/newmod")
 def newmod():
