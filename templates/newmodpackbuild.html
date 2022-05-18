@@ -1,0 +1,34 @@
+{%extends "layout.html"%}
+{% set active_page = "newmodpackbuild" %}
+{%block head%}
+<title>solder.py</title>
+
+{%endblock%}{%block main%}
+<div class="minwidth">
+    <form method="post" action="">
+        <div class="mb-3"">
+            <label for="build" class="form-label">Build number</label>
+            <input type="text" class="form-control" name="build" id="build">
+        </div>
+        <div class="mb-3"">
+            <label for="name" class="form-label">Minecraft version</label>
+            <select class="form-select"  name="name" id="name">
+        </div>
+        <div class="mb-3"">
+            <label for="build" class="form-label">Clone Build</label>
+            <select class="form-select"  name="build" id="build">
+                <option>Do not clone</option>
+        </div>
+        <div class="mb-3"">
+            <label for="description" class="form-label">Minium Java Version</label>
+            <select class="form-select" name="description" id="description">
+                <option>No requirement</option>
+        </div>
+        <div class="mb-3"">
+            <label for="memory" class="form-label">Minimum Memory requirement in MB, 0 for disable</label>
+            <input type="text" class="form-control" name="memory" id="memory">
+        </div>
+        <input class="btn btn-success" type="submit" value="Add build">
+    </form>
+</div>
+{% endblock %}
