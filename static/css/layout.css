@@ -44,8 +44,19 @@ main {
 
 .navcontainer {
   padding: 1em;
+  grid-row: 2;
+}
+
+.navcontainer2 {
+  padding: 1em;
+  grid-row: 3;
+  align-self: end;
 }
 
 .minwidth {
   min-width: 20vw;
+}
+
+.maxwidth {
+  min-width: 30vw;
 }
