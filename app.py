@@ -150,6 +150,61 @@ def newmodpack():
 
     return render_template("newmodpack.html")
 
+@app.route("/newmodpackbuild")
+def newmodpackbuild():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    return render_template("newmodpackbuild.html")
+
+@app.route("/modpackversion")
+def modpackversion():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    return render_template("modpackversion.html")
+
+@app.route("/editmodpack")
+def editmodpack():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    return render_template("editmodpack.html")
+
+@app.route("/editmodpackbuild")
+def editmodpackbuild():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    return render_template("editmodpackbuild.html")
+
+@app.route("/modpackbuild")
+def modpackbuild():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    return render_template("modpackbuild.html")
+
 @app.route("/modlibrary")
 def modlibrary():
     if "key" in session and session["key"] in app.sessions:

@@ -23,3 +23,7 @@
     position: sticky;
     top: 0;
   }
+
+  .tablewidth {
+    width: 160px;
+  }
