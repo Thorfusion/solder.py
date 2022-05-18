@@ -2,7 +2,7 @@ html,
 
 .wrapper {
   display: grid;
-  grid-template-columns: minmax(min-content, max-content) auto;
+  grid-template-columns: minmax(min-content, max-content) minmax(min-content, max-content);
   grid-template-rows: auto;
   gap: 1em;
 }
@@ -10,7 +10,6 @@ html,
 aside {
   grid-column: 1;
   grid-row: 1;
-  
 }
 
 main {
