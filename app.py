@@ -139,17 +139,6 @@ def newmod():
 
     return render_template("newmod.html")
 
-@app.route("/newmodpackbuild")
-def newmodpackbuild():
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
-        # New or invalid session, send to login
-        return redirect(url_for("login"))
-
-    return render_template("newmodpackbuild.html")
-
 @app.route("/viewmodpack")
 def viewmodpack():
     if "key" in session and session["key"] in app.sessions:
