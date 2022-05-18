@@ -93,8 +93,8 @@ def login():
                 return render_template("login.html", failed=True)
 
 
-@app.route("/addversion/<id>", methods=["GET", "POST"])
-def addversion(id):
+@app.route("/modversion/<id>", methods=["GET", "POST"])
+def modversion(id):
     if "key" in session and session["key"] in app.sessions:
         # Valid ession, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -126,7 +126,7 @@ def addversion(id):
         else:
             print("error")
 
-    return render_template("addversion.html", modSlug=modSlug, name=name, size=size)
+    return render_template("modversion.html", modSlug=modSlug, name=name, size=size)
 
 @app.route("/newmod")
 def newmod():
