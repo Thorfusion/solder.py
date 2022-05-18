@@ -156,8 +156,8 @@ def viewmodpack():
 
     return render_template("viewmodpack.html", mods=mods)
 
-@app.route("/editmodpackbuild")
-def editmodpackbuild():
+@app.route("/mainsettings")
+def mainsettings():
     if "key" in session and session["key"] in app.sessions:
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -165,7 +165,7 @@ def editmodpackbuild():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    return render_template("editmodpackbuild.html")
+    return render_template("mainsettings.html")
 
 @app.route("/modpackbuild")
 def modpackbuild():
