@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 
-from db_config import get_api_key, select_all_modpacks, select_modpack, select_builds
+from db_config import get_api_key, select_all_modpacks_cid, select_modpack_cid, select_builds, select_modpack_build, select_mod_versions, select_mod
 
 api = Blueprint("api", __name__)
 
@@ -38,56 +38,50 @@ def verify_key(key: str = None):
 
 @api.route("/api/modpack")
 def modpack():
-    data = select_all_modpacks()
+    data = select_all_modpacks_cid(request.args.get("cid"))
     modpacks = {}
     for pack in data:
-
         modpacks[pack["slug"]] = pack["name"]
     return jsonify({"modpacks": modpacks, "mirror_url": mirror_url})
 
 
 @api.route("/api/modpack/<slug>")
 def modpack_slug(slug: str):
-    data = select_modpack(slug)
+    data = select_modpack_cid(slug, request.args.get("cid"))
     if data:
         builds_data = select_builds(data["id"])
         builds = [build["version"] for build in builds_data]
         data["builds"] = builds
         return jsonify(data)
     else:
-        return jsonify({"error": "Modpack does not exist/Build does not exist"})
+        return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
 
 
 @api.route("/api/modpack/<slug>/<build>")
 def modpack_slug_build(slug: str, build: str):
-    return jsonify(
-        {
-            "minecraft": "1.5.1",
-            "minecraft_md5": "5c1219d869b87d233de3033688ec7567",
-            "forge": None,
-            "mods": [
-                {
-                    "name": "basemods",
-                    "version": "tekkitmain-v1.0.2",
-                    "md5": "842658e9a8a03c1210d563be1b7d09f5",
-                    "url": "http:\/\/mirror.technicpack.net\/Technic\/mods\/basemods\/basemods-tekkitmain-v1.0.2.zip",
-                },
-                {
-                    "name": "balkonsweaponmod",
-                    "version": "v1.11",
-                    "md5": "016bb3edb2fa11c7212fd4cf2504e260",
-                    "url": "http:\/\/mirror.technicpack.net\/Technic\/mods\/balkonsweaponmod\/balkonsweaponmod-v1.11.zip",
-                },
-            ],
-        }
-    )
+    modpack = select_modpack_cid(slug, request.args.get("cid"))
+    if not modpack:
+        return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
+    modpack_id = modpack["id"]
+
+    modpack_data = select_modpack_build(modpack_id, build)
+    if not modpack_data:
+        return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
+
+    mods = select_mod_versions(modpack_data["id"])
+    for mod in mods:
+        name = select_mod(mod["mod_id"])["name"]
+        mod["url"] = mirror_url + name + "/" + name + "-" + mod["version"] + ".zip"
+
+    modpack_data["mods"] = mods
+    return jsonify(modpack_data)
 
 
 @api.route("/api/mod")
 def mod():
     return jsonify(
-        {"error": "No mod requested/Mod does not exist/Mod version does not exist"}
-    )
+        {"error": "Mod does not exist"}
+    ), 404
 
 
 @api.route("/api/mod/<name>")
