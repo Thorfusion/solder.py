@@ -45,3 +45,7 @@ main {
 .navcontainer {
   padding: 1em;
 }
+
+.minwidth {
+  min-width: 20vw;
+}
