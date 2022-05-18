@@ -5,25 +5,46 @@
 
 {%endblock%}{%block main%}
 
-<div class="wrapper2">
-<form enctype="multipart/form-data" method="POST" class="one">
-  <h3>{{modSlug}}</h3>
-  <label for="modver">Mod Version:</label><br />
-  <!--Select mod, puts jar file in mods folder inside a zip file-->
-  <input type="radio" id="mod" name="fav_language" value="MOD" class="form-check-input"/>
-  <label for="mod">MOD</label><br />
-  <!--Select mod loader, puts jar or json file inside a bin folder inside a zip file-->
-  <input type="radio" id="loader" name="fav_language" value="MOD-LOADER" class="form-check-input"/>
-  <label for="loader">MOD-LOADER</label><br />
-  <!--Select zip file, uploads the zip file-->
-  <input type="radio" id="zip" name="fav_language" value="ZIP" class="form-check-input"/>
-  <label for="zip">ZIP</label><br />
-  <input type="file" id="jarfile" name="jarfile" class="form-select"/><br />
-  <input type="text" id="modver" name="modver" class="form-text" /><br />
-  <p>md5 hash</p>
-  <p>file size</p>
-  <input type="submit" value="submit" class="btn btn-primary"/><br />
-  <p>file location</p>
-</form>
+<div class="">
+  <form method="post" action="">
+      <div class="mb-3">
+        <label for="formFile" class="form-label">Select file</label>
+        <input class="form-control" type="file" id="formFile">
+      </div>
+      <div class="mb-3"">
+          <label for="pretty_name" class="form-label">md5</label>
+          <input type="text" class="form-control" name="pretty_name" id="pretty_name" disabled readonly>
+      </div>
+      <label>Select type</label>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" checked>
+        <label class="form-check-label" for="flexRadioDefault2">
+          MOD.JAR
+        </label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1">
+        <label class="form-check-label" for="flexRadioDefault1">
+          Launcher
+        </label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1">
+        <label class="form-check-label" for="flexRadioDefault1">
+          ZIP
+        </label>
+      </div>
+      <div>
+        <label for="select" class="form-label">Select mod</label>
+        <select class="form-select" aria-label="Default select" name="select">
+          <option selected>Open this select menu</option>
+        </select>
+      </div>
+      <div class="mb-3"">
+          <label for="author" class="form-label">Version number</label>
+          <input type="text" class="form-control" name="author" id="author">
+      </div>
+      <input class="btn btn-success" type="submit" value="Add Version">
+  </form>
 </div>
 {% endblock %}
