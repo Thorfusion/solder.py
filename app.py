@@ -1,4 +1,5 @@
 from concurrent.futures import thread
+from hmac import digest
 import os
 from zipfile import ZipFile
 from dotenv import load_dotenv
@@ -33,12 +34,12 @@ app.sessions = {}
 
 def hasher(pw: str, salt: str) -> str:
     """
-    Hashes a password with a salt. Uses sha512
+    Hashes a password with a salt. Uses blake2b
     :param pw: Password to hash
     :param salt: Salt to hash with. This should be the username
     :return: Hashed password
     """
-    return hashlib.sha512((pw + salt).encode("utf-8")).hexdigest()
+    return hashlib.blake2b(pw.encode("UTF-8"), salt=hashlib.blake2b(salt.encode("UTF-8"), digest_size=16).digest()).hexdigest()
 
 def sessionLoop() -> None:
     while True:
