@@ -23,7 +23,14 @@
     position: sticky;
     top: 0;
   }
+  
+  .tablewidth2 {
+    width: 100%;
+    max-width: 160px;
+  }
 
   .tablewidth {
-    width: 160px;
+    width: max-content;
+    max-width: 160px;
+    min-width: max-content;
   }

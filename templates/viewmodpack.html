@@ -6,19 +6,31 @@
     <table class="table table-striped table-hover placeone">
         <thead class="table-light sticky-md-top">
             <tr>
-                <th scope="col">Name (Slug)</th>
-                <th scope="col">Version</th>
-                <th scope="col">Action</th>
+                <th scope="col">ID</th>
+                <th scope="col">Build</th>
+                <th scope="col">MC Version</th>
+                <th scope="col">Mod count</th>
+                <th scope="col">Rec</th>
+                <th scope="col">Latest</th>
+                <th scope="col">Published</th>
+                <th scope="col">Private</th>
+                <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody class="">
             {%for mod in mods%}
             <tr>
+                <td>{{mod.id}}</td>
                 <td>{{mod.pretty_name}} ({{mod.name}})</td>
                 <td>{{mod.author}}</td>
+                <td>{{mod.author}}</td>
+                <td>{{mod.author}}</td>
+                <td>{{mod.id}}</td>
+                <td>{{mod.id}}</td>
+                <td>{{mod.id}}</td>
                 <td>
                     <div class="tablewidth">
-                        <a href="{{ url_for('viewmodpack') }}"><button type="button" class="btn btn-danger">Remove</button></a>
+                        <a href="{{ url_for('modpackbuild') }}"><button type="button" class="btn btn-primary">Manage</button></a>
                     </div>
                 </td>
             </tr>
@@ -32,24 +44,13 @@
         <label for="pretty_name " class="form-label ">selected modpack</label>
         <input type="text " class="form-control " name="pretty_name " id="pretty_name " disabled readonly>
     </div>
+    <div class="mb-3 ">
+      <label for="buildnumber " class="form-label ">Build number</label>
+      <input type="text " class="form-control " name="buildnumber " id="buildnumber ">
+  </div>
   <div class="mb-3 ">
       <label for="mcversion " class="form-label ">Minecraft version</label>
       <select class="form-select "  name="mcversion " id="mcversion ">
-          <option>test</option>
-  <input class="btn btn-success " type="submit " value="Add build ">
-    </form>
-        <form method="post " action=" ">
-            <div class="mb-3 " ">
-                <label for="pretty_name " class="form-label ">selected modpack</label>
-                <input type="text " class="form-control " name="pretty_name " id="pretty_name " disabled readonly>
-            </div>
-            <div class="mb-3 ">
-                <label for="buildnumber " class="form-label ">Build number</label>
-                <input type="text " class="form-control " name="buildnumber " id="buildnumber ">
-            </div>
-            <div class="mb-3 ">
-                <label for="mcversion " class="form-label ">Minecraft version</label>
-                <select class="form-select " name="mcversion " id="mcversion ">
           <option>test</option>
   </div>
   <div class="mb-3 ">
@@ -66,8 +67,7 @@
       <label for="memory " class="form-label ">Minimum Memory requirement in MB, 0 for disable</label>
       <input type="text " class="form-control " name="memory " id="memory ">
   </div>
-  <input class="btn btn-success " type="submit " value="Save changes">
-  <input class="btn btn-danger " type="submit " value="Delete build">
+  <input class="btn btn-success " type="submit " value="Add build ">
     </form>
     {% if success %}
     <div class="alert alert-success loginfail mx-auto " role="alert ">
