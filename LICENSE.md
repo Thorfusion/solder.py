@@ -8,5 +8,5 @@ For purposes of the foregoing, “Sell” means practicing any or all of the rig
 
 Software: [solder.py]
 License: [EUPL-1.2]
-Artwork, logos and other stuff that the license above does not cover is under [CC BY-NC-SA 4.0]
+Artwork, logos and other stuff that the license [EUPL-1.2] does not cover is under [CC BY-NC-SA 4.0]
 Licensor: [Thorfusion]
