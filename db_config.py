@@ -170,18 +170,17 @@ def select_modpack(slug: str) -> typing.Union[dict, None]:
     cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
     return cur.fetchone()
 
-def select_modpack_cid(slug: str, cid: str) -> dict:
+def select_modpack_cid(slug: str, cid: str) -> typing.Union[dict, None]:
     conn = connect()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
     pack = cur.fetchone()
     if pack is not None and pack["private"]:
         if cid is None:
-            return
-            
+            return None
         cur.execute("SELECT * FROM client_modpack WHERE client_id IN (SELECT client_id FROM clients WHERE uuid = %s) AND modpack_id = %s", (cid, pack["id"]))
         if cur.fetchone() is None:
-            return
+            return None
         else:
             return pack
     return pack
@@ -193,7 +192,7 @@ def select_all_mods():
     cur.execute("SELECT * FROM mods ORDER BY id ASC")
     return cur.fetchall()
 
-def select_mod_versions(build: int) -> list:
+def select_mod_versions_from_build(build: int) -> list:
     conn = connect()
     cur = conn.cursor(dictionary=True)
     sql = "SELECT * FROM modversions AS v JOIN build_modversion AS bv ON bv.modversion_id = v.id JOIN mods AS m ON v.mod_id = m.id WHERE bv.build_id = %s"
@@ -212,6 +211,36 @@ def select_mod(id):
         return cur.fetchone()
     except Exception as e:
         message("Error whilst fetching mod info", e)
+
+def select_mod_name(name: str) -> typing.Union[dict, None]:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    sql = "SELECT * FROM mods WHERE name=%s"
+    try:
+        cur.execute(sql, (name,))
+        return cur.fetchone()
+    except Exception as e:
+        message("Error whilst fetching mod info", e)
+
+def select_mod_versions(id: int) -> list:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    sql = "SELECT * FROM modversions WHERE mod_id=%s"
+    try:
+        cur.execute(sql, (id,))
+        return cur.fetchall()
+    except Exception as e:
+        message("Error whilst fetching mod versions", e)
+
+def select_mod_version(mod: str, version: str) -> typing.Union[dict, None]:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    sql = "SELECT * FROM modversions WHERE mod_id=%s AND version=%s"
+    try:
+        cur.execute(sql, (mod, version))
+        return cur.fetchone()
+    except Exception as e:
+        message("Error whilst fetching mod version", e)
 
 def select_builds(modpack_id: int) -> dict:
     conn = connect()

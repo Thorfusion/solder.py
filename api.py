@@ -4,7 +4,7 @@ import os
 from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 
-from db_config import get_api_key, select_all_modpacks_cid, select_modpack_cid, select_builds, select_modpack_build, select_mod_versions, select_mod
+from db_config import get_api_key, select_all_modpacks_cid, select_modpack_cid, select_builds, select_modpack_build, select_mod_versions_from_build, select_mod_name, select_mod_versions, select_mod_version
 
 api = Blueprint("api", __name__)
 
@@ -68,7 +68,7 @@ def modpack_slug_build(slug: str, build: str):
     if not build_data:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
 
-    mods = select_mod_versions(build_data["id"])
+    mods = select_mod_versions_from_build(build_data["id"])
     for mod in mods:
         mod["url"] = mirror_url + mod["name"] + "/" + mod["name"] + "-" + mod["version"] + ".zip"
 
@@ -85,24 +85,23 @@ def mod():
 
 @api.route("/api/mod/<name>")
 def mod_name(name: str):
-    return jsonify(
-        {
-            "name": "testmod",
-            "pretty_name": "TestMod",
-            "author": "Technic",
-            "description": "This is a test mod for Solder",
-            "link": "http://solder.io",
-            "donate": None,
-            "versions": ["0.1"],
-        }
-    )
+    mod = select_mod_name(name)
+    if not mod:
+        return jsonify({"error": "Mod does not exist"}), 404
+    else:
+        mod["versions"] = select_mod_versions(mod["id"])
+        return jsonify(mod)
 
 
 @api.route("/api/mod/<name>/<version>")
 def mod_name_version(name: str, version: str):
-    return jsonify(
-        {
-            "md5": "fb6582e4d9c9bc208181907ecc108eb1",
-            "url": "http://technic.pagefortress.com/mods/testmod/testmod-0.1.zip",
-        }
-    )
+    mod = select_mod_name(name)
+    if not mod:
+        return jsonify({"error": "Mod does not exist"}), 404
+    version = select_mod_version(mod["id"], version)
+    if not version:
+        return jsonify({"error": "Mod version does not exist"}), 404
+    else:
+        version["url"] = mirror_url + name + "/" + name + "-" + version["version"] + ".zip"
+        return jsonify(version)
+
