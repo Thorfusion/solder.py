@@ -1,8 +1,8 @@
 from datetime import datetime
 from os import getenv
-
 from dotenv import load_dotenv
 from mysql import connector
+import typing
 
 load_dotenv(".env")
 
@@ -164,7 +164,7 @@ def select_all_modpacks_cid(cid: str) -> list:
         packs.remove(pack)
     return packs
 
-def select_modpack(slug: str) -> dict:
+def select_modpack(slug: str) -> typing.Union[dict, None]:
     conn = connect()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
@@ -196,7 +196,7 @@ def select_all_mods():
 def select_mod_versions(build: int) -> list:
     conn = connect()
     cur = conn.cursor(dictionary=True)
-    sql = "SELECT * FROM modversions WHERE id IN (SELECT modversion_id FROM build_modversion WHERE build_id = %s)"
+    sql = "SELECT * FROM modversions AS v JOIN build_modversion AS bv ON bv.modversion_id = v.id JOIN mods AS m ON v.mod_id = m.id WHERE bv.build_id = %s"
     try:
         cur.execute(sql, (build,))
         return cur.fetchall()
