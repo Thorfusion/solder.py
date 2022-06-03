@@ -64,17 +64,16 @@ def modpack_slug_build(slug: str, build: str):
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
     modpack_id = modpack["id"]
 
-    modpack_data = select_modpack_build(modpack_id, build)
-    if not modpack_data:
+    build_data = select_modpack_build(modpack_id, build)
+    if not build_data:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
 
-    mods = select_mod_versions(modpack_data["id"])
+    mods = select_mod_versions(build_data["id"])
     for mod in mods:
-        name = select_mod(mod["mod_id"])["name"]
-        mod["url"] = mirror_url + name + "/" + name + "-" + mod["version"] + ".zip"
+        mod["url"] = mirror_url + mod["name"] + "/" + mod["name"] + "-" + mod["version"] + ".zip"
 
-    modpack_data["mods"] = mods
-    return jsonify(modpack_data)
+    build_data["mods"] = mods
+    return jsonify(build_data)
 
 
 @api.route("/api/mod")
