@@ -1,4 +1,5 @@
 from concurrent.futures import thread
+from hmac import digest
 import os
 from zipfile import ZipFile
 from dotenv import load_dotenv
@@ -10,7 +11,7 @@ from werkzeug.utils import secure_filename
 import secrets
 import hashlib
 
-from db_config import add_modversion_db, select_all_mods, select_mod, init_db, get_user_info
+from db_config import add_modversion_db, select_all_mods, select_all_modpacks, select_mod, init_db, get_user_info
 from mysql import connector
 
 from api import api
@@ -33,19 +34,18 @@ app.sessions = {}
 
 def hasher(pw: str, salt: str) -> str:
     """
-    Hashes a password with a salt. Uses sha512
+    Hashes a password with a salt. Uses blake2b
     :param pw: Password to hash
     :param salt: Salt to hash with. This should be the username
     :return: Hashed password
     """
-    return hashlib.sha512((pw + salt).encode("utf-8")).hexdigest()
+    return hashlib.blake2b(pw.encode("UTF-8"), salt=hashlib.blake2b(salt.encode("UTF-8"), digest_size=16).digest()).hexdigest()
 
 def sessionLoop() -> None:
     while True:
         to_delete = []
         for key in app.sessions:
-            if (datetime.utcnow() - app.sessions[key]).total_seconds() > 10:
-                print(key)
+            if (datetime.utcnow() - app.sessions[key]).total_seconds() > 420:
                 to_delete.append(key)
         for key in to_delete:
             del app.sessions[key]
@@ -55,7 +55,7 @@ t = threading.Thread(target=sessionLoop)
 t.start()
 
 def createFolder(dirName):
-        os.makedirs(dirName, exist_ok=True)
+    os.makedirs(dirName, exist_ok=True)
 
 @app.route("/")
 def index():
@@ -66,12 +66,8 @@ def index():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    try:
-        mods = select_all_mods()
-    except connector.ProgrammingError as e:
-        init_db()
-        mods = []
-    return render_template("index.html", mods=mods, session_key=session["key"])
+
+    return render_template("index.html")
 
 @app.route("/login", methods=["GET"])
 def login_page():
@@ -98,8 +94,8 @@ def login():
                 return render_template("login.html", failed=True)
 
 
-@app.route("/addversion/<id>", methods=["GET", "POST"])
-def addversion(id):
+@app.route("/modversion/<id>", methods=["GET", "POST"])
+def modversion(id):
     if "key" in session and session["key"] in app.sessions:
         # Valid ession, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -131,8 +127,103 @@ def addversion(id):
         else:
             print("error")
 
-    return render_template("addversion.html", modSlug=modSlug, name=name, size=size)
+    try:
+        mods = select_all_mods()
+    except connector.ProgrammingError as e:
+        init_db()
+        mods = []
 
+    return render_template("modversion.html", modSlug=modSlug, name=name, size=size, mods=mods)
+
+@app.route("/newmod")
+def newmod():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    return render_template("newmod.html")
+
+@app.route("/viewmodpack")
+def viewmodpack():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        mods = select_all_mods()
+    except connector.ProgrammingError as e:
+        init_db()
+        mods = []
+
+    return render_template("viewmodpack.html", mods=mods)
+
+@app.route("/mainsettings")
+def mainsettings():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    return render_template("mainsettings.html")
+
+@app.route("/modpackbuild")
+def modpackbuild():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        mods = select_all_mods()
+    except connector.ProgrammingError as e:
+        init_db()
+        mods = []
+
+    return render_template("modpackbuild.html", mods=mods)
+
+@app.route("/modlibrary")
+def modlibrary():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        mods = select_all_mods()
+    except connector.ProgrammingError as e:
+        init_db()
+        mods = []
+
+    return render_template("modlibrary.html", mods=mods)
+
+@app.route("/modpacks")
+def modpacks():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        mods = select_all_mods()
+    except connector.ProgrammingError as e:
+        init_db()
+        mods = []
+
+    return render_template("modpacks.html", mods=mods)
 
 @app.errorhandler(404)
 def page_not_found(e):

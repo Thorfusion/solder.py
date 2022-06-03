@@ -1,0 +1,62 @@
+html,
+
+.wrapper {
+  display: grid;
+  grid-template-columns: minmax(min-content, max-content) 1fr;
+  grid-template-rows: auto;
+  gap: 0.5vw;
+}
+
+aside {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+main {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.image {
+  width: 12vw;
+  max-width: 24em;
+  min-width: 12em;
+}
+
+.sidenav {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.wrappernav {
+  display: grid;
+  grid-template-columns: auto;
+  grid-template-rows: 2fr 5fr 1fr;
+}
+
+.imgcontainer {
+  justify-self: center;
+  padding: 1em;
+  grid-row: 1;
+  
+}
+
+.navcontainer {
+  padding: 1em;
+  grid-row: 2;
+}
+
+.navcontainer2 {
+  padding: 1em;
+  grid-row: 3;
+  align-self: end;
+}
+
+.minwidth {
+  min-width: 15vw;
+}
+
+.maxwidth {
+  min-width: 20vw;
+}

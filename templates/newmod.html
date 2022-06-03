@@ -1,0 +1,45 @@
+{%extends "layout.html"%}
+{% set active_page = "newmod" %}
+{%block head%}
+<title>solder.py</title>
+
+{%endblock%}{%block main%}
+<div class="minwidth">
+    <form method="post" action="">
+        <div class="mb-3"">
+            <label for="pretty_name" class="form-label">Mod Name</label>
+            <input type="text" class="form-control" name="pretty_name" id="pretty_name">
+        </div>
+        <div class="mb-3"">
+            <label for="name" class="form-label">Mod Slug</label>
+            <input type="text" class="form-control" name="name" id="name">
+        </div>
+        <div class="mb-3"">
+            <label for="author" class="form-label">Author</label>
+            <input type="text" class="form-control" name="author" id="author">
+        </div>
+        <div class="mb-3"">
+            <label for="description" class="form-label">Description</label>
+            <textarea name="description" id="description" class="form-control" rows="5"></textarea>
+        </div>
+        <div class="mb-3"">
+            <label for="link" class="form-label">Mod Website</label>
+            <input type="text" class="form-control" name="link" id="link">
+        </div>
+        <label>Select type</label>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" value="" id="client">
+          <label class="form-check-label" for="client">Client</label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" value="" id="server">
+          <label class="form-check-label" for="server">Server</label>
+        </div>
+        <div class="mb-3"">
+            <label for="internal_note" class="form-label">Internal note</label>
+            <textarea name="internal_note" id="internal_note" class="form-control" rows="5"></textarea>
+        </div>
+        <input class="btn btn-success" type="submit" value="Add Mod">
+    </form>
+</div>
+{% endblock %}
