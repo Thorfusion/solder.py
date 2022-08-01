@@ -355,3 +355,16 @@ def add_mod(name: str, pretty_name: str, author: str, description: str, link: st
         return False
     conn.close()
     return True
+
+def count_mods_build(build_id: int) -> int:
+    conn = connect()
+    cur = conn.cursor()
+    sql = "SELECT COUNT(*) FROM build_modversion WHERE build_id = %s"
+    try:
+        cur.execute(sql, build_id)
+        ret = cur.fetchone()[0]
+        conn.close()
+        return ret
+    except Exception as e:
+        message("Error whilst counting mods in a build", e)
+        return 0
