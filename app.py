@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 import secrets
 import hashlib
 
-from db_config import select_mod_versions, select_all_mods, select_all_modpacks, select_mod, init_db, get_user_info
+from db_config import select_mod_versions, select_all_mods, select_all_modpacks, select_mod, init_db, get_user_info, select_modpack_id
 from mysql import connector
 
 from api import api
@@ -143,8 +143,8 @@ def newmod():
 
     return render_template("newmod.html")
 
-@app.route("/viewmodpack")
-def viewmodpack():
+@app.route("/viewmodpack/<id>", methods=["GET", "POST"])
+def viewmodpack(id):
     if "key" in session and session["key"] in app.sessions:
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -153,12 +153,12 @@ def viewmodpack():
         return redirect(url_for("login"))
 
     try:
-        mods = select_all_mods()
+        modpack = select_modpack_id(id)
     except connector.ProgrammingError as e:
         init_db()
-        mods = []
+        modpack = []
 
-    return render_template("viewmodpack.html", mods=mods)
+    return render_template("viewmodpack.html", modpack=modpack)
 
 @app.route("/mainsettings")
 def mainsettings():
