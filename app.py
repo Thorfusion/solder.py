@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 import secrets
 import hashlib
 
-from db_config import select_mod_versions, select_all_mods, select_all_modpacks, select_mod, init_db, get_user_info, select_modpack_id
+from db_config import select_mod_versions, select_all_mods, select_all_modpacks, select_mod, init_db, get_user_info, select_builds_from_modpack
 from mysql import connector
 
 from api import api
@@ -153,7 +153,7 @@ def viewmodpack(id):
         return redirect(url_for("login"))
 
     try:
-        modpack = select_modpack_id(id)
+        modpack = select_builds_from_modpack(id)
     except connector.ProgrammingError as e:
         init_db()
         modpack = []
