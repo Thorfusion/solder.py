@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 import secrets
 import hashlib
 
-from db_config import add_modversion_db, select_all_mods, select_all_modpacks, select_mod, init_db, get_user_info
+from db_config import select_mod_versions, select_all_mods, select_all_modpacks, select_mod, init_db, get_user_info
 from mysql import connector
 
 from api import api
@@ -125,12 +125,12 @@ def modversion(id):
             print("error")
 
     try:
-        mods = select_all_mods()
+        modversions = select_mod_versions(id)
     except connector.ProgrammingError as e:
         init_db()
-        mods = []
+        modversions = []
 
-    return render_template("modversion.html", modSlug=modSlug, name=name, size=size, mods=mods)
+    return render_template("modversion.html", modSlug=modSlug, name=name, size=size, modversions=modversions)
 
 @app.route("/newmod")
 def newmod():
