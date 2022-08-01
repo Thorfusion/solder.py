@@ -222,6 +222,27 @@ def modpacks():
 
     return render_template("modpacks.html", modpacks=modpacks)
 
+@app.route("/newmod", methods=["POST"])
+def newmod_submit():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    form = request.form
+    print(form)
+
+    name = form['name']
+    pretty_name = form['pretty_name']
+    author = form['author']
+    description = form['description']
+    link = form['link']
+    client = form['client']
+    server = form['server']
+    note = form['internal_note']
+
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template("404.html", error=e), 404
