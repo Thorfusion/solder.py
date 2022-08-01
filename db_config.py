@@ -154,6 +154,14 @@ def select_all_modpacks() -> list:
     conn.close()
     return ret
 
+def select_all_modpacks_internal() -> list:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM modpacks WHERE ORDER BY id ASC")
+    ret = cur.fetchall()
+    conn.close()
+    return ret
+
 def select_all_modpacks_cid(cid: str) -> list:
     conn = connect()
     cur = conn.cursor(dictionary=True)
