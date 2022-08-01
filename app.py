@@ -90,6 +90,13 @@ def login():
             else:
                 return render_template("login.html", failed=True)
 
+@app.route("/logout")
+def logout():
+    if "key" in session and session["key"] in app.sessions:
+        del app.sessions[session["key"]]
+        session.pop("key")
+    return render_template("login.html", failed=False)
+
 
 @app.route("/modversion/<id>", methods=["GET", "POST"])
 def modversion(id):
