@@ -279,7 +279,18 @@ def select_builds(modpack_id: int) -> dict:
     conn.close()
     return ret
 
-def select_modpack_build(modpack: str, build: str) -> dict:
+def select_builds_from_modpack(modpack_id: int) -> dict:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT * FROM builds WHERE modpack_id = %s", (modpack_id,))
+    except Exception as e:
+        message("Error whilst fetching builds", e)
+    ret = cur.fetchall()
+    conn.close()
+    return ret
+
+def select_modpack_build(modpack: int, build: str) -> dict:
     conn = connect()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM builds WHERE modpack_id = %s AND version = %s AND is_published = 1", (modpack, build))
