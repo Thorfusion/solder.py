@@ -1,7 +1,121 @@
 {%extends "layout.html"%} {% set active_page = "mainsettings" %} {%block head%}
 <title>solder.py</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}" /> {%endblock%}{%block main%}
+<link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}" /> 
+{%endblock%}{%block main%}
 
-<p>Herro</p>
+
+
+<div class="wrappermod">
+    <table class="table table-striped table-hover placeone maxheighttable">
+        <thead class="table-light sticky-md-top">
+            <tr>
+                <form method="post" action=""></form>
+                <th scope="col">ID</th>
+                <th scope="col">
+                    <div class="mb-3">
+                  <label for="author" class="form-label">Name</label>
+                  <input type="text" class="form-control" name="author" id="author">
+              </div></th>
+                <th scope="col">
+                  <div class="mb-3">
+                        <label for="pretty_name" class="form-label">api key</label>
+                        <input type="text" class="form-control" name="pretty_name" id="pretty_name">
+                    </div>
+                </th>
+                <td>
+                    <input class="btn btn-success" type="submit" value="Add Key">
+                </td>
+                </form>
+            </tr>
+        </thead>
+        <tbody class="">
+            {%for mod in modversions%}
+            <tr>
+                <td>{{mod.id}}</td>
+                <td>{{mod.name}}</td>
+                <td>{{mod.api_key}}</td>
+                <td>
+                    <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+                </td>
+            </tr>
+            {%endfor%}
+        </tbody>
+    </table>
+    <table class="table table-striped table-hover placeone maxheighttable">
+        <thead class="table-light sticky-md-top">
+            <tr>
+                <form method="post" action=""></form>
+                <th scope="col">ID</th>
+                <th scope="col">
+                    <div class="mb-3">
+                  <label for="author" class="form-label">Name</label>
+                  <input type="text" class="form-control" name="author" id="author">
+              </div></th>
+                <th scope="col">
+                  <div class="mb-3">
+                        <label for="pretty_name" class="form-label">Client UUID</label>
+                        <input type="text" class="form-control" name="pretty_name" id="pretty_name">
+                    </div>
+                </th>
+                <td>
+                    <input class="btn btn-success" type="submit" value="Add Client">
+                </td>
+                </form>
+            </tr>
+        </thead>
+        <tbody class="">
+            {%for mod in modversions%}
+            <tr>
+                <td>{{mod.id}}</td>
+                <td>{{mod.name}}</td>
+                <td>{{mod.uuid}}</td>
+                <td>
+                    <a href="#"><button type="button" class="btn btn-primary">Manage</button></a>
+                    <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+                </td>
+            </tr>
+            {%endfor%}
+        </tbody>
+    </table>
+    <table class="table table-striped table-hover placeone maxheighttable">
+        <thead class="table-light sticky-md-top">
+            <tr>
+                <form method="post" action=""></form>
+                <th scope="col">ID</th>
+                <th scope="col">
+                    <div class="mb-3">
+                  <label for="author" class="form-label">EMAIL</label>
+                  <input type="text" class="form-control" name="author" id="author">
+              </div></th>
+                <th scope="col">
+                  <div class="mb-3">
+                        <label for="pretty_name" class="form-label">USERNAME</label>
+                        <input type="text" class="form-control" name="pretty_name" id="pretty_name">
+                    </div>
+                </th>
+                <td>
+                    <input class="btn btn-success" type="submit" value="Add User">
+                </td>
+                </form>
+            </tr>
+        </thead>
+        <tbody class="">
+            {%for mod in modversions%}
+            <tr>
+                <td>{{mod.id}}</td>
+                <td>{{mod.email}}</td>
+                <td>{{mod.username}}</td>
+                <td>
+                    <a href="#"><button type="button" class="btn btn-primary">Manage</button></a>
+                    <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+                </td>
+            </tr>
+            {%endfor%}
+        </tbody>
+    </table>
+  
+    <div class="placetwo minwidth maxwidth">
+    </div>
+</div>
 
 {% endblock %}
