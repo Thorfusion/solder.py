@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 import secrets
 import hashlib
 
-from db_config import select_mod_versions, select_all_mods, select_all_modpacks_internal, select_mod, init_db, get_user_info, select_builds_from_modpack, select_mod_versions_from_build, select_all_clients
+from db_config import select_mod_versions, select_all_mods, select_all_modpacks_internal, select_mod, init_db, get_user_info, select_builds_from_modpack, select_mod_versions_from_build, select_all_clients, select_perms_from_client_modpack
 from mysql import connector
 
 from api import api
@@ -260,6 +260,22 @@ def newmod_submit():
 def page_not_found(e):
     return render_template("404.html", error=e), 404
 
+@app.route("/clients/<id>", methods=["GET", "POST"])
+def clients(id):
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        clients = select_perms_from_client_modpack(id)
+    except connector.ProgrammingError as e:
+        init_db()
+        clients = []
+
+    return render_template("clients.html", clients=clients)
 
 if __name__ == "__main__":
     app.run(debug=True, host=host, port=port)  # endre denne når nettsiden skal ut på nett

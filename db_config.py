@@ -226,6 +226,17 @@ def select_all_clients():
     conn.close()
     return ret
 
+def select_perms_from_client_modpack(client_id: int) -> dict:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT * FROM client_modpack WHERE client_id = %s", (client_id,))
+    except Exception as e:
+        message("Error whilst fetching client permissions", e)
+    ret = cur.fetchall()
+    conn.close()
+    return ret
+
 def select_mod_versions_from_build(build: int) -> list:
     conn = connect()
     cur = conn.cursor(dictionary=True)
