@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 import secrets
 import hashlib
 
-from db_config import select_mod_versions, select_all_mods, select_all_modpacks_internal, select_mod, init_db, get_user_info, select_builds_from_modpack, select_mod_versions_from_build
+from db_config import select_mod_versions, select_all_mods, select_all_modpacks_internal, select_mod, init_db, get_user_info, select_builds_from_modpack, select_mod_versions_from_build, select_all_clients
 from mysql import connector
 
 from api import api
@@ -176,7 +176,13 @@ def mainsettings():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    return render_template("mainsettings.html")
+    try:
+        clients = select_all_clients()
+    except connector.ProgrammingError as e:
+        init_db()
+        clients = []
+
+    return render_template("mainsettings.html", clients=clients)
 
 @app.route("/modpackbuild/<id>", methods=["GET", "POST"])
 def modpackbuild(id):

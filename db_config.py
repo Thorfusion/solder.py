@@ -218,6 +218,14 @@ def select_all_mods():
     conn.close()
     return ret
 
+def select_all_clients():
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM clients ORDER BY id ASC")
+    ret = cur.fetchall()
+    conn.close()
+    return ret
+
 def select_mod_versions_from_build(build: int) -> list:
     conn = connect()
     cur = conn.cursor(dictionary=True)
