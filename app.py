@@ -1,13 +1,14 @@
+from crypt import methods
 import os
 from dotenv import load_dotenv
 
-from flask import Flask, redirect, render_template, request, url_for
-from flask import session, request
+from flask import Flask, redirect, render_template, request, url_for, session, request, Response
 from werkzeug.utils import secure_filename
 
 import secrets
 import hashlib
 
+from models.database import Database
 from db_config import select_mod_versions, select_all_mods, select_all_modpacks_internal, select_mod, init_db, get_user_info, select_builds_from_modpack, select_mod_versions_from_build, select_all_clients, select_perms_from_client_modpack
 from mysql import connector
 
@@ -56,6 +57,9 @@ def createFolder(dirName):
 
 @app.route("/")
 def index():
+    if not Database.is_setup():
+        # Initial database setup
+        return redirect(url_for("setup"))
     if "key" in session and session["key"] in app.sessions:
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -65,6 +69,19 @@ def index():
 
 
     return render_template("index.html")
+
+@app.route("/setup", methods=["GET", "POST"])
+def setup():
+    if request.method == "POST":
+        if Database.is_setup():
+            return redirect(url_for("index"))
+        Database.create_tables()
+        return render_template("setup.html")
+    else:
+        if Database.is_setup():
+            return Response(status=400)'
+        '
+        return redirect(url_for("index"))
 
 @app.route("/login", methods=["GET"])
 def login_page():
