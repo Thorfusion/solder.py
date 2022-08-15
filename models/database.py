@@ -2,7 +2,7 @@ from os import getenv
 from dotenv import load_dotenv
 from mysql import connector
 
-import errorPrinter
+from . import errorPrinter
 
 load_dotenv(".env")
 db_host = getenv("DB_HOST")
@@ -25,6 +25,18 @@ class Database:
         except Exception as e:
             errorPrinter.message("Error connecting to database", e)
         return conn
+
+    @staticmethod
+    def is_setup() -> bool:
+        conn = Database.get_connection()
+        cur = conn.cursor()
+        sql = "SELECT table_name FROM information_schema.tables"
+        try:
+            cur.execute(sql)
+            return True if cur.fetchone() is not None else False
+        except Exception as e:
+            errorPrinter.message("An error occurred whilst trying to fetch an API key", e)
+        conn.close()
 
     @staticmethod
     def create_tables() -> bool:

@@ -1,5 +1,5 @@
-from database import Database
-import errorPrinter
+from .database import Database
+from . import errorPrinter
 from datetime import datetime
 class Key:
     def __init__(self, id, name, key, created_at, updated_at):
@@ -10,7 +10,7 @@ class Key:
         self.updated_at = updated_at
 
     @classmethod
-    def insert_new(cls, name, key) -> Key:
+    def insert_new(cls, name, key):
         key_exists = cls.get_key(key)
         if key_exists:
             return key_exists
@@ -19,7 +19,7 @@ class Key:
         return new_key
 
     @classmethod
-    def get_key_by_id(cls, id: int) -> Key:
+    def get_key_by_id(cls, id: int):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         sql = "SELECT * FROM `keys` WHERE id = %s"
@@ -33,7 +33,7 @@ class Key:
         conn.close()
 
     @classmethod
-    def get_key(cls, key: str) -> Key:
+    def get_key(cls, key: str):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         sql = "SELECT * FROM `keys` WHERE api_key = %s"

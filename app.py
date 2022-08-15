@@ -256,6 +256,11 @@ def newmod_submit():
     server = form['server']
     note = form['internal_note']
 
+    print(client)
+    print(server)
+
+    return 204
+
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template("404.html", error=e), 404

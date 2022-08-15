@@ -2,7 +2,8 @@ import os
 from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 
-from db_config import get_api_key, select_all_modpacks_cid, select_modpack_cid, select_builds, select_modpack_build, select_mod_versions_from_build, select_mod_name, select_mod_versions, select_mod_version
+from models.key import Key
+from db_config import select_all_modpacks_cid, select_modpack_cid, select_builds, select_modpack_build, select_mod_versions_from_build, select_mod_name, select_mod_versions, select_mod_version
 
 api = Blueprint("api", __name__)
 
@@ -21,12 +22,12 @@ def verify():
 
 @api.route("/api/verify/<key>")
 def verify_key(key: str = None):
-    key = get_api_key(key)
+    key = Key.get_key(key)
     if key:
         return jsonify(
             {
                 "valid": "Key validated.",
-                "name": key['name'],
+                "name": key.name,
                 "created_at": "1970-01-01T00:00:00+00:00",
             }
         )
