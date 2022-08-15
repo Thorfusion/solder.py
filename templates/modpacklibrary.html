@@ -1,4 +1,4 @@
-{%extends "layout.html"%} {% set active_page = "modpacks" %} {%block head%}
+{%extends "layout.html"%} {% set active_page = "modpacklibrary" %} {%block head%}
 <title>solder.py</title>
 <link rel="stylesheet" href="{{ url_for('static',filename='css/modlibrary.css') }}" /> {%endblock%}{%block main%}
 
@@ -16,7 +16,7 @@
             </tr>
         </thead>
         <tbody class="">
-            {%for mod in modpacks%}
+            {%for mod in modpacklibrary%}
             <tr>
                 <td>{{mod.id}}</td>
                 <td>{{mod.name}} ({{mod.slug}})</td>
@@ -26,8 +26,8 @@
                 <td>{{mod.private}}</td>
                 <td>
                     <div class="tablewidth">
-                        <a href="./viewmodpack/{{mod.id}}"><button type="button" class="btn btn-primary">Select</button></a>
-                        <a href="./viewmodpack/{{mod.id}}"><button type="button" class="btn btn-secondary">Manage</button></a>
+                        <a href="./modpack/{{mod.id}}"><button type="button" class="btn btn-primary">Select</button></a>
+                        <a href="./modpack/{{mod.id}}"><button type="button" class="btn btn-secondary">Manage</button></a>
                     </div>
                 </td>
             </tr>

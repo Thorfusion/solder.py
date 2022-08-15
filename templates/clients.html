@@ -1,4 +1,4 @@
-{%extends "layout.html"%} {% set active_page = "modpacks" %} {%block head%}
+{%extends "layout.html"%} {% set active_page = "mainsettings" %} {%block head%}
 <title>solder.py</title>
 <link rel="stylesheet" href="{{ url_for('static',filename='css/modlibrary.css') }}" /> {%endblock%}{%block main%}
 
@@ -7,8 +7,8 @@
         <thead class="table-light sticky-md-top">
             <tr>
                 <th scope="col">ID</th>
-                <th scope="col">Build</th>
-                <th scope="col">MC Version</th>
+                <th scope="col">Client ID</th>
+                <th scope="col">Modpack ID</th>
                 <th scope="col">Actions</th>
             </tr>
         </thead>
