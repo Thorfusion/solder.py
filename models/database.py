@@ -2,7 +2,7 @@ from os import getenv
 from dotenv import load_dotenv
 from mysql import connector
 
-from . import errorPrinter
+from .errorPrinter import ErrorPrinter
 
 load_dotenv(".env")
 db_host = getenv("DB_HOST")
@@ -10,6 +10,8 @@ db_port = getenv("DB_PORT")
 db_user = getenv("DB_USER")
 db_pass = getenv("DB_PASSWORD")
 db_name = getenv("DB_DATABASE")
+
+tables = ("modpacks", "builds", "mods", "modversions", "build_modversions", "users", "user_permissions", "clients", "client_modpacks", "keys")
 
 class Database:
     @staticmethod
@@ -29,19 +31,23 @@ class Database:
     @staticmethod
     def is_setup() -> bool:
         conn = Database.get_connection()
-        cur = conn.cursor()
+        cur = conn.cursor(dictionary=True)
         sql = "SELECT table_name FROM information_schema.tables"
         try:
             cur.execute(sql)
-            return True if cur.fetchone() is not None else False
+            curr_tables = [table["table_name"] for table in cur.fetchall()]
+            for table in tables:
+                if table not in curr_tables:
+                    return False
+                return True
         except Exception as e:
-            errorPrinter.message("An error occurred whilst trying to fetch an API key", e)
+            errorPrinter.message("An error occurred whilst trying to check database setup", e)
         conn.close()
 
     @staticmethod
     def create_tables() -> bool:
         try:
-            con = get_connection()
+            con = Database.get_connection()
             cur = con.cursor()
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS modpacks (
@@ -149,7 +155,7 @@ class Database:
                         api_key VARCHAR(255) NOT NULL UNIQUE
                         )"""
             )
-            conn.commit()
-            conn.close()
+            con.commit()
+            con.close()
         except Exception:
             errorPrinter.message("Error creating tables", e)

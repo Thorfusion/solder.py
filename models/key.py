@@ -1,5 +1,5 @@
 from .database import Database
-from . import errorPrinter
+from .errorPrinter import ErrorPrinter
 from datetime import datetime
 class Key:
     def __init__(self, id, name, key, created_at, updated_at):
@@ -29,7 +29,7 @@ class Key:
             conn.close()
             return cls(key['id'], key['name'], key['api_key'], key['created_at'], key['updated_at'])
         except Exception as e:
-            errorPrinter.message("An error occurred whilst trying to fetch an API key", e)
+            ErrorPrinter.message("An error occurred whilst trying to fetch an API key", e)
         conn.close()
 
     @classmethod
@@ -43,7 +43,7 @@ class Key:
             conn.close()
             return cls(key['id'], key['name'], key['api_key'], key['created_at'], key['updated_at'])
         except Exception as e:
-            errorPrinter.message("An error occurred whilst trying to fetch an API key", e)
+            ErrorPrinter.message("An error occurred whilst trying to fetch an API key", e)
         conn.close()
 
     @staticmethod
@@ -55,7 +55,7 @@ class Key:
             cur.execute(sql, (key,))
             return True if cur.fetchone() is not None else False
         except Exception as e:
-            errorPrinter.message("An error occurred whilst trying to fetch an API key", e)
+            ErrorPrinter.message("An error occurred whilst trying to fetch an API key", e)
         conn.close()
 
     @staticmethod
@@ -69,7 +69,7 @@ class Key:
             keys = [Key(row['id'], row['name'], row['api_key'], row['created_at'], row['updated_at']) for row in keydata]
             return keys
         except Exception as e:
-            errorPrinter.message("An error occurred whilst trying to fetch all API keys", e)
+            ErrorPrinter.message("An error occurred whilst trying to fetch all API keys", e)
         conn.close()
 
     def add_key() -> None:
@@ -79,5 +79,5 @@ class Key:
         try:
             cur.execute(sql, (self.id, self.name, self.key, self.created_at, self.updated_at))
         except Exception as e:
-            errorPrinter.message("An error occurred whilst trying to fetch an API key", e)
+            ErrorPrinter.message("An error occurred whilst trying to fetch an API key", e)
         conn.close()

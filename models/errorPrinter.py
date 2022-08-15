@@ -1,5 +1,3 @@
-
-
 class ErrorPrinter:
     @staticmethod
     def message(message, e=""):
