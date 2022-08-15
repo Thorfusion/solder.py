@@ -71,7 +71,7 @@ def index():
 
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
-    if request.method == "POST":
+    if request.method == "GET":
         if Database.is_setup():
             return redirect(url_for("index"))
         Database.create_tables()
