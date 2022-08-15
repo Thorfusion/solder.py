@@ -150,8 +150,8 @@ def newmod():
 
     return render_template("newmod.html")
 
-@app.route("/viewmodpack/<id>", methods=["GET", "POST"])
-def viewmodpack(id):
+@app.route("/modpack/<id>", methods=["GET", "POST"])
+def modpack(id):
     if "key" in session and session["key"] in app.sessions:
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -165,7 +165,7 @@ def viewmodpack(id):
         init_db()
         modpack = []
 
-    return render_template("viewmodpack.html", modpack=modpack)
+    return render_template("modpack.html", modpack=modpack)
 
 @app.route("/mainsettings")
 def mainsettings():
@@ -218,8 +218,8 @@ def modlibrary():
 
     return render_template("modlibrary.html", mods=mods)
 
-@app.route("/modpacks")
-def modpacks():
+@app.route("/modpacklibrary")
+def modpacklibrary():
     if "key" in session and session["key"] in app.sessions:
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -228,12 +228,12 @@ def modpacks():
         return redirect(url_for("login"))
 
     try:
-        modpacks = select_all_modpacks_internal()
+        modpacklibrary = select_all_modpacks_internal()
     except connector.ProgrammingError as e:
         init_db()
-        modpacks = []
+        modpacklibrary = []
 
-    return render_template("modpacks.html", modpacks=modpacks)
+    return render_template("modpacklibrary.html", modpacklibrary=modpacklibrary)
 
 @app.route("/newmod", methods=["POST"])
 def newmod_submit():
