@@ -1,4 +1,3 @@
-from ast import keyword
 from database import Database
 import errorPrinter
 from datetime import datetime
@@ -11,34 +10,13 @@ class Key:
         self.updated_at = updated_at
 
     @classmethod
-    def insert_new(cls, name, key):
+    def insert_new(cls, name, key) -> Key:
         key_exists = cls.get_key(key)
         if key_exists:
             return key_exists
-        conn = Database.get_connection()
-        cur = conn.cursor()
-        sql = "INSERT INTO `keys` (name, api_key, created_at, updated_at) VALUES (%s, %s, %s, %s) RETURNING id"
-        date = datetime.now()
-        try:
-            cur.execute(sql, (name, key, date, date))
-            id = cur.fetchone()[0]
-            conn.close()
-            return cls(id, name, key, date, date)
-        except Exception as e:
-            errorPrinter.print_error("An error occurred trying to insert a new key", e)
-            return None
-
-    @staticmethod
-    def verify_key(key: str) -> bool:
-        conn = Database.get_connection()
-        cur = conn.cursor()
-        sql = "SELECT * FROM `keys` WHERE api_key = %s"
-        try:
-            cur.execute(sql, (key,))
-            return True if cur.fetchone() is not None else False
-        except Exception as e:
-            errorPrinter.message("An error occurred whilst trying to fetch an API key", e)
-        conn.close()
+        new_key = cls(None, name, key, datetime.now(), datetime.now())
+        cls.add_key(new_key)
+        return new_key
 
     @classmethod
     def get_key_by_id(cls, id: int) -> Key:
@@ -69,6 +47,18 @@ class Key:
         conn.close()
 
     @staticmethod
+    def verify_key(key: str) -> bool:
+        conn = Database.get_connection()
+        cur = conn.cursor()
+        sql = "SELECT * FROM `keys` WHERE api_key = %s"
+        try:
+            cur.execute(sql, (key,))
+            return True if cur.fetchone() is not None else False
+        except Exception as e:
+            errorPrinter.message("An error occurred whilst trying to fetch an API key", e)
+        conn.close()
+
+    @staticmethod
     def get_all_keys() -> list:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
@@ -82,13 +72,12 @@ class Key:
             errorPrinter.message("An error occurred whilst trying to fetch all API keys", e)
         conn.close()
 
-    @staticmethod
-    def add_key(key: Key) -> None:
+    def add_key() -> None:
         conn = Database.get_connection()
         cur = conn.cursor()
         sql = "INSERT INTO `keys` (id, name, api_key, created_at, updated_at) VALUES (%s, %s, %s, %s, %s)"
         try:
-            cur.execute(sql, (key.id, key.name, key.key, key.created_at, key.updated_at))
+            cur.execute(sql, (self.id, self.name, self.key, self.created_at, self.updated_at))
         except Exception as e:
             errorPrinter.message("An error occurred whilst trying to fetch an API key", e)
         conn.close()
