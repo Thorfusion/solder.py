@@ -9,7 +9,7 @@ class Key:
         sql = "SELECT * FROM `keys` WHERE api_key = %s"
         try:
             cur.execute(sql, (key,))
-            return cur.fetchone()
+            return true if cur.fetchone() is not None else false
         except Exception as e:
             errorPrinter.message("An error occurred whilst trying to fetch an API key", e)
         conn.close()
