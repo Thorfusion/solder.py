@@ -79,8 +79,7 @@ def setup():
         return render_template("setup.html")
     else:
         if Database.is_setup():
-            return Response(status=400)'
-        '
+            return Response(status=400)
         return redirect(url_for("index"))
 
 @app.route("/login", methods=["GET"])
