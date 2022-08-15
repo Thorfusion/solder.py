@@ -9,25 +9,15 @@
                 <th scope="col">ID</th>
                 <th scope="col">Build</th>
                 <th scope="col">MC Version</th>
-                <th scope="col">Mod count</th>
-                <th scope="col">Rec</th>
-                <th scope="col">Latest</th>
-                <th scope="col">Published</th>
-                <th scope="col">Private</th>
                 <th scope="col">Actions</th>
             </tr>
         </thead>
         <tbody class="">
-            {%for mod in modpack%}
+            {%for mod in clients%}
             <tr>
                 <td>{{mod.id}}</td>
-                <td>{{mod.version}}</td>
-                <td>{{mod.minecraft}}</td>
-                <td>{{mod.author}}</td>
-                <td>{{mod.author}}</td>
-                <td>{{mod.author}}</td>
-                <td>{{mod.is_published}}</td>
-                <td>{{mod.private}}</td>
+                <td>{{mod.client_id}}</td>
+                <td>{{mod.modpack_id}}</td>
                 <td>
                     <div class="tablewidth">
                         <a href="../modpackbuild/{{mod.id}}"><button type="button" class="btn btn-primary">Manage</button></a>

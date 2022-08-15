@@ -51,7 +51,9 @@ def init_db() -> None:
                 pretty_name VARCHAR(65535) DEFAULT(''),
                 description VARCHAR(65535),
                 author VARCHAR(65535),
-                link VARCHAR(65535)
+                link VARCHAR(65535),
+                side enum('CLIENT', 'SERVER', 'BOTH'),
+                note VARCHAR(65535)
                 )"""
     )
     cur.execute(
@@ -123,6 +125,7 @@ def init_db() -> None:
                 )"""
     )
     conn.commit()
+    conn.close()
 
 
 def connect():
@@ -147,7 +150,17 @@ def select_all_modpacks() -> list:
     conn = connect()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM modpacks WHERE hidden = 0 ORDER BY id ASC")
-    return cur.fetchall()
+    ret = cur.fetchall()
+    conn.close()
+    return ret
+
+def select_all_modpacks_internal() -> list:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM modpacks ORDER BY id ASC")
+    ret = cur.fetchall()
+    conn.close()
+    return ret
 
 def select_all_modpacks_cid(cid: str) -> list:
     conn = connect()
@@ -162,13 +175,24 @@ def select_all_modpacks_cid(cid: str) -> list:
                 toremove.append(pack)
     for pack in toremove:
         packs.remove(pack)
+    conn.close()
     return packs
 
 def select_modpack(slug: str) -> typing.Union[dict, None]:
     conn = connect()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
-    return cur.fetchone()
+    ret = cur.fetchone()
+    conn.close()
+    return ret
+
+def select_modpack_id(id: int) -> typing.Union[dict, None]:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM modpacks WHERE id = %s", (id,))
+    ret = cur.fetchone()
+    conn.close()
+    return ret
 
 def select_modpack_cid(slug: str, cid: str) -> typing.Union[dict, None]:
     conn = connect()
@@ -183,14 +207,35 @@ def select_modpack_cid(slug: str, cid: str) -> typing.Union[dict, None]:
             return None
         else:
             return pack
+    conn.close()
     return pack
-
 
 def select_all_mods():
     conn = connect()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM mods ORDER BY id ASC")
-    return cur.fetchall()
+    ret = cur.fetchall()
+    conn.close()
+    return ret
+
+def select_all_clients():
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    cur.execute("SELECT * FROM clients ORDER BY id ASC")
+    ret = cur.fetchall()
+    conn.close()
+    return ret
+
+def select_perms_from_client_modpack(client_id: int) -> dict:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT * FROM client_modpack WHERE client_id = %s", (client_id,))
+    except Exception as e:
+        message("Error whilst fetching client permissions", e)
+    ret = cur.fetchall()
+    conn.close()
+    return ret
 
 def select_mod_versions_from_build(build: int) -> list:
     conn = connect()
@@ -198,9 +243,11 @@ def select_mod_versions_from_build(build: int) -> list:
     sql = "SELECT * FROM modversions AS v JOIN build_modversion AS bv ON bv.modversion_id = v.id JOIN mods AS m ON v.mod_id = m.id WHERE bv.build_id = %s"
     try:
         cur.execute(sql, (build,))
-        return cur.fetchall()
     except Exception as e:
         message("Error whilst fetching mods for modpack", e)
+    ret = cur.fetchall()
+    conn.close()
+    return ret
 
 def select_mod(id):
     conn = connect()
@@ -208,9 +255,11 @@ def select_mod(id):
     sql = "SELECT * FROM mods WHERE id=%s"
     try:
         cur.execute(sql, (id,))
-        return cur.fetchone()
     except Exception as e:
         message("Error whilst fetching mod info", e)
+    ret = cur.fetchone()
+    conn.close()
+    return ret
 
 def select_mod_name(name: str) -> typing.Union[dict, None]:
     conn = connect()
@@ -218,9 +267,11 @@ def select_mod_name(name: str) -> typing.Union[dict, None]:
     sql = "SELECT * FROM mods WHERE name=%s"
     try:
         cur.execute(sql, (name,))
-        return cur.fetchone()
     except Exception as e:
         message("Error whilst fetching mod info", e)
+    ret = cur.fetchone()
+    conn.close()
+    return ret
 
 def select_mod_versions(id: int) -> list:
     conn = connect()
@@ -231,6 +282,7 @@ def select_mod_versions(id: int) -> list:
         return cur.fetchall()
     except Exception as e:
         message("Error whilst fetching mod versions", e)
+    conn.close()
 
 def select_mod_version(mod: str, version: str) -> typing.Union[dict, None]:
     conn = connect()
@@ -241,6 +293,7 @@ def select_mod_version(mod: str, version: str) -> typing.Union[dict, None]:
         return cur.fetchone()
     except Exception as e:
         message("Error whilst fetching mod version", e)
+    conn.close()
 
 def select_builds(modpack_id: int) -> dict:
     conn = connect()
@@ -249,13 +302,28 @@ def select_builds(modpack_id: int) -> dict:
         cur.execute("SELECT * FROM builds WHERE modpack_id = %s AND is_published = 1", (modpack_id,))
     except Exception as e:
         message("Error whilst fetching builds", e)
-    return cur.fetchall()
+    ret = cur.fetchall()
+    conn.close()
+    return ret
 
-def select_modpack_build(modpack: str, build: str) -> dict:
+def select_builds_from_modpack(modpack_id: int) -> dict:
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("SELECT * FROM builds WHERE modpack_id = %s", (modpack_id,))
+    except Exception as e:
+        message("Error whilst fetching builds", e)
+    ret = cur.fetchall()
+    conn.close()
+    return ret
+
+def select_modpack_build(modpack: int, build: str) -> dict:
     conn = connect()
     cur = conn.cursor(dictionary=True)
     cur.execute("SELECT * FROM builds WHERE modpack_id = %s AND version = %s AND is_published = 1", (modpack, build))
-    return cur.fetchone()
+    ret = cur.fetchone()
+    conn.close()
+    return ret
 
 def add_modversion_db(mod_id, version, hash, filesize):
     conn = connect()
@@ -271,14 +339,15 @@ def add_modversion_db(mod_id, version, hash, filesize):
     conn.close()
 
 def get_api_key(key: str) -> list[str]:
-        conn = connect()
-        cur = conn.cursor(dictionary=True)
-        sql = "SELECT * FROM `keys` WHERE api_key = %s"
-        try:
-                cur.execute(sql, (key,))
-                return cur.fetchone()
-        except Exception as e:
-                message("An error occurred whilst trying to fetch an API key", e)
+    conn = connect()
+    cur = conn.cursor(dictionary=True)
+    sql = "SELECT * FROM `keys` WHERE api_key = %s"
+    try:
+            cur.execute(sql, (key,))
+            return cur.fetchone()
+    except Exception as e:
+            message("An error occurred whilst trying to fetch an API key", e)
+    conn.close()
 
 def get_user_info(user_or_email: str) -> dict:
     conn = connect()
@@ -289,3 +358,40 @@ def get_user_info(user_or_email: str) -> dict:
         return cur.fetchone()
     except Exception as e:
         message("An error occurred whilst trying to fetch a user", e)
+    conn.close()
+
+def add_mod(name: str, pretty_name: str, author: str, description: str, link: str, side: str, note: str) -> bool:
+    conn = connect()
+    cur = conn.cursor()
+    sql = "SELECT * FROM mods WHERE NAME = %s"
+    try:
+        cur.execute(sql, name)
+        if cur.fetchone() is not None:
+            return False
+    except Exception as e:
+        message("An error occurred whilst fetching mod info", e)
+        return False
+    sql = "INSERT INTO mods(name, pretty_name, author, description, link, side, note, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    try:
+        cur.execute(
+            sql, (name, pretty_name, author, description, link, side, note, datetime.now(), datetime.now())
+        )
+        conn.commit()
+    except Exception as e:
+        message("Error whilst adding a mod to the database", e)
+        return False
+    conn.close()
+    return True
+
+def count_mods_build(build_id: int) -> int:
+    conn = connect()
+    cur = conn.cursor()
+    sql = "SELECT COUNT(*) FROM build_modversion WHERE build_id = %s"
+    try:
+        cur.execute(sql, build_id)
+        ret = cur.fetchone()[0]
+        conn.close()
+        return ret
+    except Exception as e:
+        message("Error whilst counting mods in a build", e)
+        return 0

@@ -1,17 +1,14 @@
-from concurrent.futures import thread
-from hmac import digest
 import os
-from zipfile import ZipFile
 from dotenv import load_dotenv
 
-from flask import Flask, redirect, render_template, request, request_started, url_for
+from flask import Flask, redirect, render_template, request, url_for
 from flask import session, request
 from werkzeug.utils import secure_filename
 
 import secrets
 import hashlib
 
-from db_config import add_modversion_db, select_all_mods, select_all_modpacks, select_mod, init_db, get_user_info
+from db_config import select_mod_versions, select_all_mods, select_all_modpacks_internal, select_mod, init_db, get_user_info, select_builds_from_modpack, select_mod_versions_from_build, select_all_clients, select_perms_from_client_modpack
 from mysql import connector
 
 from api import api
@@ -93,6 +90,13 @@ def login():
             else:
                 return render_template("login.html", failed=True)
 
+@app.route("/logout")
+def logout():
+    if "key" in session and session["key"] in app.sessions:
+        del app.sessions[session["key"]]
+        session.pop("key")
+    return render_template("login.html", failed=False)
+
 
 @app.route("/modversion/<id>", methods=["GET", "POST"])
 def modversion(id):
@@ -128,12 +132,12 @@ def modversion(id):
             print("error")
 
     try:
-        mods = select_all_mods()
+        modversions = select_mod_versions(id)
     except connector.ProgrammingError as e:
         init_db()
-        mods = []
+        modversions = []
 
-    return render_template("modversion.html", modSlug=modSlug, name=name, size=size, mods=mods)
+    return render_template("modversion.html", modSlug=modSlug, name=name, size=size, modversions=modversions)
 
 @app.route("/newmod")
 def newmod():
@@ -146,8 +150,8 @@ def newmod():
 
     return render_template("newmod.html")
 
-@app.route("/viewmodpack")
-def viewmodpack():
+@app.route("/viewmodpack/<id>", methods=["GET", "POST"])
+def viewmodpack(id):
     if "key" in session and session["key"] in app.sessions:
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -156,12 +160,12 @@ def viewmodpack():
         return redirect(url_for("login"))
 
     try:
-        mods = select_all_mods()
+        modpack = select_builds_from_modpack(id)
     except connector.ProgrammingError as e:
         init_db()
-        mods = []
+        modpack = []
 
-    return render_template("viewmodpack.html", mods=mods)
+    return render_template("viewmodpack.html", modpack=modpack)
 
 @app.route("/mainsettings")
 def mainsettings():
@@ -172,10 +176,16 @@ def mainsettings():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    return render_template("mainsettings.html")
+    try:
+        clients = select_all_clients()
+    except connector.ProgrammingError as e:
+        init_db()
+        clients = []
 
-@app.route("/modpackbuild")
-def modpackbuild():
+    return render_template("mainsettings.html", clients=clients)
+
+@app.route("/modpackbuild/<id>", methods=["GET", "POST"])
+def modpackbuild(id):
     if "key" in session and session["key"] in app.sessions:
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -184,12 +194,12 @@ def modpackbuild():
         return redirect(url_for("login"))
 
     try:
-        mods = select_all_mods()
+        modpackbuild = select_mod_versions_from_build(id)
     except connector.ProgrammingError as e:
         init_db()
-        mods = []
+        modpackbuild = []
 
-    return render_template("modpackbuild.html", mods=mods)
+    return render_template("modpackbuild.html", modpackbuild=modpackbuild)
 
 @app.route("/modlibrary")
 def modlibrary():
@@ -218,17 +228,54 @@ def modpacks():
         return redirect(url_for("login"))
 
     try:
-        mods = select_all_mods()
+        modpacks = select_all_modpacks_internal()
     except connector.ProgrammingError as e:
         init_db()
-        mods = []
+        modpacks = []
 
-    return render_template("modpacks.html", mods=mods)
+    return render_template("modpacks.html", modpacks=modpacks)
+
+@app.route("/newmod", methods=["POST"])
+def newmod_submit():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    form = request.form
+    print(form)
+
+    name = form['name']
+    pretty_name = form['pretty_name']
+    author = form['author']
+    description = form['description']
+    link = form['link']
+    client = form['client']
+    server = form['server']
+    note = form['internal_note']
 
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template("404.html", error=e), 404
 
+@app.route("/clients/<id>", methods=["GET", "POST"])
+def clients(id):
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        clients = select_perms_from_client_modpack(id)
+    except connector.ProgrammingError as e:
+        init_db()
+        clients = []
+
+    return render_template("clients.html", clients=clients)
 
 if __name__ == "__main__":
     app.run(debug=True, host=host, port=port)  # endre denne når nettsiden skal ut på nett

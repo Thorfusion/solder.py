@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="{{ url_for('static',filename='css/modlibrary.css') }}" /> {%endblock%}{%block main%}
 
 <div class="wrappermod">
-    <table class="table table-striped table-hover placeone">
+    <table class="table table-striped table-hover placeone maxheighttable">
         <thead class="table-light sticky-md-top">
             <tr>
                 <th scope="col">Name (Slug)</th>
@@ -12,13 +12,13 @@
             </tr>
         </thead>
         <tbody class="">
-            {%for mod in mods%}
+            {%for mod in modpackbuild%}
             <tr>
                 <td>{{mod.pretty_name}} ({{mod.name}})</td>
-                <td>{{mod.author}}</td>
+                <td>{{mod.version}}</td>
                 <td>
                     <div class="tablewidth">
-                        <a href="{{ url_for('viewmodpack') }}"><button type="button" class="btn btn-danger">Remove</button></a>
+                        <a href=""><button type="button" class="btn btn-danger">Remove</button></a>
                     </div>
                 </td>
             </tr>
