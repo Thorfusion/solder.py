@@ -1,4 +1,53 @@
-
+import datetime
+from .database import Database
+from .modversion import Modversion
 
 class Mod:
-    pass
+    def __init__(self, id, name, description, author, link, created_at, updated_at, pretty_name, side, note):
+        self.id = id
+        self.name = name
+        self.description = description
+        self.author = author
+        self.link = link
+        self.created_at = created_at
+        self.updated_at = updated_at
+        self.pretty_name = pretty_name
+        self.side = side
+        self.note = note
+
+    @classmethod
+    def new(cls, name, description, author, link, pretty_name, side, note):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id", (name, description, author, link, now, now, pretty_name, side, note))
+        id = cur.fetchone()["id"]
+        return cls(id, name, description, author, link, now, now, pretty_name, side, note)
+
+    @classmethod
+    def get_by_id(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM mods WHERE id = %s", (id,))
+        row = cur.fetchone()
+        if row:
+            return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"])
+        return None
+    
+    def get_versions(self):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (self.id,))
+        rows = cur.fetchall()
+        if rows:
+            return [Modversion(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
+        return None
+
+    def get_version_by_id(self, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (id,))
+        row = cur.fetchone()
+        if row:
+            return Modversion(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
+        return None
