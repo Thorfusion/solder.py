@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 
 from models.key import Key
+from models.modpack import Modpack
 from db_config import select_all_modpacks_cid, select_modpack_cid, select_builds, select_modpack_build, select_mod_versions_from_build, select_mod_name, select_mod_versions, select_mod_version
 
 api = Blueprint("api", __name__)
@@ -34,24 +35,18 @@ def verify_key(key: str = None):
     else:
         return jsonify({"error": "Invalid key provided."})
 
-
 @api.route("/api/modpack")
 def modpack():
-    data = select_all_modpacks_cid(request.args.get("cid"))
-    modpacks = {}
-    for pack in data:
-        modpacks[pack["slug"]] = pack["name"]
-    return jsonify({"modpacks": modpacks, "mirror_url": mirror_url})
+    modpacks = Modpack.get_by_cid(request.args.get("cid"))
+    return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": mirror_url})
 
 
 @api.route("/api/modpack/<slug>")
 def modpack_slug(slug: str):
-    data = select_modpack_cid(slug, request.args.get("cid"))
-    if data:
-        builds_data = select_builds(data["id"])
-        builds = [build["version"] for build in builds_data]
-        data["builds"] = builds
-        return jsonify(data)
+    modpack = Modpack.get_by_cid_slug(request.args.get("cid"), slug)
+    if modpack:
+        modpack.builds = modpack.get_builds()
+        return jsonify(modpack.to_json())
     else:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
 

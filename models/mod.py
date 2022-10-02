@@ -33,7 +33,7 @@ class Mod:
         if row:
             return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"])
         return None
-    
+
     def get_versions(self):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)

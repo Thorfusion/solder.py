@@ -33,3 +33,13 @@ class Build:
         if build is None:
             return None
         return cls(**build)
+
+    @staticmethod
+    def get_by_modpack(modpack):
+        conn = Database.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM builds WHERE modpack_id = %s", (modpack.id,))
+        builds = cursor.fetchall()
+        if builds:
+            return [Build(**build) for build in builds]
+        return None

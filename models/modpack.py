@@ -1,5 +1,6 @@
 import datetime
 from .database import Database
+from .build import Build
 
 class Modpack:
     def __init__(self, id, name, slug, recommended, latest, url, created_at, updated_at, order, hidden, private):
@@ -33,3 +34,39 @@ class Modpack:
         if row:
             return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["url"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"])
         return None
+
+    @staticmethod
+    def get_by_cid(cid):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM modpacks WHERE hidden = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s)", (cid,))
+        rows = cur.fetchall()
+        if rows:
+            return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["url"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"]) for row in rows]
+        return None
+
+    @staticmethod
+    def get_by_cid_slug(cid, slug):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM modpacks WHERE slug = %s AND (hidden = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))", (slug, cid))
+        row = cur.fetchone()
+        if row:
+            return Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["url"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"])
+        return None
+
+    def get_builds(self):
+        return Build.get_by_modpack(self)
+
+    def to_json(self):
+        data ={
+            "name": self.name,
+            "slug": self.slug,
+            "recommended": self.recommended,
+            "latest": self.latest,
+            "url": self.url,
+        }
+
+        if self.builds is not None:
+            data["builds"] = [build.version for build in self.builds]
+        return data
