@@ -191,13 +191,58 @@ def mainsettings():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
+    return render_template("mainsettings.html")
+
+@app.route("/apikeylibrary")
+def apikeylibrary():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        keys = select_all_clients()
+    except connector.ProgrammingError as e:
+        init_db()
+        keys = []
+
+    return render_template("apikeylibrary.html", keys=keys)
+
+@app.route("/clientlibrary")
+def clientlibrary():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
     try:
         clients = select_all_clients()
     except connector.ProgrammingError as e:
         init_db()
         clients = []
 
-    return render_template("mainsettings.html", clients=clients)
+    return render_template("clientlibrary.html", clients=clients)
+
+@app.route("/userlibrary")
+def userlibrary():
+    if "key" in session and session["key"] in app.sessions:
+        # Valid session, refresh token
+        app.sessions[session["key"]] = datetime.utcnow()
+    else:
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        users = select_all_clients()
+    except connector.ProgrammingError as e:
+        init_db()
+        users = []
+
+    return render_template("userlibrary.html", users=users)
 
 @app.route("/modpackbuild/<id>", methods=["GET", "POST"])
 def modpackbuild(id):
