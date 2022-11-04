@@ -58,6 +58,9 @@ class Modpack:
     def get_builds(self):
         return Build.get_by_modpack(self)
 
+    def get_build(self, version):
+        return Build.get_by_modpack_version(self, version)
+
     def to_json(self):
         data ={
             "name": self.name,

@@ -2,7 +2,7 @@ import datetime
 from .database import Database
 
 class Modversion:
-    def __init__(self, id, mod_id, version, md5, created_at, updated_at, filesize):
+    def __init__(self, id, mod_id, version, md5, created_at, updated_at, filesize, ):
         self.id = id
         self.mod_id = mod_id
         self.version = version
@@ -29,3 +29,14 @@ class Modversion:
         if row:
             return cls(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
         return None
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "mod_id": self.mod_id,
+            "version": self.version,
+            "md5": self.md5,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "filesize": self.filesize
+        }

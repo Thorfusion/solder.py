@@ -34,6 +34,16 @@ class Mod:
             return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"])
         return None
 
+    @classmethod
+    def get_by_name(cls, name):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM mods WHERE name = %s", (name,))
+        row = cur.fetchone()
+        if row:
+            return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"])
+        return None
+
     def get_versions(self):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
@@ -43,7 +53,7 @@ class Mod:
             return [Modversion(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
         return None
 
-    def get_version_by_id(self, id):
+    def get_versions_by_id(self, id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (id,))
@@ -51,3 +61,26 @@ class Mod:
         if row:
             return Modversion(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
         return None
+
+    def get_version(self, version):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM modversions WHERE mod_id = %s AND version = %s", (self.id, version))
+        row = cur.fetchone()
+        if row:
+            return Modversion(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
+        return None
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+            "author": self.author,
+            "link": self.link,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "pretty_name": self.pretty_name,
+            "side": self.side,
+            "note": self.note
+        }
