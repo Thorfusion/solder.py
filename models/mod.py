@@ -44,6 +44,16 @@ class Mod:
             return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"])
         return None
 
+    @staticmethod
+    def get_all():
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM mods")
+        rows = cur.fetchall()
+        if rows:
+            return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"]) for row in rows]
+        return None
+
     def get_versions(self):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)

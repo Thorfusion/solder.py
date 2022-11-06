@@ -5,9 +5,15 @@ from flask import Flask, redirect, render_template, request, url_for, session, r
 from werkzeug.utils import secure_filename
 
 import secrets
-import hashlib
 
 from models.database import Database
+from models.user import User
+from models.mod import Mod
+from models.build import Build
+from models.key import Key
+from models.client import Client
+from models.modpack import Modpack
+
 from db_config import select_mod_versions, select_all_mods, select_all_modpacks_internal, select_mod, init_db, get_user_info, select_builds_from_modpack, select_mod_versions_from_build, select_all_clients, select_perms_from_client_modpack
 from mysql import connector
 
@@ -28,15 +34,6 @@ app.config["UPLOAD_FOLDER"] = "./mods/"
 
 app.secret_key = secrets.token_hex()
 app.sessions = {}
-
-def hasher(pw: str, salt: str) -> str:
-    """
-    Hashes a password with a salt. Uses blake2b
-    :param pw: Password to hash
-    :param salt: Salt to hash with. This should be the username
-    :return: Hashed password
-    """
-    return hashlib.blake2b(pw.encode("UTF-8"), salt=hashlib.blake2b(salt.encode("UTF-8"), digest_size=16).digest()).hexdigest()
 
 def sessionLoop() -> None:
     while True:
@@ -94,11 +91,11 @@ def login():
     if "key" in session and session["key"] in app.sessions:
         return redirect(url_for("index"))
     else:
-        user = get_user_info(request.form["username"])
+        user = User.get_by_username(request.form["username"])
         if user is None:
             return render_template("login.html", failed=True)
         else:
-            if user["password"] == hasher(request.form["password"], user["username"]):
+            if user.verify_password(request.form["password"]):
                 session["key"] = secrets.token_hex()
                 app.sessions[session["key"]] = datetime.utcnow()
                 return redirect(url_for("index"))
@@ -122,7 +119,7 @@ def modversion(id):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    modSlug = select_mod(id)
+    mod = Mod.get_by_id(id)
     name = ""
     size = ""
     if request.method == "POST":
@@ -136,7 +133,7 @@ def modversion(id):
             name = jarfile.filename.strip(".jar")
             # createFolder("/mods")
             createFolder("mods/" + modSlug)
-            # zipObj = ZipFile(modSlug+"-"+modver, 'w')
+            # zipObj = ZipFile(mod.slug+"-"+modver, 'w')
 
             # zipObj.write(jarfile.read())
             # zipObj.close()
@@ -147,12 +144,12 @@ def modversion(id):
             print("error")
 
     try:
-        modversions = select_mod_versions(id)
+        modversions = mod.get_versions()
     except connector.ProgrammingError as e:
-        init_db()
+        Database.create_tables()
         modversions = []
 
-    return render_template("modversion.html", modSlug=modSlug, name=name, size=size, modversions=modversions)
+    return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions)
 
 @app.route("/newmod")
 def newmod():
@@ -175,12 +172,12 @@ def modpack(id):
         return redirect(url_for("login"))
 
     try:
-        modpack = select_builds_from_modpack(id)
+        builds = Modpack.get_by_id(id).get_builds()
     except connector.ProgrammingError as e:
-        init_db()
-        modpack = []
+        Database.create_tables()
+        builds = []
 
-    return render_template("modpack.html", modpack=modpack)
+    return render_template("modpack.html", modpack=builds)
 
 @app.route("/mainsettings")
 def mainsettings():
@@ -203,9 +200,9 @@ def apikeylibrary():
         return redirect(url_for("login"))
 
     try:
-        keys = select_all_clients()
+        keys = Key.get_all_keys()
     except connector.ProgrammingError as e:
-        init_db()
+        Database.create_tables()
         keys = []
 
     return render_template("apikeylibrary.html", keys=keys)
@@ -220,9 +217,9 @@ def clientlibrary():
         return redirect(url_for("login"))
 
     try:
-        clients = select_all_clients()
+        clients = Client.get_all_clients()
     except connector.ProgrammingError as e:
-        init_db()
+        Database.create_tables()
         clients = []
 
     return render_template("clientlibrary.html", clients=clients)
@@ -237,9 +234,9 @@ def userlibrary():
         return redirect(url_for("login"))
 
     try:
-        users = select_all_clients()
+        users = User.get_all_users()
     except connector.ProgrammingError as e:
-        init_db()
+        Database.create_tables()
         users = []
 
     return render_template("userlibrary.html", users=users)
@@ -254,9 +251,9 @@ def modpackbuild(id):
         return redirect(url_for("login"))
 
     try:
-        modpackbuild = select_mod_versions_from_build(id)
+        modpackbuild = Build.get_by_id(id).get_modversions_minimal()
     except connector.ProgrammingError as e:
-        init_db()
+        Database.create_tables()
         modpackbuild = []
 
     return render_template("modpackbuild.html", modpackbuild=modpackbuild)
@@ -271,9 +268,9 @@ def modlibrary():
         return redirect(url_for("login"))
 
     try:
-        mods = select_all_mods()
+        mods = Mod.get_all()
     except connector.ProgrammingError as e:
-        init_db()
+        Database.create_tables()
         mods = []
 
     return render_template("modlibrary.html", mods=mods)
@@ -288,9 +285,9 @@ def modpacklibrary():
         return redirect(url_for("login"))
 
     try:
-        modpacklibrary = select_all_modpacks_internal()
+        modpacklibrary = Modpack.get_all()
     except connector.ProgrammingError as e:
-        init_db()
+        Database.create_tables()
         modpacklibrary = []
 
     return render_template("modpacklibrary.html", modpacklibrary=modpacklibrary)
@@ -335,12 +332,12 @@ def clients(id):
         return redirect(url_for("login"))
 
     try:
-        clients = select_perms_from_client_modpack(id)
+        packs = Client.get_by_id(id).get_allowed_modpacks()
     except connector.ProgrammingError as e:
-        init_db()
-        clients = []
+        Database.create_tables()
+        packs = []
 
-    return render_template("clients.html", clients=clients)
+    return render_template("clients.html", clients=packs)
 
 if __name__ == "__main__":
-    app.run(debug=True, host=host, port=port)  # endre denne når nettsiden skal ut på nett
+    app.run(debug=True, host=host, port=port)

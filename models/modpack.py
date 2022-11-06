@@ -45,14 +45,24 @@ class Modpack:
             return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["url"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"]) for row in rows]
         return None
 
-    @staticmethod
-    def get_by_cid_slug(cid, slug):
+    @classmethod
+    def get_by_cid_slug(cls, cid, slug):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM modpacks WHERE slug = %s AND (hidden = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))", (slug, cid))
         row = cur.fetchone()
         if row:
-            return Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["url"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"])
+            return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["url"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"])
+        return None
+
+    @staticmethod
+    def get_all() -> list:
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM modpacks")
+        rows = cur.fetchall()
+        if rows:
+            return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["url"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"]) for row in rows]
         return None
 
     def get_builds(self):
