@@ -14,7 +14,6 @@ from models.key import Key
 from models.client import Client
 from models.modpack import Modpack
 
-from db_config import select_mod_versions, select_all_mods, select_all_modpacks_internal, select_mod, init_db, get_user_info, select_builds_from_modpack, select_mod_versions_from_build, select_all_clients, select_perms_from_client_modpack
 from mysql import connector
 
 from api import api
