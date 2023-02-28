@@ -52,9 +52,6 @@ def createFolder(dirName):
 
 @app.route("/")
 def index():
-    if not Database.is_setup():
-        # Initial database setup
-        return redirect(url_for("setup"))
     if "key" in session and session["key"] in app.sessions:
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -315,7 +312,7 @@ def newmod_submit():
     print(client)
     print(server)
 
-    return 204
+    return Response(status=204)
 
 @app.errorhandler(404)
 def page_not_found(e):
