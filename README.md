@@ -61,7 +61,7 @@ docker pull thorfusion/solderpy
 
 Launch an container, underneath is an example, remember to also add the enviroment variables further down.
 ```bash
-docker run --name solderpy --restart always -d -p 80:5000 maggi373/solderpy
+docker run --name solderpy --restart always -d -p 80:5000 thorfusion/solderpy
 ```
 
 Enviroment variables
