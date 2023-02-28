@@ -5,7 +5,6 @@ from flask import Blueprint, jsonify, request
 from models.key import Key
 from models.modpack import Modpack
 from models.mod import Mod
-from db_config import select_all_modpacks_cid, select_modpack_cid, select_builds, select_modpack_build, select_mod_versions_from_build, select_mod_name, select_mod_versions, select_mod_version
 
 api = Blueprint("api", __name__)
 
