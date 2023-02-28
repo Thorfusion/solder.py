@@ -56,7 +56,7 @@ Well we dont have your database name nor username so go get it!
 ## Install solder.py with docker
 Pull the latest image from docker hub
 ```bash
-docker pull maggi373/solderpy
+docker pull thorfusion/solderpy
 ```
 
 Launch an container, underneath is an example, remember to also add the enviroment variables further down.
