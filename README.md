@@ -18,15 +18,14 @@ solder.py is written in flask where ease of use is at top aswell with something 
 + Internal descriptions of mods
 
 # Requirements (work in progress)
-+ MySQL
-+ Apache or NGINX or equivalent
++ MySQL Server
++ Python on Host machine unless running docker
++ Apache or NGINX or equivalent for reverse proxy if applicable
 
 # Installation/Updating
 
 ## Pre-install
 You need to be familiar with hosting websites and linux. We will help anyone who needs help but google is a good friend.
-
-## Setting up solder.py
 
 ## Setting up MySQL: for new installations
 go to mysql
@@ -47,6 +46,35 @@ exit
 
 ## Setting up MySQL: Migrating to solder.py
 Well we dont have your database name nor username so go get it!
+
+## Install solder.py
+```bash
+
+```
+
+
+## Install solder.py with docker
+Pull the latest image from docker hub
+```bash
+docker pull maggi373/solderpy
+```
+
+Launch an container, underneath is an example, remember to also add the enviroment variables further down.
+```bash
+docker run --name solderpy --restart always -d -p 80:5000 maggi373/solderpy
+```
+
+Enviroment variables
+```bash
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=user
+DB_PASSWORD=password
+DB_DATABASE=solderpy
+```
+
+## TODO for docker
+Enable filehosting for like mods n shit
 
 ## Hosting
 
