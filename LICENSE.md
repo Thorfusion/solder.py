@@ -34,7 +34,7 @@ Licensor: [Thorfusion]
 |              | Warranty       |                              |
 |              | Patent use     |                              |
 
-## Legend
+## Legend for the human-readable summary
 
 #### Commercial use
 + The licensed material and derivatives may be used for commercial purposes.
