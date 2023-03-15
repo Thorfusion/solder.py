@@ -23,10 +23,20 @@
           request.form.username }}" class="user form-control"><br />
                 <input type="password" placeholder="Password" name="password" value="{{
           request.form.password }}" class="pass form-control"><br />
-                <input type="submit" value="Create Account" class="login w-100 btn btn-lg btn-primary"><br /> {% if
+                <input type="text" placeholder="DB HOST" name="db_host" value="{{
+            request.form.username }}" class="user form-control"><br />
+                <input type="text" placeholder="DB PORT" name="db_port" value="{{
+                request.form.username }}" class="user form-control"><br />
+                <input type="text" placeholder="DB User" name="db_user" value="{{
+            request.form.username }}" class="user form-control"><br />
+                <input type="password" placeholder="DB Password" name="db_password" value="{{
+            request.form.password }}" class="pass form-control"><br />
+                <input type="text" placeholder="Database" name="db" value="{{
+                request.form.username }}" class="user form-control"><br />
+                <input type="Init solder.py" value="init" class="login w-100 btn btn-lg btn-primary"><br /> {% if
                 failed %}
                 <div class="alert alert-danger loginfail mx-auto" role="alert">
-                    <p>Login failed!</p>
+                    <p>Init failed!</p>
                 </div>
                 {% endif %}
             </form>
