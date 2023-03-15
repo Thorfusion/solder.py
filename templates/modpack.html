@@ -10,7 +10,7 @@
                 <th scope="col">Build</th>
                 <th scope="col">MC Version</th>
                 <th scope="col">Mod count</th>
-                <th scope="col">Rec</th>
+                <th scope="col">Recommended</th>
                 <th scope="col">Latest</th>
                 <th scope="col">Published</th>
                 <th scope="col">Private</th>
@@ -24,8 +24,8 @@
                 <td>{{mod.version}}</td>
                 <td>{{mod.minecraft}}</td>
                 <td>{{mod.author}}</td>
-                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.rec %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.latest %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="radio" value="" id="hidden"{% if mod.rec %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="radio" value="" id="hidden"{% if mod.latest %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.is_published %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.private %}checked{% endif %}></td>
                 <td>
@@ -44,8 +44,8 @@
     <div class="placetwo minwidth maxwidth">
         <form method="post" action="" enctype="multipart/form-data">
             <div class="mb-3">
-                <label for="pretty_name" class="form-label">selected modpack</label>
-                <input type="text" class="form-control" name="pretty_name" id="pretty_name" disabled readonly>
+                <label for="selected_name" class="form-label">selected modpack</label>
+                <input type="text" class="form-control" name="selected_name" id="selected_name" disabled readonly>
             </div>
             <div class="mb-3">
                 <label for="buildnumber" class="form-label">Build number</label>
