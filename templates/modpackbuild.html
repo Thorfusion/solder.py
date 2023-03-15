@@ -8,6 +8,7 @@
             <tr>
                 <th scope="col">Name (Slug)</th>
                 <th scope="col">Version</th>
+                <th scope="col">Optional</th>
                 <th scope="col">Action</th>
             </tr>
         </thead>
@@ -16,6 +17,9 @@
             <tr>
                 <td>{{mod.pretty_name}} ({{mod.name}})</td>
                 <td>{{mod.version}}</td>
+                <td>
+                    <input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.optional %}checked{% endif %}>
+                </td>
                 <td>
                     <div class="tablewidth">
                         <a href=""><button type="button" class="btn btn-danger">Remove</button></a>
