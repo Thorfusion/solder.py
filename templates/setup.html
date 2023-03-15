@@ -7,7 +7,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="{{url_for('static',filename='css/login.css')}}" />
     <link rel="shortcut icon" href="{{url_for('static', filename='images/sp.png')}}" type="image/x-icon" />
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-0evHe/X+R7YkIZDRvuzKMRqM+OrBnVFBL6DOitfPri4tjfHxaWutUpFmBp4vmVor" crossorigin="anonymous">
 </head>
 
 <body>
@@ -22,7 +23,8 @@
           request.form.username }}" class="user form-control"><br />
                 <input type="password" placeholder="Password" name="password" value="{{
           request.form.password }}" class="pass form-control"><br />
-                <input type="submit" value="Create Account" class="login w-100 btn btn-lg btn-primary"><br /> {% if failed %}
+                <input type="submit" value="Create Account" class="login w-100 btn btn-lg btn-primary"><br /> {% if
+                failed %}
                 <div class="alert alert-danger loginfail mx-auto" role="alert">
                     <p>Login failed!</p>
                 </div>

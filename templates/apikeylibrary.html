@@ -1,6 +1,6 @@
 {%extends "layout.html"%} {% set active_page = "mainsettings" %} {%block head%}
 <title>solder.py</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}" /> 
+<link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}" />
 {%endblock%}{%block main%}
 
 
@@ -13,11 +13,12 @@
                 <th scope="col">ID</th>
                 <th scope="col">
                     <div class="mb-3">
-                  <label for="author" class="form-label">Name</label>
-                  <input type="text" class="form-control" name="author" id="author">
-              </div></th>
+                        <label for="author" class="form-label">Name</label>
+                        <input type="text" class="form-control" name="author" id="author">
+                    </div>
+                </th>
                 <th scope="col">
-                  <div class="mb-3">
+                    <div class="mb-3">
                         <label for="pretty_name" class="form-label">api key</label>
                         <input type="text" class="form-control" name="pretty_name" id="pretty_name">
                     </div>
@@ -42,7 +43,7 @@
         </tbody>
     </table>
 
-  
+
     <div class="placetwo minwidth maxwidth">
     </div>
 </div>

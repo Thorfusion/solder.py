@@ -1,8 +1,8 @@
-{%extends "layout.html"%} 
+{%extends "layout.html"%}
 {% set active_page = "modlibrary" %}
 {%block head%}
 <title>solder.py</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/modlibrary.css') }}"/>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/modlibrary.css') }}" />
 {%endblock%}{%block main%}
 
 <div class="wrappermod">
@@ -14,66 +14,67 @@
         <th scope="col">Author</th>
         <td>
           <div class="">
-          <a href="{{ url_for('newmod') }}"><button type="button" class="btn btn-success tablewidth2">New mod</button></a>
+            <a href="{{ url_for('newmod') }}"><button type="button" class="btn btn-success tablewidth2">New
+                mod</button></a>
           </div>
         </td>
-    </tr>
+      </tr>
     </thead>
     <tbody class="">
-    {%for mod in mods%}
-    <tr>
-      <td>{{mod.id}}</td>
-      <td>{{mod.pretty_name}} ({{mod.name}})</td>
-      <td>{{mod.author}}</td>
-      <td>
-        <div class="tablewidth">
-        <a href="./modversion/{{mod.id}}"><button type="button" class="btn btn-primary">Select</button></a>
-        <a href="./modversion/{{mod.id}}"><button type="button" class="btn btn-secondary">Manage</button></a>
-        </div>
-      </td>
-    </tr>
-    {%endfor%}
-  </tbody>
+      {%for mod in mods%}
+      <tr>
+        <td>{{mod.id}}</td>
+        <td>{{mod.pretty_name}} ({{mod.name}})</td>
+        <td>{{mod.author}}</td>
+        <td>
+          <div class="tablewidth">
+            <a href="./modversion/{{mod.id}}"><button type="button" class="btn btn-primary">Select</button></a>
+            <a href="./modversion/{{mod.id}}"><button type="button" class="btn btn-secondary">Manage</button></a>
+          </div>
+        </td>
+      </tr>
+      {%endfor%}
+    </tbody>
   </table>
-  
+
   <div class="placetwo minwidth maxwidth">
     <form method="post" action="" enctype="multipart/form-data">
       <div class="mb-3"">
-        <label for="pretty_name" class="form-label">selected mod</label>
+        <label for=" pretty_name" class="form-label">selected mod</label>
         <input type="text" class="form-control" name="pretty_name" id="pretty_name" disabled readonly>
-    </div>
-        <div class="mb-3">
-          <label for="formFile" class="form-label">Select file</label>
-          <input class="form-control" type="file" id="formFile">
-        </div>
-        <div class="mb-3"">
-            <label for="md5" class="form-label">md5</label>
-            <input type="text" class="form-control" name="md5" id="md5" disabled readonly>
-        </div>
-        <label>Select type</label>
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" checked>
-          <label class="form-check-label" for="flexRadioDefault1">
-            MOD.JAR
-          </label>
-        </div>
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2">
-          <label class="form-check-label" for="flexRadioDefault2">
-            Launcher
-          </label>
-        </div>
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3">
-          <label class="form-check-label" for="flexRadioDefault3">
-            ZIP
-          </label>
-        </div>
-        <div class="mb-3"">
-            <label for="version" class="form-label">Version number</label>
-            <input type="text" class="form-control" name="version" id="version">
-        </div>
-        <input class="btn btn-success" type="submit" value="Add Version">
+      </div>
+      <div class="mb-3">
+        <label for="formFile" class="form-label">Select file</label>
+        <input class="form-control" type="file" id="formFile">
+      </div>
+      <div class="mb-3"">
+            <label for=" md5" class="form-label">md5</label>
+        <input type="text" class="form-control" name="md5" id="md5" disabled readonly>
+      </div>
+      <label>Select type</label>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" checked>
+        <label class="form-check-label" for="flexRadioDefault1">
+          MOD.JAR
+        </label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2">
+        <label class="form-check-label" for="flexRadioDefault2">
+          Launcher
+        </label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3">
+        <label class="form-check-label" for="flexRadioDefault3">
+          ZIP
+        </label>
+      </div>
+      <div class="mb-3"">
+            <label for=" version" class="form-label">Version number</label>
+        <input type="text" class="form-control" name="version" id="version">
+      </div>
+      <input class="btn btn-success" type="submit" value="Add Version">
     </form>
     {% if success %}
     <div class="alert alert-success loginfail mx-auto" role="alert">
