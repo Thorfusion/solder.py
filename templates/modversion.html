@@ -11,12 +11,13 @@
                     <form method="post" action=""></form>
                     <th scope="col ">
                         <div class="mb-3" ">
-                  <label for="version" class=" form-label ">Version number</label>
-                  <input type=" text " class=" form-control " name="version" id="version">
-              </div></th>
-                <th scope=" col ">
-                  <div class=" mb-3 "">
-                            <label for="md5" class="form-label">md5</label>
+                  <label for=" version" class=" form-label ">Version number</label>
+                            <input type=" text " class=" form-control " name="version" id="version">
+                        </div>
+                    </th>
+                    <th scope=" col ">
+                        <div class=" mb-3 "">
+                            <label for=" md5" class="form-label">md5</label>
                             <input type="text" class="form-control" name="md5" id="md5">
                         </div>
                     </th>
@@ -26,11 +27,12 @@
                     </form>
                 </tr>
             </thead>
-            <tbody class=" "> 
+            <tbody class=" ">
                 {%for mod in modversions%}
                 <tr>
                     <td>{{mod.version}}</td>
-                    <td><input type="text" class="form-control md5_width" placeholder="{{mod.md5}}" name="md5" id="md5"></td>
+                    <td><input type="text" class="form-control md5_width" placeholder="{{mod.md5}}" name="md5" id="md5">
+                    </td>
                     <td>
                         <a href="# "><button type="button " class="btn btn-primary ">Rehash</button></a>
                         <a href="# "><button type="button " class="btn btn-danger ">Delete</button></a>
