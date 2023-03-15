@@ -16,9 +16,8 @@
               </div></th>
                 <th scope=" col ">
                   <div class=" mb-3 "">
-                            <label for="pretty_name" class="form-label">md5</label>
-                            <input type="text" class="form-control" name="pretty_name" id="pretty_name" disabled
-                                readonly>
+                            <label for="md5" class="form-label">md5</label>
+                            <input type="text" class="form-control" name="md5" id="md5">
                         </div>
                     </th>
                     <td>
@@ -27,11 +26,11 @@
                     </form>
                 </tr>
             </thead>
-            <tbody class=" ">
+            <tbody class=" "> 
                 {%for mod in modversions%}
                 <tr>
                     <td>{{mod.version}}</td>
-                    <td>{{mod.md5}}</td>
+                    <td><input type="text" class="form-control md5_width" placeholder="{{mod.md5}}" name="md5" id="md5"></td>
                     <td>
                         <a href="# "><button type="button " class="btn btn-primary ">Rehash</button></a>
                         <a href="# "><button type="button " class="btn btn-danger ">Delete</button></a>
@@ -43,12 +42,12 @@
         <div class="placetwo">
             <form method="post" action="" enctype="multipart/form-data">
                 <div class="mb-3">
-                    <label for="pretty_name" class="form-label">Mod Name</label>
-                    <input type="text" class="form-control" name="pretty_name" id="pretty_name">
+                    <label for="mod_name" class="form-label">Mod Name</label>
+                    <input type="text" class="form-control" name="mod_name" id="mod_name">
                 </div>
                 <div class="mb-3">
-                    <label for="name" class="form-label">Mod Slug</label>
-                    <input type="text" class="form-control" name="name" id="name">
+                    <label for="mod_slug" class="form-label">Mod Slug</label>
+                    <input type="text" class="form-control" name="mod_slug" id="mod_slug">
                 </div>
                 <div class="mb-3">
                     <label for="author" class="form-label">Author</label>
