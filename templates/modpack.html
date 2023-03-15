@@ -24,14 +24,16 @@
                 <td>{{mod.version}}</td>
                 <td>{{mod.minecraft}}</td>
                 <td>{{mod.author}}</td>
-                <td>{{mod.author}}</td>
-                <td>{{mod.author}}</td>
-                <td>{{mod.is_published}}</td>
-                <td>{{mod.private}}</td>
+                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.rec %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.latest %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.is_published %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.private %}checked{% endif %}></td>
                 <td>
                     <div class="tablewidth">
                         <a href="../modpackbuild/{{mod.id}}"><button type="button"
                                 class="btn btn-primary">Manage</button></a>
+                        <a href="../modpackbuild/{{mod.id}}"><button type="button"
+                                class="btn btn-secondary">Export MCIL</button></a>
                     </div>
                 </td>
             </tr>
