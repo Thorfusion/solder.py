@@ -29,57 +29,64 @@
     <div class="placetwo minwidth maxwidth">
         <form method="post" action="">
             <div class="mb-3" ">
-        <label for=" pretty_name " class=" form-label ">selected modpack</label>
-        <input type=" text " class=" form-control " name=" pretty_name " id=" pretty_name " disabled readonly>
+        <label for=" pretty_name " class=" form-label ">selected mod</label>
+        <input type=" text " class=" form-control " name=" pretty_name " id=" pretty_name " disabled readonly></input>
     </div>
   <div class=" mb-3 ">
-      <label for=" mcversion " class=" form-label ">Minecraft version</label>
+      <label for=" mcversion " class=" form-label ">Modversion</label>
       <select class=" form-select "  name=" mcversion " id=" mcversion ">
           <option>test</option>
-  <input class=" btn btn-success " type=" submit " value=" Add build ">
-    </form>
-        <form method=" post " action=" ">
-            <div class=" mb-3 " ">
-                <label for="pretty_name " class="form-label ">selected modpack</label>
-                <input type="text " class="form-control " name="pretty_name " id="pretty_name " disabled readonly>
+        </select>
+    </div>
+  <input class=" btn btn-success " type=" submit " value=" Add Mod ">
+</form>
+  <div class=" divider"></div>
+            <form method=" post " action=" ">
+                <div class=" mb-3 " ">
+        <label for=" build_name " class=" form-label ">selected build</label>
+        <input type=" text " class=" form-control " name=" build_name " id=" build_name " disabled readonly></input>
+    </div>
+    <div class=" mb-3 ">
+        <label for=" buildnumber " class=" form-label ">Build number</label>
+        <input type=" text " class=" form-control " name=" buildnumber " id=" buildnumber "></input>
+    </div>
+    <div class=" mb-3 ">
+        <label for=" mcversion " class=" form-label ">Minecraft version</label>
+        <select class=" form-select " name=" mcversion " id=" mcversion ">
+            <option>test</option>
+        </select>
+    </div>
+    <div class=" mb-3 ">
+        <label for=" clonebuild " class=" form-label ">Clone build</label>
+        <select class=" form-select " name=" clonebuild " id=" clonebuild ">
+            <option>Do not clone</option>
+        </select>
+    </div>
+    <div class=" mb-3 ">
+        <label for=" description " class=" form-label ">Minium Java Version</label>
+        <select class=" form-select " name=" description " id=" description ">
+            <option>No requirement</option>
+            <option>1.8</option>
+        </select>
+    </div>
+    <div class=" mb-3 ">
+        <label for=" memory " class=" form-label ">Minimum Memory requirement in MB, 0 for disable</label>
+        <input type=" text " class=" form-control " name=" memory " id=" memory ">
+    </div>
+    <input class=" btn btn-success " type=" submit " value=" Save changes">
+                    <input class="btn btn-danger " type="submit " value="Delete build">
+            </form>
+            {% if success %}
+            <div class="alert alert-success loginfail mx-auto " role="alert ">
+                <p>{{mod.vmd5}}</p>
+                <p>{{mod.vurl}}</p>
             </div>
-            <div class="mb-3 ">
-                <label for="buildnumber " class="form-label ">Build number</label>
-                <input type="text " class="form-control " name="buildnumber " id="buildnumber ">
+            {% endif %}
+            {% if failed %}
+            <div class="alert alert-danger loginfail mx-auto " role="alert ">
+                <p>Failed!</p>
             </div>
-            <div class="mb-3 ">
-                <label for="mcversion " class="form-label ">Minecraft version</label>
-                <select class="form-select " name="mcversion " id="mcversion ">
-                    <option>test</option>
-            </div>
-            <div class="mb-3 ">
-                <label for="clonebuild " class="form-label ">Clone build</label>
-                <select class="form-select " name="clonebuild " id="clonebuild ">
-                    <option>Do not clone</option>
-            </div>
-            <div class="mb-3 ">
-                <label for="description " class="form-label ">Minium Java Version</label>
-                <select class="form-select " name="description " id="description ">
-                    <option>No requirement</option>
-            </div>
-            <div class="mb-3 ">
-                <label for="memory " class="form-label ">Minimum Memory requirement in MB, 0 for disable</label>
-                <input type="text " class="form-control " name="memory " id="memory ">
-            </div>
-            <input class="btn btn-success " type="submit " value="Save changes">
-            <input class="btn btn-danger " type="submit " value="Delete build">
-        </form>
-        {% if success %}
-        <div class="alert alert-success loginfail mx-auto " role="alert ">
-            <p>{{mod.vmd5}}</p>
-            <p>{{mod.vurl}}</p>
-        </div>
-        {% endif %}
-        {% if failed %}
-        <div class="alert alert-danger loginfail mx-auto " role="alert ">
-            <p>Failed!</p>
-        </div>
-        {% endif %}
+            {% endif %}
     </div>
 </div>
 

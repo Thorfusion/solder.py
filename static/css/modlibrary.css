@@ -34,3 +34,7 @@
     max-width: 160px;
     min-width: max-content;
   }
+
+  .divider {
+    height: 5rem;
+  }
