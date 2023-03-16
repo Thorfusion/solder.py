@@ -245,6 +245,7 @@ def modpackbuild(id):
     else:
         # New or invalid session, send to login
         return redirect(url_for("login"))
+    listmod = Mod.get_all()
 
     try:
         modpackbuild = Build.get_by_id(id).get_modversions_minimal()
@@ -252,7 +253,7 @@ def modpackbuild(id):
         Database.create_tables()
         modpackbuild = []
 
-    return render_template("modpackbuild.html", modpackbuild=modpackbuild)
+    return render_template("modpackbuild.html", modpackbuild=modpackbuild, listmod=listmod)
 
 @app.route("/modlibrary")
 def modlibrary():
