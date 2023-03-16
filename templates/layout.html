@@ -43,6 +43,12 @@
                         <a href="{{ url_for('modpacklibrary') }}"
                             class="nav-link text-white {{ 'active' if active_page == 'modpacklibrary' else '' }}">Modpacks</a>
                     </li>
+                    {%for mod in listpinnedpacks%}
+                    <li>
+                        <a href="/modpack/{{mod.id}}"
+                            class="nav-link text-white {{ 'active' if active_page == 'modpack_{{mod.id}}' else '' }}">{{mod.name}}</a>
+                    </li>
+                    {%endfor%}
                     <li>
                         <a href="{{ url_for('modlibrary') }}"
                             class="nav-link text-white {{ 'active' if active_page == 'modlibrary' else '' }}">Mod
