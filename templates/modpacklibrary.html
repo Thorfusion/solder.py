@@ -23,9 +23,9 @@
                 <td>{{mod.name}} ({{mod.slug}})</td>
                 <td>{{mod.recommended}}</td>
                 <td>{{mod.latest}}</td>
-                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.hidden %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.private %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.pin %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="hidden_{{mod.id}}"{% if mod.hidden %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}"{% if mod.private %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="pin_{{mod.id}}"{% if mod.pin %}checked{% endif %}></td>
                 <td>
                     <div class="tablewidth">
                         <a href="./modpack/{{mod.id}}"><button type="button" class="btn btn-primary">Manage</button></a>
