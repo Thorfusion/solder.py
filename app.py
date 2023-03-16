@@ -254,7 +254,7 @@ def modpackbuild(id):
         mod_version_combo = [(Mod.get_by_id(build_modversion.mod_id), build_modversion) for build_modversion in modpackbuild]
     except connector.ProgrammingError as e:
         Database.create_tables()
-        modpackbuild = []
+        mod_version_combo = []
 
     return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod)
 
