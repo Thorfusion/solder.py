@@ -28,10 +28,10 @@
                 </tr>
             </thead>
             <tbody class=" ">
-                {%for mod in modversions%}
+                {%for versions in modversions%}
                 <tr>
-                    <td>{{mod.version}}</td>
-                    <td><input type="text" class="form-control md5_width" placeholder="{{mod.md5}}" name="md5" id="md5">
+                    <td>{{versions.version}}</td>
+                    <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5" id="md5">
                     </td>
                     <td>
                         <a href="# "><button type="button " class="btn btn-primary ">Rehash</button></a>
@@ -45,36 +45,36 @@
             <form method="post" action="" enctype="multipart/form-data">
                 <div class="mb-3">
                     <label for="mod_name" class="form-label">Mod Name</label>
-                    <input type="text" class="form-control" name="mod_name" id="mod_name">
+                    <input type="text" class="form-control" name="mod_name" value="{{ mod.pretty_name }}" id="mod_name">
                 </div>
                 <div class="mb-3">
                     <label for="mod_slug" class="form-label">Mod Slug</label>
-                    <input type="text" class="form-control" name="mod_slug" id="mod_slug">
+                    <input type="text" class="form-control" name="mod_slug" value="{{ mod.name }}" id="mod_slug">
                 </div>
                 <div class="mb-3">
                     <label for="author" class="form-label">Author</label>
-                    <input type="text" class="form-control" name="author" id="author">
+                    <input type="text" class="form-control" name="author" value="{{ mod.author }}" id="author">
                 </div>
                 <div class="mb-3">
                     <label for="description" class="form-label">Description</label>
-                    <textarea name="description" id="description" class="form-control" rows="5"></textarea>
+                    <textarea name="description" id="description" class="form-control" rows="5">{{ mod.description }}</textarea>
                 </div>
                 <div class="mb-3">
                     <label for="link" class="form-label">Mod Website</label>
-                    <input type="text" class="form-control" name="link" id="link">
+                    <input type="text" class="form-control" name="link" value="{{ mod.link }}" id="link">
                 </div>
                 <label>Select type</label>
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" value="" id="client">
+                    <input class="form-check-input" type="checkbox" value="" id="client" {% if mod.side == "CLIENT" and mod.side == "BOTH" %}checked{% endif %}>
                     <label class="form-check-label" for="client">Client</label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" value="" id="server">
+                    <input class="form-check-input" type="checkbox" value="" id="server" {% if mod.side == "SERVER" and mod.side == "BOTH" %}checked{% endif %}>
                     <label class="form-check-label" for="server">Server</label>
                 </div>
                 <div class="mb-3">
                     <label for="internal_note" class="form-label">Internal note</label>
-                    <textarea name="internal_note" id="internal_note" class="form-control" rows="5"></textarea>
+                    <textarea name="internal_note" id="internal_note" class="form-control"rows="5">{{ mod.note }}</textarea>
                 </div>
                 <input class="btn btn-success" type="submit" value="Save changes">
                 <input class="btn btn-danger" type="submit" value="Delete Mod">

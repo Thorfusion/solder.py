@@ -145,7 +145,7 @@ def modversion(id):
         Database.create_tables()
         modversions = []
 
-    return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions)
+    return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod)
 
 @app.route("/newmod")
 def newmod():
@@ -336,4 +336,4 @@ def clients(id):
     return render_template("clients.html", clients=packs)
 
 if __name__ == "__main__":
-    app.run(debug=True, host=host, port=port)
+    app.run(debug=True, use_reloader=False, host=host, port=port)
