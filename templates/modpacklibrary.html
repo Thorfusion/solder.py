@@ -12,6 +12,7 @@
                 <th scope="col">Latest</th>
                 <th scope="col">Hidden</th>
                 <th scope="col">Private</th>
+                <th scope="col">Pin to menu</th>
                 <th scope="col">Action</th>
             </tr>
         </thead>
@@ -24,6 +25,7 @@
                 <td>{{mod.latest}}</td>
                 <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.hidden %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.private %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.pin %}checked{% endif %}></td>
                 <td>
                     <div class="tablewidth">
                         <a href="./modpack/{{mod.id}}"><button type="button" class="btn btn-primary">Manage</button></a>
