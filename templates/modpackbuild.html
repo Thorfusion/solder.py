@@ -13,12 +13,12 @@
             </tr>
         </thead>
         <tbody class="">
-            {%for mod in modpackbuild%}
+            {%for combo in mod_version_combo%}
             <tr>
-                <td>{{mod.pretty_name}} ({{mod.name}})</td>
-                <td>{{mod.version}}</td>
+                <td>{{combo[0].pretty_name}} ({{combo[0].name}})</td>
+                <td>{{combo[1].version}}</td>
                 <td>
-                    <input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.optional %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" value="" id="hidden"{% if combo[0].optional %}checked{% endif %}>
                 </td>
                 <td>
                     <div class="tablewidth">

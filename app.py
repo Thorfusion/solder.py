@@ -1,3 +1,5 @@
+__version__ = "0.0.1-dev"
+
 import os
 from dotenv import load_dotenv
 
@@ -249,11 +251,12 @@ def modpackbuild(id):
 
     try:
         modpackbuild = Build.get_by_id(id).get_modversions_minimal()
+        mod_version_combo = [(Mod.get_by_id(build_modversion.mod_id), build_modversion) for build_modversion in modpackbuild]
     except connector.ProgrammingError as e:
         Database.create_tables()
         modpackbuild = []
 
-    return render_template("modpackbuild.html", modpackbuild=modpackbuild, listmod=listmod)
+    return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod)
 
 @app.route("/modlibrary")
 def modlibrary():
