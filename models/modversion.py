@@ -2,7 +2,7 @@ import datetime
 from .database import Database
 
 class Modversion:
-    def __init__(self, id, mod_id, version, md5, created_at, updated_at, filesize, ):
+    def __init__(self, id, mod_id, version, md5, created_at, updated_at, filesize, optional=False):
         self.id = id
         self.mod_id = mod_id
         self.version = version
@@ -10,6 +10,7 @@ class Modversion:
         self.created_at = created_at
         self.updated_at = updated_at
         self.filesize = filesize
+        self.optional = optional
 
     @classmethod
     def new(cls, mod_id, version, md5, filesize):
