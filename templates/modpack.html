@@ -3,6 +3,7 @@
 <link rel="stylesheet" href="{{ url_for('static',filename='css/modlibrary.css') }}" /> {%endblock%}{%block main%}
 
 <div class="wrappermod">
+    <form method="post" action="" enctype="multipart/form-data"></form>
     <table class="table table-striped table-hover placeone maxheighttable">
         <thead class="table-light sticky-md-top">
             <tr>
@@ -24,10 +25,10 @@
                 <td>{{mod.version}}</td>
                 <td>{{mod.minecraft}}</td>
                 <td>{{mod.author}}</td>
-                <td><input class="form-check-input" type="radio" value="" id="hidden"{% if mod.rec %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="radio" value="" id="hidden"{% if mod.latest %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.is_published %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="hidden"{% if mod.private %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="radio" name="flexRadioDefault" value="" id="rec_{{mod.id}}"{% if mod.rec %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="radio" name="flexRadioDefault1" value="" id="latest_{{mod.id}}"{% if mod.latest %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="published_{{mod.id}}"{% if mod.is_published %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}"{% if mod.private %}checked{% endif %}></td>
                 <td>
                     <div class="tablewidth">
                         <a href="../modpackbuild/{{mod.id}}"><button type="button"
@@ -40,6 +41,8 @@
             {%endfor%}
         </tbody>
     </table>
+</form>
+    
 
     <div class="placetwo minwidth maxwidth">
         <form method="post" action="" enctype="multipart/form-data">
