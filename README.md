@@ -12,10 +12,19 @@
 # About solder.py
 solder.py is written in flask where ease of use is at top aswell with something stuff here. solder.py is also compatible with technic solder databases making an migration to solder.py easy and simple. With critical missing features in technic solder and solder.cf mothballed right now we needed an more modern solder to use. solder.py is being used by its creators and improvements for efficiency for modpack creators are at top. removing unnecessary steps and keeping it simple.
 
-# Main features over vanilla solder (work in progress)
+# Working features
++ Technic solder api
++ Basic view of solder
+
+# Features in dev
 + Mod uploading
-+ Transfer modpack version between modpacks
++ MCIL export support
 + Internal descriptions of mods
++ Editing the solder database
+
+# Planned features
++ R2 bucket integration
++ Transfer modpack version between modpacks
 
 # Requirements (work in progress)
 + MySQL Server
