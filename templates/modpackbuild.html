@@ -18,7 +18,8 @@
                 <td>{{combo[0].pretty_name}} ({{combo[0].name}})</td>
                 <td>{{combo[1].version}}</td>
                 <td>
-                    <input class="form-check-input" type="checkbox" value="" id="hidden"{% if combo[1].optional %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" value="" id="hidden" {% if combo[1].optional
+                        %}checked{% endif %}>
                 </td>
                 <td>
                     <div class="tablewidth">
@@ -32,63 +33,59 @@
 
     <div class="placetwo minwidth maxwidth">
         <form method="post" action="">
-            <div class=" mb-3 ">
-                <label for=" description " class=" form-label ">Select Mod</label>
-                <select class=" form-select " name=" description " id=" description ">
+            <div class="mb-3">
+                <label for="description" class="form-label">Select Mod</label>
+                <select class="form-select" name="description" id="description">
                     {%for lmod in listmod%}
                     <option>{{lmod.name}}</option>
                     {%endfor%}
                 </select>
             </div>
-  <div class=" mb-3 ">
-      <label for=" mcversion " class=" form-label ">Modversion</label>
-      <select class=" form-select "  name=" mcversion " id=" mcversion ">
-          <option>test</option>
-        </select>
-    </div>
-  <input class=" btn btn-success " type=" submit " value=" Add Mod ">
-</form>
-  <div class=" divider"></div>
-            <form method=" post " action=" ">
-                <div class=" mb-3 " ">
-        <label for=" build_name " class=" form-label ">selected build</label>
-        <input type=" text " class=" form-control " name=" build_name " id=" build_name " disabled readonly></input>
-    </div>
-    <div class=" mb-3 ">
-        <label for=" buildnumber " class=" form-label ">Build number</label>
-        <input type=" text " class=" form-control " name=" buildnumber " id=" buildnumber "></input>
-    </div>
-    <div class=" mb-3 ">
-        <label for=" mcversion " class=" form-label ">Minecraft version</label>
-        <select class=" form-select " name=" mcversion " id=" mcversion ">
-            <option>test</option>
-        </select>
-    </div>
-    <div class=" mb-3 ">
-        <label for=" description " class=" form-label ">Minium Java Version</label>
-        <select class=" form-select " name=" description " id=" description ">
-            <option>No requirement</option>
-            <option>1.8</option>
-        </select>
-    </div>
-    <div class=" mb-3 ">
-        <label for=" memory " class=" form-label ">Minimum Memory requirement in MB, 0 for disable</label>
-        <input type=" text " class=" form-control " name=" memory " id=" memory "></input>
-    </div>
-    <input class=" btn btn-success " type=" submit " value=" Save changes"></input>
-                    <input class="btn btn-danger " type="submit " value="Delete build"></input>
-            </form>
-            {% if success %}
-            <div class="alert alert-success loginfail mx-auto " role="alert ">
-                <p>{{mod.vmd5}}</p>
-                <p>{{mod.vurl}}</p>
+            <div class="mb-3">
+                <label for="modversion" class="form-label">Modversion</label>
+                <input type="text" class="form-control" name="modversion" id="modversion"></input>
             </div>
-            {% endif %}
-            {% if failed %}
-            <div class="alert alert-danger loginfail mx-auto " role="alert ">
-                <p>Failed!</p>
+            <input class="btn btn-success" type="submit" value="Add Mod">
+        </form>
+        <div class="divider"></div>
+        <form method="post" action="">
+            <div class="mb-3">
+                <label for="build_name" class="form-label">selected build</label>
+                <input type="text" class="form-control" name="build_name" id="build_name" disabled readonly></input>
             </div>
-            {% endif %}
+            <div class="mb-3">
+                <label for="buildnumber" class="form-label">Build number</label>
+                <input type="text" class="form-control" name="buildnumber" id=" buildnumber"></input>
+            </div>
+            <div class="mb-3">
+                <label for="mcversion" class="form-label">Minecraft version</label>
+                <input type="text" class="form-control" name="mcversion" id="mcversion"></input>
+            </div>
+            <div class="mb-3">
+                <label for="description" class="form-label">Minium Java Version</label>
+                <select class="form-select" name="description" id="description">
+                    <option>No requirement</option>
+                    <option>1.8</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="memory" class="form-label">Minimum Memory requirement in MB, 0 for disable</label>
+                <input type="text" class="form-control" name="memory" id="memory" value="0"></input>
+            </div>
+            <input class="btn btn-success" type="submit" value="Save changes"></input>
+            <input class="btn btn-danger" type="submit" value="Delete build"></input>
+        </form>
+        {% if success %}
+        <div class="alert alert-success loginfail mx-auto" role="alert">
+            <p>{{mod.vmd5}}</p>
+            <p>{{mod.vurl}}</p>
+        </div>
+        {% endif %}
+        {% if failed %}
+        <div class="alert alert-danger loginfail mx-auto" role="alert">
+            <p>Failed!</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 

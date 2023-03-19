@@ -56,9 +56,7 @@
             </div>
             <div class="mb-3">
                 <label for="mcversion" class="form-label">Minecraft version</label>
-                <select class="form-select" name="mcversion" id="mcversion">
-                    <option>test</option>
-                </select>
+                <input type="text" class="form-control" name="mcversion" id="mcversion"></input>
             </div>
             <div class="mb-3">
                 <label for="clonebuild" class="form-label">Clone build</label>
@@ -78,7 +76,7 @@
             </div>
             <div class="mb-3">
                 <label for="memory" class="form-label">Minimum Memory requirement in MB, 0 for disable</label>
-                <input type="text" class="form-control" name="memory" id="memory"></input>
+                <input type="text" class="form-control" name="memory" id="memory" value="0"></input>
             </div>
             <input class="btn btn-success" type="submit" value="Add build"></input>
         </form>
