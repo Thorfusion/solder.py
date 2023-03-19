@@ -8,3 +8,7 @@ $('#search').keyup(function () {
         return !~text.indexOf(val);
     }).hide();
 });
+
+function buttonpress(id, val){
+    document.getElementById(id).value = val;
+}

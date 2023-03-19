@@ -19,7 +19,7 @@
         </th>
       </tr>
     </thead>
-    <tbody >
+    <tbody>
       {%for mod in mods%}
       <tr id="trsearch">
         <td>{{mod.id}}</td>
@@ -27,7 +27,7 @@
         <td>{{mod.author}}</td>
         <td>
           <div class="">
-            <a href="./modversion/{{mod.id}}"><button type="button" class="btn btn-primary">Select</button></a>
+            <button type="button" class="btn btn-primary" onclick="buttonpress('mod', '{{mod.name}}'); toslug(md5, mod);">Select</button>
             <a href="./modversion/{{mod.id}}"><button type="button" class="btn btn-secondary">Manage</button></a>
           </div>
         </td>
@@ -38,16 +38,16 @@
 
   <div class="placetwo minwidth maxwidth">
     <form method="post" action="" enctype="multipart/form-data">
-      <div class="mb-3"">
-        <label for=" pretty_name" class="form-label">selected mod</label>
-        <input type="text" class="form-control" name="pretty_name" id="pretty_name" disabled readonly>
+      <div class="mb-3">
+        <label for="mod" class="form-label">selected mod</label>
+        <input type="text" class="form-control" name="mod" id="mod" disabled readonly>
       </div>
       <div class="mb-3">
         <label for="formFile" class="form-label">Select file</label>
         <input class="form-control" type="file" id="formFile">
       </div>
-      <div class="mb-3"">
-            <label for=" md5" class="form-label">md5</label>
+      <div class="mb-3">
+        <label for="md5" class="form-label">md5</label>
         <input type="text" class="form-control" name="md5" id="md5" disabled readonly>
       </div>
       <label>Select type</label>
@@ -69,8 +69,8 @@
           ZIP
         </label>
       </div>
-      <div class="mb-3"">
-            <label for=" version" class="form-label">Version number</label>
+      <div class="mb-3">
+        <label for="version" class="form-label">Version number</label>
         <input type="text" class="form-control" name="version" id="version">
       </div>
       <input class="btn btn-success" type="submit" value="Add Version">
@@ -94,6 +94,7 @@
     </div>
   </div>
 </div>
+
 <script src="{{ url_for('static',filename='js/tablesearch.js') }}"></script>
 
 {% endblock %}
