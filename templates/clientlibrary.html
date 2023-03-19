@@ -1,6 +1,6 @@
 {%extends "layout.html"%} {% set active_page = "Clientslist" %} {%block head%}
 <title>solder.py</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static',filename='css/modversion.css') }}" />
 {%endblock%}{%block main%}
 
 
@@ -11,15 +11,9 @@
             <tr>
                 <form method="post" action=""></form>
                 <th scope="col">ID</th>
-                <th scope="col">
-                        <input type="text" class="form-control" name="author" placeholder="Name" id="author">
-                </th>
-                <th scope="col">
-                        <input type="text" class="form-control" name="pretty_name" placeholder="Client UUID" id="pretty_name">
-                </th>
-                <td>
-                    <input class="btn btn-success" type="submit" value="Add Client">
-                </td>
+                <th scope="col">Name</th>
+                <th scope="col">UUID</th>
+                <th scope="col">Actions</th>
                 </form>
             </tr>
         </thead>
@@ -38,6 +32,28 @@
         </tbody>
     </table>
     <div class="placetwo minwidth maxwidth">
+        <form method="post" action="">
+            <div class="mb-3">
+                <label for="client" class="form-label">CLIENT NAME</label>
+                <input type="text" class="form-control" name="client" id="client">
+            </div>
+            <div class="mb-3">
+                <label for="UUID" class="form-label">CLIENT UUID</label>
+                <input type="text" class="form-control" name="UUID" id="UUID">
+            </div>
+            <input class="btn btn-success" type="submit" value="Add client UUID">
+        </form>
+        {% if success %}
+        <div class="alert alert-success loginfail mx-auto" role="alert">
+            <p>{{mod.vmd5}}</p>
+            <p>{{mod.vurl}}</p>
+        </div>
+        {% endif %}
+        {% if failed %}
+        <div class="alert alert-danger loginfail mx-auto" role="alert">
+            <p>Failed!</p>
+        </div>
+        {% endif %}
     </div>
 </div>
 
