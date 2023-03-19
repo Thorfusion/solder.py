@@ -14,14 +14,14 @@
         <th scope="col">Author</th>
         <th>
           <div class="">
-            <input type="text" class="form-control" id="search" placeholder="Type to search">
+            <input type="text" class="form-control" id="search" placeholder="Type to search" onkeyup="tablesearches();">
           </div>
         </th>
       </tr>
     </thead>
     <tbody>
       {%for mod in mods%}
-      <tr id="trsearch">
+      <tr>
         <td>{{mod.id}}</td>
         <td>{{mod.pretty_name}} ({{mod.name}})</td>
         <td>{{mod.author}}</td>
