@@ -5,6 +5,8 @@
 <link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}" />
 {%endblock%}{%block main%}
 
-<p>Herro</p>
+<div class="center">
+    <input type="text" class="form-control" id="search" placeholder="Type to search" onkeyup="tablesearches();">
+  </div>
 
 {% endblock %}
