@@ -12,16 +12,10 @@
                 <form method="post" action=""></form>
                 <th scope="col">ID</th>
                 <th scope="col">
-                    <div class="mb-3">
-                        <label for="author" class="form-label">Name</label>
-                        <input type="text" class="form-control" name="author" id="author">
-                    </div>
+                    <input type="text" class="form-control" name="author" placeholder="Name" id="author">
                 </th>
                 <th scope="col">
-                    <div class="mb-3">
-                        <label for="pretty_name" class="form-label">api key</label>
-                        <input type="text" class="form-control" name="pretty_name" id="pretty_name">
-                    </div>
+                    <input type="text" class="form-control" name="pretty_name" placeholder="api key" id="pretty_name">
                 </th>
                 <td>
                     <input class="btn btn-success" type="submit" value="Add Key">
@@ -42,10 +36,6 @@
             {%endfor%}
         </tbody>
     </table>
-
-
-    <div class="placetwo minwidth maxwidth">
-    </div>
 </div>
 
 {% endblock %}
