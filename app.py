@@ -251,12 +251,13 @@ def modpackbuild(id):
 
     try:
         modpackbuild = Build.get_by_id(id).get_modversions_minimal()
+        packbuild = Build.get_by_id(id)
         mod_version_combo = [(Mod.get_by_id(build_modversion.mod_id), build_modversion) for build_modversion in modpackbuild]
     except connector.ProgrammingError as e:
         Database.create_tables()
         mod_version_combo = []
 
-    return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod)
+    return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild)
 
 @app.route("/modlibrary")
 def modlibrary():

@@ -59,26 +59,31 @@
         <form method="post" action="">
             <div class="mb-3">
                 <label for="build_name" class="form-label">selected build</label>
-                <input type="text" class="form-control" name="build_name" id="build_name" disabled readonly></input>
+                <input type="text" class="form-control" name="build_name" id="build_name" value="{{ packbuild.modpack_id }}" disabled readonly></input>
             </div>
             <div class="mb-3">
                 <label for="buildnumber" class="form-label">Build number</label>
-                <input type="text" class="form-control" name="buildnumber" id=" buildnumber"></input>
+                <input type="text" class="form-control" name="buildnumber" id="buildnumber" value="{{ packbuild.version }}"></input>
             </div>
             <div class="mb-3">
                 <label for="mcversion" class="form-label">Minecraft version</label>
-                <input type="text" class="form-control" name="mcversion" id="mcversion"></input>
+                <input type="text" class="form-control" name="mcversion" id="mcversion" value="{{ packbuild.minecraft }}"></input>
             </div>
             <div class="mb-3">
                 <label for="description" class="form-label">Minium Java Version</label>
                 <select class="form-select" name="description" id="description">
+                    {% if packbuild.min_java != 1.8 %}
                     <option>No requirement</option>
+                    {% endif %}
                     <option>1.8</option>
+                    {% if packbuild.min_java == 1.8 %}
+                    <option>No requirement</option>
+                    {% endif %}
                 </select>
             </div>
             <div class="mb-3">
                 <label for="memory" class="form-label">Minimum Memory requirement in MB, 0 for disable</label>
-                <input type="text" class="form-control" name="memory" id="memory" value="0"></input>
+                <input type="text" class="form-control" name="memory" id="memory" value="{{ packbuild.min_memory }}"></input>
             </div>
             <input class="btn btn-success" type="submit" value="Save changes"></input>
             <input class="btn btn-danger" type="submit" value="Delete build"></input>
