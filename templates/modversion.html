@@ -9,20 +9,20 @@
             <thead class="table-light sticky-md-top ">
                 <tr>
                     <form method="post" action=""></form>
-                    <th scope="col ">
-                        <div class="mb-3" ">
-                  <label for=" version" class=" form-label ">Version number</label>
+                    <th scope="col">
+                        <div class="mb-3">
+                            <label for=" version" class=" form-label ">Version number</label>
                             <input type=" text " class=" form-control " name="version" id="version">
                         </div>
                     </th>
-                    <th scope=" col ">
-                        <div class=" mb-3 "">
-                            <label for=" md5" class="form-label">md5</label>
+                    <th scope="col">
+                        <div class="mb-3">
+                            <label for="md5" class="form-label">md5</label>
                             <input type="text" class="form-control" name="md5" id="md5">
                         </div>
                     </th>
                     <td>
-                        <input class="btn btn-success " type="submit " value="Add Version ">
+                        <input class="btn btn-success" type="submit" value="Add Version">
                     </td>
                     </form>
                 </tr>
@@ -31,11 +31,12 @@
                 {%for versions in modversions%}
                 <tr>
                     <td>{{versions.version}}</td>
-                    <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5" id="md5">
+                    <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5"
+                            id="md5">
                     </td>
                     <td>
-                        <a href="# "><button type="button " class="btn btn-primary ">Rehash</button></a>
-                        <a href="# "><button type="button " class="btn btn-danger ">Delete</button></a>
+                        <a href="#"><button type="button" class="btn btn-primary">Rehash</button></a>
+                        <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
                     </td>
                 </tr>
                 {%endfor%}
@@ -57,7 +58,8 @@
                 </div>
                 <div class="mb-3">
                     <label for="description" class="form-label">Description</label>
-                    <textarea name="description" id="description" class="form-control" rows="5">{{ mod.description }}</textarea>
+                    <textarea name="description" id="description" class="form-control"
+                        rows="5">{{ mod.description }}</textarea>
                 </div>
                 <div class="mb-3">
                     <label for="link" class="form-label">Mod Website</label>
@@ -65,16 +67,19 @@
                 </div>
                 <label>Select type</label>
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" value="" id="client" {% if mod.side == "CLIENT" and mod.side == "BOTH" %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" value="" id="client" {% if mod.side=="CLIENT" and
+                        mod.side=="BOTH" %}checked{% endif %}>
                     <label class="form-check-label" for="client">Client</label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="checkbox" value="" id="server" {% if mod.side == "SERVER" and mod.side == "BOTH" %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" value="" id="server" {% if mod.side=="SERVER" and
+                        mod.side=="BOTH" %}checked{% endif %}>
                     <label class="form-check-label" for="server">Server</label>
                 </div>
                 <div class="mb-3">
                     <label for="internal_note" class="form-label">Internal note</label>
-                    <textarea name="internal_note" id="internal_note" class="form-control"rows="5">{{ mod.note }}</textarea>
+                    <textarea name="internal_note" id="internal_note" class="form-control"
+                        rows="5">{{ mod.note }}</textarea>
                 </div>
                 <input class="btn btn-success" type="submit" value="Save changes">
                 <input class="btn btn-danger" type="submit" value="Delete Mod">
