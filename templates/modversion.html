@@ -10,20 +10,18 @@
                 <tr>
                     <form method="post" action=""></form>
                     <th scope="col">
-                        <div class="mb-3">
                             <label for=" version" class=" form-label ">Version number</label>
                             <input type=" text " class=" form-control " name="version" id="version">
-                        </div>
                     </th>
                     <th scope="col">
-                        <div class="mb-3">
                             <label for="md5" class="form-label">md5</label>
                             <input type="text" class="form-control" name="md5" id="md5">
-                        </div>
                     </th>
-                    <td>
+                    <th scope="col">Download URL</th>
+                    <th scope="col">Filesize</th>
+                    <th>
                         <input class="btn btn-success" type="submit" value="Add Version">
-                    </td>
+                    </th>
                     </form>
                 </tr>
             </thead>
@@ -34,6 +32,8 @@
                     <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5"
                             id="md5">
                     </td>
+                    <td>test</td>
+                    <td>{{versions.filesize}} bytes</td>
                     <td>
                         <a href="#"><button type="button" class="btn btn-primary">Rehash</button></a>
                         <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
