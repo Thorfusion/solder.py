@@ -48,10 +48,18 @@
                             class="nav-link text-white {{ 'active' if active_page == 'modlibrary' else '' }}">Mod
                             library</a>
                     </li>
-                    <li>
-                        <a href="{{ url_for('mainsettings') }}"
-                            class="nav-link text-white {{ 'active' if active_page == 'mainsettings' else '' }}">Settings</a>
-                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link text-white" data-bs-toggle="collapse" data-bs-target="#account-collapse" href="#" role="button" aria-expanded="false">Settings</a>
+                        <div class="collapse" id="account-collapse">
+                            <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
+                              <li><a href="{{ url_for('clientlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'clientlibrary' else '' }}">Clients</a></li>
+                              <li><a href="{{ url_for('apikeylibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'apikeylibrary' else '' }}">API Keys</a></li>
+                              <li><a href="{{ url_for('userlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'userlibrary' else '' }}">Users</a></li>
+                              <li><a href="{{ url_for('mainsettings') }}" class="nav-link text-white {{ 'active' if active_page == 'mainsettings' else '' }}">Env Settings</a></li>
+                            </ul>
+                          </div>
+                      </li>
+
                 </ul>
             </nav>
             <div class="flex-column flex-shrink-0 p-3 text-white navcontainer2">
