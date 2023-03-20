@@ -16,7 +16,11 @@
             {%for combo in mod_version_combo%}
             <tr>
                 <td>{{combo[0].pretty_name}} ({{combo[0].name}})</td>
-                <td>{{combo[1].version}}</td>
+                <td>
+                    <select class="form-select" name="selmodver" id="selmodver">
+                        <option>{{combo[1].version}}</option>
+                    </select>
+                </td>
                 <td>
                     <input class="form-check-input" type="checkbox" value="" id="hidden" {% if combo[1].optional
                         %}checked{% endif %}>
