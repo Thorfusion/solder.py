@@ -15,10 +15,12 @@
     {% block head %}{% endblock %}
 </head>
 
-<body class="wrapper">
-    <main class="">{%block main%}{% endblock %}</main>
 
-    <aside class="bg-dark">
+<body class="wrapper">
+    <main class="mainpos">{%block main%}{% endblock %}</main>
+
+
+    <aside class="bg-dark asideleft">
         <div class="sidenav">
             <div class="imgcontainer">
                 <a href="/">
@@ -49,16 +51,25 @@
                             library</a>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link text-white" data-bs-toggle="collapse" data-bs-target="#account-collapse" href="#" role="button" aria-expanded="false">Settings</a>
+                        <a class="nav-link text-white" data-bs-toggle="collapse" data-bs-target="#account-collapse"
+                            href="#" role="button" aria-expanded="false">Settings</a>
                         <div class="collapse" id="account-collapse">
                             <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
-                              <li><a href="{{ url_for('clientlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'clientlibrary' else '' }}">Clients</a></li>
-                              <li><a href="{{ url_for('apikeylibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'apikeylibrary' else '' }}">API Keys</a></li>
-                              <li><a href="{{ url_for('userlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'userlibrary' else '' }}">Users</a></li>
-                              <li><a href="{{ url_for('mainsettings') }}" class="nav-link text-white {{ 'active' if active_page == 'mainsettings' else '' }}">Env Settings</a></li>
+                                <li><a href="{{ url_for('clientlibrary') }}"
+                                        class="nav-link text-white {{ 'active' if active_page == 'clientlibrary' else '' }}">Clients</a>
+                                </li>
+                                <li><a href="{{ url_for('apikeylibrary') }}"
+                                        class="nav-link text-white {{ 'active' if active_page == 'apikeylibrary' else '' }}">API
+                                        Keys</a></li>
+                                <li><a href="{{ url_for('userlibrary') }}"
+                                        class="nav-link text-white {{ 'active' if active_page == 'userlibrary' else '' }}">Users</a>
+                                </li>
+                                <li><a href="{{ url_for('mainsettings') }}"
+                                        class="nav-link text-white {{ 'active' if active_page == 'mainsettings' else '' }}">Env
+                                        Settings</a></li>
                             </ul>
-                          </div>
-                      </li>
+                        </div>
+                    </li>
 
                 </ul>
             </nav>
@@ -68,6 +79,11 @@
 
         </div>
     </aside>
+
+    <aside class="bg-light asideright">
+        {%block aside%}{% endblock %}
+    </aside>
+
 </body>
 
 </html>

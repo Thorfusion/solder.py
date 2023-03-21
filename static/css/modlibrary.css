@@ -1,67 +1,83 @@
 .wrappermod {
-    display: grid;
-    grid-template-columns: 60vw 1fr;
-    grid-template-rows: auto;
-    gap: 0.5vw;
-  }
-  
-  
-  .placeone {
-    grid-column: 1;
-    grid-row: 1;
-  }
+  max-width: fit-content;
+}
 
-  .placetwo {
-    grid-column: 2;
-    grid-row: 1;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-  }
+.sticky {
+  position: sticky;
+  top: 0;
+}
 
-  .sticky {
-    position: sticky;
-    top: 0;
-  }
-  
-  .tablewidth2 {
-    width: 100%;
-    max-width: 160px;
-  }
+.tablewidth2 {
+  width: 100%;
+  max-width: 160px;
+}
 
-  .tablewidth {
-    width: max-content;
-    max-width: 160px;
-    min-width: max-content;
-  }
+.tablewidth4 {
+  max-width: 30vw;
+}
 
-  .tablewidth3 {
-    width: 60vw;
-  }
+.tablewidth {
+  width: max-content;
+  max-width: 160px;
+  min-width: max-content;
+}
 
-  .maxcontents {
-    max-width: 1vw;
-  }
+.tablewidth3 {
+  width: 60vw;
+}
 
-  .divider {
-    height: 5rem;
-  }
+.maxcontents {
+  max-width: 1vw;
+}
 
-  .rowheight {
-    max-height: 20px;
-  }
+.divider {
+  height: 5rem;
+}
 
-table.fixed {table-layout:fixed; width:60vw;}/*Setting the table width is important!*/
+.rowheight {
+  max-height: 20px;
+}
 
-table.fixed th {overflow:hidden;}/*Hide text outside the cell.*/
-table.fixed th:nth-of-type(1) {width:3rem;}/*Setting the width of column 1.*/
-table.fixed th:nth-of-type(2) {width:auto;}/*Setting the width of column 2.*/
-table.fixed th:nth-of-type(3) {max-width:min-content;}/*Setting the width of column 3.*/
-table.fixed th:nth-of-type(4) {width:fit-content;}/*Setting the width of column 3.*/
+table.fixed {
+  table-layout: fixed;
+  width: 60vw;
+}
 
-table.fixed td {overflow:hidden;}/*Hide text outside the cell.*/
-table.fixed td:nth-of-type(1) {width:3rem; max-height: min-content;}/*Setting the width of column 1.*/
-table.fixed td:nth-of-type(2) {width:100%; max-height: min-content;}/*Setting the width of column 2.*/
-table.fixed td:nth-of-type(3) {max-width:min-content; max-height: min-content;}/*Setting the width of column 3.*/
-table.fixed td:nth-of-type(4) {width:min-content; max-height: min-content;}/*Setting the width of column 3.*/
+/*Setting the table width is important!*/
 
+table.fixed tr {
+  overflow: hidden;
+  max-height: 20px
+}
+
+/*Hide text outside the cell.*/
+table.fixed td {
+  overflow: hidden;
+}
+
+/*Hide text outside the cell.*/
+table.fixed td:nth-of-type(1) {
+  width: 3rem;
+  width: 3rem;
+  max-height: min-content;
+}
+
+/*Setting the width of column 1.*/
+table.fixed td:nth-of-type(2) {
+  width: 100%;
+  max-height: min-content;
+}
+
+/*Setting the width of column 2.*/
+table.fixed td:nth-of-type(3) {
+  max-width: min-content;
+  max-height: min-content;
+}
+
+/*Setting the width of column 3.*/
+table.fixed td:nth-of-type(4) {
+  width: min-content;
+  max-height: min-content;
+}
+
+/*Setting the width of column 3.*/

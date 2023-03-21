@@ -6,14 +6,14 @@
 {%endblock%}{%block main%}
 
 <div class="wrappermod">
-  <table class="table table-striped table-hover placeone" id="table">
+  <table class="table table-striped table-hover" id="table">
     <thead class="table-light sticky-md-top">
       <tr>
         <th scope="col">ID</th>
         <th scope="col">Name (Slug)</th>
         <th scope="col">Author</th>
         <th>
-          <div class="">
+          <div class="tablewidth2">
             <input type="text" class="form-control" id="search" placeholder="Type to search" onkeyup="tablesearches(1);">
           </div>
         </th>
@@ -23,7 +23,7 @@
       {%for mod in mods%}
       <tr>
         <td>{{mod.id}}</td>
-        <td>{{mod.pretty_name}} ({{mod.name}})</td>
+        <td class="tablewidth4">{{mod.pretty_name}} ({{mod.name}})</td>
         <td>{{mod.author}}</td>
         <td>
           <div class="">
@@ -35,8 +35,10 @@
       {%endfor%}
     </tbody>
   </table>
-
-  <div class="placetwo minwidth maxwidth">
+</div>
+  {% endblock %}
+  {%block aside%}
+  <div class="">
     <form method="post" action="" enctype="multipart/form-data">
       <div class="mb-3">
         <label for="mod" class="form-label">selected mod</label>
@@ -93,7 +95,7 @@
           mod</button></a>
     </div>
   </div>
-</div>
+
 
 <script src="{{ url_for('static',filename='js/tablesearch.js') }}"></script>
 
