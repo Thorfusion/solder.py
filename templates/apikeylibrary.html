@@ -1,6 +1,6 @@
 {%extends "layout.html"%} {% set active_page = "apikeylibrary" %} {%block head%}
 <title>solder.py</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/modversion.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" />
 {%endblock%}{%block main%}
 
 
@@ -13,18 +13,18 @@
                 <th scope="col">ID</th>
                 <th scope="col">Name</th>
                 <th scope="col">API KEY</th>
-                <th scope="col">Actions</th>
+                <th scope="col" class="tablewidthsearch">Actions</th>
                 </form>
             </tr>
         </thead>
         <tbody class="">
             {%for mod in keys%}
             <tr>
-                <td>{{mod.id}}</td>
-                <td>{{mod.name}}</td>
-                <td>{{mod.api_key}}</td>
+                <td class="tablewidthid">{{mod.id}}</td>
+                <td class="tablemaxwidth">{{mod.name}}</td>
+                <td class="tablemaxwidth">{{mod.api_key}}</td>
                 <td>
-                    <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+                    <a href="#"><button type="button" class="btn btn-danger maxcont">Delete</button></a>
                 </td>
             </tr>
             {%endfor%}

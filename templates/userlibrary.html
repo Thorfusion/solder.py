@@ -1,6 +1,6 @@
 {%extends "layout.html"%} {% set active_page = "userlibrary" %} {%block head%}
 <title>solder.py</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/modversion.css') }}" />
+<link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" />
 {%endblock%}{%block main%}
 
 <div class="">
@@ -11,19 +11,21 @@
                 <th scope="col">ID</th>
                 <th scope="col">EMAIL</th>
                 <th scope="col">USERNAME</th>
-                <th scope="col">Actions</th>
+                <th scope="col" class="tablewidthsearch">Actions</th>
                 </form>
             </tr>
         </thead>
         <tbody class="">
             {%for mod in users%}
             <tr>
-                <td>{{mod.id}}</td>
-                <td>{{mod.email}}</td>
-                <td>{{mod.username}}</td>
+                <td class="tablewidthid">{{mod.id}}</td>
+                <td class="tablemaxwidth">{{mod.email}}</td>
+                <td class="tablemaxwidth">{{mod.username}}</td>
                 <td>
-                    <a href="#"><button type="button" class="btn btn-primary" disabled readonly>Manage</button></a>
-                    <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+                    <div class="maxcont">
+                        <a href="#"><button type="button" class="btn btn-primary" disabled readonly>Manage</button></a>
+                        <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+                    </div>
                 </td>
             </tr>
             {%endfor%}
