@@ -1,49 +1,67 @@
-{%extends "layout.html"%} {% set active_page = "Clientslist" %} {%block head%}
+{%extends "layout.html"%} {% set active_page = "clientlibrary" %} {%block head%}
 <title>solder.py</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}" /> 
-{%endblock%}{%block main%}
+<link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" />
+{%endblock%}
 
+{%block main%}
 
-
-<div class="wrappermod">
-    <table class="table table-striped table-hover placeone maxheighttable">
+<div class="">
+    <table class="table table-striped table-hover maxheighttable">
         <thead class="table-light sticky-md-top">
             <tr>
                 <form method="post" action=""></form>
                 <th scope="col">ID</th>
-                <th scope="col">
-                    <div class="mb-3">
-                  <label for="author" class="form-label">Name</label>
-                  <input type="text" class="form-control" name="author" id="author">
-              </div></th>
-                <th scope="col">
-                  <div class="mb-3">
-                        <label for="pretty_name" class="form-label">Client UUID</label>
-                        <input type="text" class="form-control" name="pretty_name" id="pretty_name">
-                    </div>
-                </th>
-                <td>
-                    <input class="btn btn-success" type="submit" value="Add Client">
-                </td>
+                <th scope="col">Name</th>
+                <th scope="col">UUID</th>
+                <th scope="col" class="tablewidthsearch">Actions</th>
                 </form>
             </tr>
         </thead>
         <tbody class="">
             {%for mod in clients%}
             <tr>
-                <td>{{mod.id}}</td>
-                <td>{{mod.name}}</td>
-                <td>{{mod.uuid}}</td>
+                <td class="tablewidthid">{{mod.id}}</td>
+                <td class="tablemaxwidth">{{mod.name}}</td>
+                <td class="tablemaxwidth">{{mod.uuid}}</td>
                 <td>
-                    <a href="../clients/{{mod.id}}"><button type="button" class="btn btn-primary">Manage</button></a>
-                    <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+                    <div class="maxcont">
+                        <a href="../clients/{{mod.id}}"><button type="button"
+                                class="btn btn-primary">Manage</button></a>
+                        <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+                    </div>
                 </td>
             </tr>
             {%endfor%}
         </tbody>
     </table>
-    <div class="placetwo minwidth maxwidth">
+</div>
+
+{% endblock %}
+
+{%block aside%}
+<div class="">
+    <form method="post" action="">
+        <div class="mb-3">
+            <label for="client" class="form-label">CLIENT NAME</label>
+            <input type="text" class="form-control" name="client" id="client">
+        </div>
+        <div class="mb-3">
+            <label for="UUID" class="form-label">CLIENT UUID</label>
+            <input type="text" class="form-control" name="UUID" id="UUID">
+        </div>
+        <input class="btn btn-success" type="submit" value="Add client UUID">
+    </form>
+    {% if success %}
+    <div class="alert alert-success loginfail mx-auto" role="alert">
+        <p>{{mod.vmd5}}</p>
+        <p>{{mod.vurl}}</p>
     </div>
+    {% endif %}
+    {% if failed %}
+    <div class="alert alert-danger loginfail mx-auto" role="alert">
+        <p>Failed!</p>
+    </div>
+    {% endif %}
 </div>
 
 {% endblock %}

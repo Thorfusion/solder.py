@@ -1,0 +1,64 @@
+.wrappermod {
+  max-width: max-content;
+}
+
+.sticky {
+  position: sticky;
+  top: 0;
+}
+
+.tablewidthsearch {
+  width: 10.4rem;
+}
+
+.buttonwidth {
+  width: 5rem;
+}
+
+.buttonwidthmcil {
+  width: 7rem;
+}
+
+.tablemaxwidth {
+  max-width: 30vw;
+}
+
+.tablewidth70 {
+  width: 70%;
+}
+
+.tablewidth30 {
+  width: 30%;
+}
+
+.tablewidth20 {
+  width: 20%;
+}
+
+.tablewidthid {
+  width: 2rem;
+}
+
+.divider {
+  height: 5rem;
+}
+
+.md5_width {
+  width: 19em;
+}
+
+.maxcont {
+  width: max-content;
+}
+
+.mincont {
+  width: min-content;
+}
+
+.action {
+  width: 5rem;
+}
+
+.actionmcil {
+  width: 12.4rem;
+}

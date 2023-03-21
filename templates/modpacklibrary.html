@@ -1,9 +1,9 @@
 {%extends "layout.html"%} {% set active_page = "modpacklibrary" %} {%block head%}
 <title>solder.py</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/modlibrary.css') }}" /> {%endblock%}{%block main%}
+<link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" /> {%endblock%}{%block main%}
 
-<div class="wrappermod">
-    <table class="table table-striped table-hover placeone maxheighttable">
+<div class="">
+    <table class="table table-striped table-hover maxheighttable">
         <thead class="table-light sticky-md-top">
             <tr>
                 <th scope="col">ID</th>
@@ -12,62 +12,50 @@
                 <th scope="col">Latest</th>
                 <th scope="col">Hidden</th>
                 <th scope="col">Private</th>
-                <th scope="col">Action</th>
+                <th scope="col">Pin to menu</th>
+                <th scope="col" class="action">Action</th>
             </tr>
         </thead>
         <tbody class="">
             {%for mod in modpacklibrary%}
             <tr>
-                <td>{{mod.id}}</td>
+                <td class="tablewidthid">{{mod.id}}</td>
                 <td>{{mod.name}} ({{mod.slug}})</td>
                 <td>{{mod.recommended}}</td>
                 <td>{{mod.latest}}</td>
-                <td>{{mod.hidden}}</td>
-                <td>{{mod.private}}</td>
+                <td><input class="form-check-input" type="checkbox" value="" id="hidden_{{mod.id}}"{% if mod.hidden %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}"{% if mod.private %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="pin_{{mod.id}}"{% if mod.pin %}checked{% endif %}></td>
                 <td>
-                    <div class="tablewidth">
-                        <a href="./modpack/{{mod.id}}"><button type="button" class="btn btn-primary">Select</button></a>
-                        <a href="./modpack/{{mod.id}}"><button type="button" class="btn btn-secondary">Manage</button></a>
-                    </div>
+                    <a href="./modpack/{{mod.id}}"><button type="button" class="btn btn-primary buttonwidth">Manage</button></a>
                 </td>
             </tr>
             {%endfor%}
         </tbody>
     </table>
-
-    <div class="placetwo minwidth maxwidth">
-        <ul class="nav nav-tabs" id="myTab" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="home-tab" data-bs-toggle="tab" data-bs-target="#home-tab-pane" type="button" role="tab" aria-controls="home-tab-pane" aria-selected="true">Edit modpack</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile-tab-pane" type="button" role="tab" aria-controls="profile-tab-pane" aria-selected="false">New modpack</button>
-            </li>
-        </ul>
-        <div class="tab-content" id="myTabContent">
-            <div class="tab-pane fade show active" id="home-tab-pane" role="tabpanel" aria-labelledby="home-tab" tabindex="0">
-                <form method="post" action="">
-                    <div class="mb-3">
-                  <label for="pretty_name" class="form-label">Modpack Name</label>
-                  <input type="text" class="form-control" name="pretty_name" id="pretty_name">
-              </div>
-              <div class="mb-3 "">
-                        <label for="name" class="form-label">Modpack Slug</label>
-                        <input type="text" class="form-control" name="name" id="name">
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="" id="Hidden">
-                        <label class="form-check-label" for="Hidden">Hidden</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="" id="Private">
-                        <label class="form-check-label" for="Private">Private</label>
-                    </div>
-                    <input class="btn btn-success" type="submit" value="Add modpack">
-                </form>
+</div>
+{% endblock %}
+{%block aside%}
+    <div class="">
+        <form method="post" action="">
+            <div class="mb-3">
+                <label for="pretty_name" class="form-label">Modpack Name</label>
+                <input type="text" class="form-control" name="pretty_name" id="pretty_name" onkeyup="toslug('name', 'pretty_name')">
             </div>
-            <div class="tab-pane fade" id="profile-tab-pane" role="tabpanel" aria-labelledby="profile-tab" tabindex="0">sau</div>
-        </div>
+            <div class="mb-3 "">
+                        <label for=" name" class="form-label">Modpack Slug</label>
+                <input type="text" class="form-control" name="name" id="name" readonly>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="" id="Hidden">
+                <label class="form-check-label" for="Hidden">Hidden</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="" id="Private">
+                <label class="form-check-label" for="Private">Private</label>
+            </div>
+            <input class="btn btn-success" type="submit" value="Add modpack">
+        </form>
         {% if success %}
         <div class="alert alert-success loginfail mx-auto " role="alert ">
             <p>{{mod.vmd5}}</p>
@@ -79,6 +67,6 @@
         </div>
         {% endif %}
     </div>
-</div>
 
+<script src="{{ url_for('static',filename='js/slug.js') }}"></script>
 {% endblock %}

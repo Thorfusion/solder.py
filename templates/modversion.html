@@ -1,82 +1,91 @@
 {%extends "layout.html"%} {% set active_page = "modversion" %} {%block head%}
 <title>solder.py</title>
-<link rel="stylesheet" href="{{ url_for('static',filename='css/modversion.css') }}" /> {%endblock%}{%block main%}
+<link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" /> {%endblock%}{%block main%}
 
-<! -- TODO ADD CURRENT MOD NAME not needed, it will be in the form on the right -->
-
-<div class="wrappermod">
-    <table class="table table-striped table-hover placeone maxheighttable">
-        <thead class="table-light sticky-md-top ">
+<div class="">
+    <table class="table table-striped table-hover maxheighttable">
+        <thead class="table-light sticky-md-top">
             <tr>
-                <form method="post" action=""></form>
-                <th scope="col ">
-                    <div class="mb-3" ">
-                  <label for="author " class="form-label ">Version number</label>
-                  <input type="text " class="form-control " name="author " id="author ">
-              </div></th>
-                <th scope="col ">
-                  <div class="mb-3 "">
-                        <label for="pretty_name" class="form-label">md5</label>
-                        <input type="text" class="form-control" name="pretty_name" id="pretty_name" disabled readonly>
-                    </div>
-                </th>
-                <td>
-                    <input class="btn btn-success " type="submit " value="Add Version ">
-                </td>
+                <form method="post" action="">
+                    <th scope="col">
+                        <label for=" version" class=" form-label ">Version number</label>
+                        <input type=" text " class=" form-control " name="version" id="version">
+                    </th>
+                    <th scope="col">
+                        <label for="md5" class="form-label">md5</label>
+                        <input type="text" class="form-control md5_width" name="md5" id="md5">
+                    </th>
+                    <th scope="col">Download URL</th>
+                    <th scope="col">Filesize</th>
+                    <th>
+                        <input class="btn btn-success tablewidthsearch" type="submit" value="Add Version">
+                    </th>
                 </form>
             </tr>
         </thead>
-        <tbody class=" ">
-            {%for mod in modversions%}
+        <tbody class="">
+            {%for versions in modversions%}
             <tr>
-                <td>{{mod.version}}</td>
-                <td>{{mod.md5}}</td>
-                <td>
-                    <a href="# "><button type="button " class="btn btn-primary ">Rehash</button></a>
-                    <a href="# "><button type="button " class="btn btn-danger ">Delete</button></a>
+                <td>{{versions.version}}</td>
+                <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5"
+                        id="md5">
+                </td>
+                <td>test</td>
+                <td>{{versions.filesize}} bytes</td>
+                <td> 
+                    <div class="maxcont">
+                    <a href="#"><button type="button" class="btn btn-primary buttonwidth">Rehash</button></a>
+                    <a href="#"><button type="button" class="btn btn-danger buttonwidth">Delete</button></a>
+                </div>
                 </td>
             </tr>
             {%endfor%}
         </tbody>
     </table>
-    <div class="placetwo">
-        <form method="post" action="" enctype="multipart/form-data">
-            <div class="mb-3">
-                        <label for="pretty_name" class="form-label">Mod Name</label>
-                        <input type="text" class="form-control" name="pretty_name" id="pretty_name">
-                    </div>
-                    <div class="mb-3">
-                <label for="name" class="form-label">Mod Slug</label>
-                <input type="text" class="form-control" name="name" id="name">
-            </div>
-            <div class="mb-3">
-                        <label for="author" class="form-label">Author</label>
-                        <input type="text" class="form-control" name="author" id="author">
-                    </div>
-                    <div class="mb-3">
-                <label for="description" class="form-label">Description</label>
-                <textarea name="description" id="description" class="form-control" rows="5"></textarea>
-            </div>
-            <div class="mb-3">
-                        <label for="link" class="form-label">Mod Website</label>
-                        <input type="text" class="form-control" name="link" id="link">
-                    </div>
-                    <label>Select type</label>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="" id="client">
-                        <label class="form-check-label" for="client">Client</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="" id="server">
-                        <label class="form-check-label" for="server">Server</label>
-                    </div>
-                    <div class="mb-3">
-                <label for="internal_note" class="form-label">Internal note</label>
-                <textarea name="internal_note" id="internal_note" class="form-control" rows="5"></textarea>
-            </div>
-            <input class="btn btn-success" type="submit" value="Save changes">
-            <input class="btn btn-danger" type="submit" value="Delete Mod">
-        </form>
-    </div>
 </div>
+{% endblock %}
+{%block aside%}
+<div class="">
+    <form method="post" action="" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label for="mod_name" class="form-label">Mod Name</label>
+            <input type="text" class="form-control" name="mod_name" value="{{ mod.pretty_name }}" id="mod_name"
+                onkeyup="toslug('mod_slug', 'mod_name')">
+        </div>
+        <div class="mb-3">
+            <label for="mod_slug" class="form-label">Mod Slug</label>
+            <input type="text" class="form-control" name="mod_slug" value="{{ mod.name }}" id="mod_slug" readonly>
+        </div>
+        <div class="mb-3">
+            <label for="author" class="form-label">Author</label>
+            <input type="text" class="form-control" name="author" value="{{ mod.author }}" id="author">
+        </div>
+        <div class="mb-3">
+            <label for="description" class="form-label">Description</label>
+            <textarea name="description" id="description" class="form-control" rows="5">{{ mod.description }}</textarea>
+        </div>
+        <div class="mb-3">
+            <label for="link" class="form-label">Mod Website</label>
+            <input type="text" class="form-control" name="link" value="{{ mod.link }}" id="link">
+        </div>
+        <label>Select type</label>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="client" {% if mod.side=="CLIENT" and
+                mod.side=="BOTH" %}checked{% endif %}>
+            <label class="form-check-label" for="client">Client</label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="server" {% if mod.side=="SERVER" and
+                mod.side=="BOTH" %}checked{% endif %}>
+            <label class="form-check-label" for="server">Server</label>
+        </div>
+        <div class="mb-3">
+            <label for="internal_note" class="form-label">Internal note</label>
+            <textarea name="internal_note" id="internal_note" class="form-control" rows="5">{{ mod.note }}</textarea>
+        </div>
+        <input class="btn btn-success" type="submit" value="Save changes">
+        <input class="btn btn-danger" type="submit" value="Delete Mod">
+    </form>
+</div>
+<script src="{{ url_for('static',filename='js/slug.js') }}"></script>
 {% endblock %}

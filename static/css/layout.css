@@ -1,14 +1,28 @@
-html,
 .wrapper {
     display: grid;
-    grid-template-columns: minmax(min-content, max-content) 1fr;
+    grid-template-columns: minmax(min-content, 10vw) 1fr 20vw;
     grid-template-rows: auto;
     gap: 0.5vw;
 }
 
-aside {
+.asideleft {
     grid-column: 1;
     grid-row: 1;
+    top: 0;
+    left: 0;
+    position: sticky;
+}
+
+.asideright {
+    grid-column: 3;
+    grid-row: 1;
+    top: 0;
+    right: 0;
+    position: sticky;
+    height: 100vh;
+    min-width: 12em;
+    padding-left: 0.5vw;
+    padding-right: 0.5vw;
 }
 
 main {
@@ -26,6 +40,9 @@ main {
     position: sticky;
     top: 0;
     height: 100vh;
+    display: grid;
+    grid-template-columns: auto;
+    grid-template-rows: max-content auto max-content;
 }
 
 .wrappernav {
@@ -52,7 +69,7 @@ main {
 }
 
 .minwidth {
-    min-width: 15vw;
+    min-width: 20vw;
 }
 
 .maxwidth {

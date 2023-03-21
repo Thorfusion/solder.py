@@ -1,3 +1,5 @@
+__version__ = "0.0.1-dev"
+
 import os
 from dotenv import load_dotenv
 
@@ -52,9 +54,6 @@ def createFolder(dirName):
 
 @app.route("/")
 def index():
-    if not Database.is_setup():
-        # Initial database setup
-        return redirect(url_for("setup"))
     if "key" in session and session["key"] in app.sessions:
         # Valid session, refresh token
         app.sessions[session["key"]] = datetime.utcnow()
@@ -148,7 +147,7 @@ def modversion(id):
         Database.create_tables()
         modversions = []
 
-    return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions)
+    return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod)
 
 @app.route("/newmod")
 def newmod():
@@ -248,14 +247,17 @@ def modpackbuild(id):
     else:
         # New or invalid session, send to login
         return redirect(url_for("login"))
+    listmod = Mod.get_all()
 
     try:
         modpackbuild = Build.get_by_id(id).get_modversions_minimal()
+        packbuild = Build.get_by_id(id)
+        mod_version_combo = [(Mod.get_by_id(build_modversion.mod_id), build_modversion) for build_modversion in modpackbuild]
     except connector.ProgrammingError as e:
         Database.create_tables()
-        modpackbuild = []
+        mod_version_combo = []
 
-    return render_template("modpackbuild.html", modpackbuild=modpackbuild)
+    return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild)
 
 @app.route("/modlibrary")
 def modlibrary():
@@ -315,7 +317,7 @@ def newmod_submit():
     print(client)
     print(server)
 
-    return 204
+    return Response(status=204)
 
 @app.errorhandler(404)
 def page_not_found(e):
@@ -339,4 +341,4 @@ def clients(id):
     return render_template("clients.html", clients=packs)
 
 if __name__ == "__main__":
-    app.run(debug=True, host=host, port=port)
+    app.run(debug=True, use_reloader=False, host=host, port=port)
