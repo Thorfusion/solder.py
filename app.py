@@ -27,6 +27,7 @@ import threading
 load_dotenv(".env")
 host = os.getenv("APP_URL")
 port = os.getenv("APP_PORT")
+debug = os.getenv("APP_DEBUG")
 
 app: Flask = Flask(__name__)
 app.register_blueprint(api)
@@ -341,4 +342,4 @@ def clients(id):
     return render_template("clients.html", clients=packs)
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False, host=host, port=port)
+    app.run(debug=debug, use_reloader=False, host=host, port=port)
