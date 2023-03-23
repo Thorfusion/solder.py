@@ -27,7 +27,7 @@ import threading
 load_dotenv(".env")
 host = os.getenv("APP_URL")
 port = os.getenv("APP_PORT")
-debug = bool(os.getenv("APP_DEBUG"))
+debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
 
 app: Flask = Flask(__name__)
 app.register_blueprint(api)
