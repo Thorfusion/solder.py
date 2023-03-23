@@ -187,7 +187,7 @@ def mainsettings():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    return render_template("mainsettings.html")
+    return render_template("mainsettings.html", nam=__name__)
 
 @app.route("/apikeylibrary")
 def apikeylibrary():
@@ -343,3 +343,6 @@ def clients(id):
 
 if __name__ == "__main__":
     app.run(debug=debug, use_reloader=False, host=host, port=port)
+
+if __name__ == "__app__":
+    app.run(debug=False, use_reloader=False, host=host, port=port)
