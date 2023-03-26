@@ -6,15 +6,66 @@
 
 
 <div class="wrappermod">
-
-    <p>
-        Shows current settings in .env file here 
-        
-        Current NAME: {{nam}}
-    </p>
-
-    <div class="placetwo minwidth maxwidth">
-    </div>
+    <table class="table table-striped" id="table">
+        <thead class="table-light sticky-md-top">
+            <tr>
+                <th scope="col" class="">DEBUG ENV</th>
+                <th scope="col" class="">SET</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="">NAME:</td>
+                <td class="">{{nam}}</td>
+            </tr>
+            <tr>
+                <td class="">DEBUG:</td>
+                <td class="">{{deb}}</td>
+            </tr>
+            <thead class="table-light sticky-md-top">
+                <tr>
+                    <th scope="col" class="">NETWORK ENV</th>
+                    <th scope="col" class="">SET</th>
+                </tr>
+            </thead>
+            <tr>
+                <td class="">HOST:</td>
+                <td class="">{{host}}</td>
+            </tr>
+            <tr>
+                <td class="">PORT:</td>
+                <td class="">{{port}}</td>
+            </tr>
+            <tr>
+                <td class="">MIRROR:</td>
+                <td class="">{{mirror_url}}</td>
+            </tr>
+            <tr>
+                <td class="">Repo:</td>
+                <td class="">{{repo_url}}</td>
+            </tr>
+            <thead class="table-light sticky-md-top">
+                <tr>
+                    <th scope="col" class="">DB ENV</th>
+                    <th scope="col" class="">SET</th>
+                </tr>
+            </thead>
+            <tr>
+                <td class="">Database:</td>
+                <td class="">{{db_name}}</td>
+            </tr>
+            <thead class="table-light sticky-md-top">
+                <tr>
+                    <th scope="col" class="">R2 ENV</th>
+                    <th scope="col" class="">SET</th>
+                </tr>
+            </thead>
+            <tr>
+                <td class="">R2 Bucket URL:</td>
+                <td class="">{{r2_url}}</td>
+            </tr>
+        </tbody>
+    </table>
 </div>
 
 {% endblock %}

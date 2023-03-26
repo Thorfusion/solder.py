@@ -28,6 +28,10 @@ load_dotenv(".env")
 host = os.getenv("APP_URL")
 port = os.getenv("APP_PORT")
 debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
+mirror_url = os.getenv("SOLDER_MIRROR_URL")
+repo_url = os.getenv("SOLDER_REPO_LOCATION")
+r2_url = os.getenv("R2_URL")
+db_name = os.getenv("DB_DATABASE")
 
 app: Flask = Flask(__name__)
 app.register_blueprint(api)
@@ -187,7 +191,7 @@ def mainsettings():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    return render_template("mainsettings.html", nam=__name__)
+    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=r2_url, db_name=db_name)
 
 @app.route("/apikeylibrary")
 def apikeylibrary():
