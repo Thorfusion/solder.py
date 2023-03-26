@@ -152,7 +152,7 @@ def modversion(id):
         Database.create_tables()
         modversions = []
 
-    return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod)
+    return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod, mirror_url=mirror_url)
 
 @app.route("/newmod")
 def newmod():
