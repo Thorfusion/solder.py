@@ -347,6 +347,3 @@ def clients(id):
 
 if __name__ == "__main__":
     app.run(debug=debug, use_reloader=False, host=host, port=port)
-
-if __name__ == "app":
-    app.run(debug=False, use_reloader=False, host=host, port=port)
