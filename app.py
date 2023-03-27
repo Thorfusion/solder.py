@@ -176,11 +176,12 @@ def modpack(id):
 
     try:
         builds = Modpack.get_by_id(id).get_builds()
+        modpackname = Modpack.get_by_id(id)
     except connector.ProgrammingError as e:
         Database.create_tables()
         builds = []
 
-    return render_template("modpack.html", modpack=builds)
+    return render_template("modpack.html", modpack=builds, modpackname=modpackname)
 
 @app.route("/mainsettings")
 def mainsettings():
@@ -257,12 +258,13 @@ def modpackbuild(id):
     try:
         modpackbuild = Build.get_by_id(id).get_modversions_minimal()
         packbuild = Build.get_by_id(id)
+        packbuildname = Modpack.get_by_id(id)
         mod_version_combo = [(Mod.get_by_id(build_modversion.mod_id), build_modversion) for build_modversion in modpackbuild]
     except connector.ProgrammingError as e:
         Database.create_tables()
         mod_version_combo = []
 
-    return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild)
+    return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname)
 
 @app.route("/modlibrary")
 def modlibrary():

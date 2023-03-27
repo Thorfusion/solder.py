@@ -52,7 +52,7 @@
     <form method="post" action="" enctype="multipart/form-data">
         <div class="mb-3">
             <label for="selected_name" class="form-label">selected modpack</label>
-            <input type="text" class="form-control" name="selected_name" id="selected_name" disabled readonly></input>
+            <input type="text" class="form-control" name="selected_name" id="selected_name" value="{{modpackname.slug}}" disabled readonly></input>
         </div>
         <div class="mb-3">
             <label for="buildnumber" class="form-label">Build number</label>
@@ -75,7 +75,11 @@
             <label for="min_java" class="form-label">Minium Java Version</label>
             <select class="form-select" name="min_java" id="min_java">
                 <option>No requirement</option>
+                <option>1.6</option>
+                <option>1.7</option>
                 <option>1.8</option>
+                <option>16</option>
+                <option>17</option>
             </select>
         </div>
         <div class="mb-3">
