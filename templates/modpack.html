@@ -25,9 +25,9 @@
                 <td>{{mod.minecraft}}</td>
                 <td>{{mod.author}}</td>
                 <td><input class="form-check-input" type="radio" name="flexRadioDefault" value="" id="rec_{{mod.id}}" {%
-                        if mod.rec %}checked{% endif %}></td>
+                        if modpackname.recommended == mod.version %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="radio" name="flexRadioDefault1" value=""
-                        id="latest_{{mod.id}}" {% if mod.latest %}checked{% endif %}></td>
+                        id="latest_{{mod.id}}" {% if modpackname.latest == mod.version %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="published_{{mod.id}}" {% if
                         mod.is_published %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" {% if mod.private
