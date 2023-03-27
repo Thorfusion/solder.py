@@ -17,6 +17,8 @@ function tablesearches(column) {
     }
 }
 
+// Thanks https://gist.github.com/effeect/58d50fc7b8db60cf558da183a55eb1ae
+
 function buttonpress(id, val) {
     document.getElementById(id).value = val;
 }
