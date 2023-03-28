@@ -47,7 +47,8 @@ class Session:
         token = secrets.token_hex(40)
         conn = Database.get_connection()
         cur = conn.cursor()
-        cur.execute("INSERT INTO sessions (token, ip, expiry) VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 1 DAY))", (token, Session.ip_to_int(ip)))
+        cur.execute("DELETE FROM sessions WHERE ip = %s", (Session.ip_to_int(ip),))
+        cur.execute("INSERT INTO sessions (token, ip, expiry) VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 1 HOURS))", (token, Session.ip_to_int(ip)))
         conn.commit()
         conn.close()
         return token
@@ -78,6 +79,7 @@ class Session:
         while Session.running:
             conn = Database.get_connection()
             cur = conn.cursor()
+            print("deleting sessions")
             cur.execute("DELETE FROM sessions WHERE expiry < NOW()")
             conn.commit()
             conn.close()
