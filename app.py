@@ -15,19 +15,22 @@ from models.build import Build
 from models.key import Key
 from models.client import Client
 from models.modpack import Modpack
+from models.session import Session
 
 from mysql import connector
 
 from api import api
 
 from datetime import datetime
-import time
-import threading
 
 load_dotenv(".env")
 host = os.getenv("APP_URL")
 port = os.getenv("APP_PORT")
-debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
+debug = False
+try:
+    debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
+except AttributeError:
+    pass
 mirror_url = os.getenv("SOLDER_MIRROR_URL")
 repo_url = os.getenv("SOLDER_REPO_LOCATION")
 r2_url = os.getenv("R2_URL")
@@ -39,33 +42,17 @@ app.register_blueprint(api)
 app.config["UPLOAD_FOLDER"] = "./mods/"
 
 app.secret_key = secrets.token_hex()
-app.sessions = {}
 
-def sessionLoop() -> None:
-    while True:
-        to_delete = []
-        for key in app.sessions:
-            if (datetime.utcnow() - app.sessions[key]).total_seconds() > 420:
-                to_delete.append(key)
-        for key in to_delete:
-            del app.sessions[key]
-        time.sleep(1)
-
-t = threading.Thread(target=sessionLoop)
-t.start()
+Session.start_session_loop()
 
 def createFolder(dirName):
     os.makedirs(dirName, exist_ok=True)
 
 @app.route("/")
 def index():
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
-
 
     return render_template("index.html")
 
@@ -83,42 +70,44 @@ def setup():
 
 @app.route("/login", methods=["GET"])
 def login_page():
-    if "key" in session and session["key"] in app.sessions:
+    if "key" in session and Session.verify_session(session["token"], request.remote_addr):
+        # Already logged in
         return redirect(url_for("index"))
-    else:
-        return render_template("login.html", failed=False)
+
+    return render_template("login.html", failed=False)
 
 @app.route("/login", methods=["POST"])
 def login():
-    # already logged in
-    if "key" in session and session["key"] in app.sessions:
+    if "key" in session and Session.verify_session(session["token"], request.remote_addr):
+        # Already logged in
+        print("already logged in")
         return redirect(url_for("index"))
+
+    user = User.get_by_username(request.form["username"])
+    if user is None:
+        print("login failed")
+        return render_template("login.html", failed=True)
     else:
-        user = User.get_by_username(request.form["username"])
-        if user is None:
-            return render_template("login.html", failed=True)
+        if user.verify_password(request.form["password"]):
+            session["token"] = Session.new_session(request.remote_addr)
+            print("login success")
+            return redirect(url_for("index"))
         else:
-            if user.verify_password(request.form["password"]):
-                session["key"] = secrets.token_hex()
-                app.sessions[session["key"]] = datetime.utcnow()
-                return redirect(url_for("index"))
-            else:
-                return render_template("login.html", failed=True)
+            return render_template("login.html", failed=True)
 
 @app.route("/logout")
 def logout():
-    if "key" in session and session["key"] in app.sessions:
-        del app.sessions[session["key"]]
-        session.pop("key")
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    Session.delete_session(session["token"])
     return render_template("login.html", failed=False)
 
 
 @app.route("/modversion/<id>", methods=["GET", "POST"])
 def modversion(id):
-    if "key" in session and session["key"] in app.sessions:
-        # Valid ession, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
@@ -156,10 +145,7 @@ def modversion(id):
 
 @app.route("/newmod")
 def newmod():
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
@@ -167,10 +153,7 @@ def newmod():
 
 @app.route("/modpack/<id>", methods=["GET", "POST"])
 def modpack(id):
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
@@ -185,10 +168,7 @@ def modpack(id):
 
 @app.route("/mainsettings")
 def mainsettings():
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
@@ -196,10 +176,7 @@ def mainsettings():
 
 @app.route("/apikeylibrary")
 def apikeylibrary():
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
@@ -213,10 +190,7 @@ def apikeylibrary():
 
 @app.route("/clientlibrary")
 def clientlibrary():
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
@@ -230,10 +204,7 @@ def clientlibrary():
 
 @app.route("/userlibrary")
 def userlibrary():
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
@@ -247,10 +218,7 @@ def userlibrary():
 
 @app.route("/modpackbuild/<id>", methods=["GET", "POST"])
 def modpackbuild(id):
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
     listmod = Mod.get_all()
@@ -268,10 +236,7 @@ def modpackbuild(id):
 
 @app.route("/modlibrary")
 def modlibrary():
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
@@ -285,10 +250,7 @@ def modlibrary():
 
 @app.route("/modpacklibrary")
 def modpacklibrary():
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
@@ -302,10 +264,7 @@ def modpacklibrary():
 
 @app.route("/newmod", methods=["POST"])
 def newmod_submit():
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
@@ -332,10 +291,7 @@ def page_not_found(e):
 
 @app.route("/clients/<id>", methods=["GET", "POST"])
 def clients(id):
-    if "key" in session and session["key"] in app.sessions:
-        # Valid session, refresh token
-        app.sessions[session["key"]] = datetime.utcnow()
-    else:
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
