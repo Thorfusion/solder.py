@@ -22,3 +22,23 @@ function tablesearches(column) {
 function buttonpress(id, val) {
     document.getElementById(id).value = val;
 }
+
+/* test code for md5
+function buttonpress2() {
+    vers = document.getElementById('version').value
+    hash = md5(vers);
+    document.getElementById('md5').value = hash;
+}
+*/
+
+function hashmd5() {
+    let fileSelect = document.getElementById('file')
+    let files = fileSelect.files
+    let file = files[0]
+
+    var reader = new FileReader();
+    reader.onload = function (event) {
+        document.getElementById('md5').value = md5(event.target.result)
+    };
+    reader.readAsArrayBuffer(file);
+}
