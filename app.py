@@ -102,7 +102,7 @@ def logout():
         return redirect(url_for("login"))
 
     Session.delete_session(session["token"])
-    return render_template("login.html", failed=False)
+    return redirect(url_for("login"))
 
 
 @app.route("/modversion/<id>", methods=["GET", "POST"])
