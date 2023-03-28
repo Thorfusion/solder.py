@@ -158,13 +158,13 @@ def modpack(id):
         return redirect(url_for("login"))
 
     try:
-        builds = Modpack.get_by_id(id).get_builds()
-        modpackname = Modpack.get_by_id(id)
+        modpack = Modpack.get_by_id(id)
+        builds = modpack.get_builds()
     except connector.ProgrammingError as e:
         Database.create_tables()
         builds = []
 
-    return render_template("modpack.html", modpack=builds, modpackname=modpackname)
+    return render_template("modpack.html", modpack=builds, modpackname=modpack)
 
 @app.route("/mainsettings")
 def mainsettings():
