@@ -38,7 +38,6 @@ class Mod:
     def get_multi_by_id(ids: tuple):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        print(ids)
         cur.execute(f"SELECT * FROM mods WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
         rows = cur.fetchall()
         if rows:
