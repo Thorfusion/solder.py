@@ -49,9 +49,9 @@
                             library</a>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link text-white" data-bs-toggle="collapse" data-bs-target="#account-collapse"
+                        <a class="nav-link text-white dropdown-toggle" data-bs-toggle="collapse" data-bs-target="#settings-collapse"
                             href="#" role="button" aria-expanded="false">Settings</a>
-                        <div class="collapse" id="account-collapse">
+                        <div class="collapse" id="settings-collapse">
                             <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
                                 <li><a href="{{ url_for('clientlibrary') }}"
                                         class="nav-link text-white {{ 'active' if active_page == 'clientlibrary' else '' }}">Clients</a>
