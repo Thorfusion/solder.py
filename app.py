@@ -221,14 +221,23 @@ def modpackbuild(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
+    print("getting mods")
     listmod = Mod.get_all()
 
     try:
-        modpackbuild = Build.get_by_id(id).get_modversions_minimal()
+        print("getting build")
         packbuild = Build.get_by_id(id)
+        print("getting modversions")
+        modpackbuild = packbuild.get_modversions_minimal()
+        print("getting modpack")
         packbuildname = Modpack.get_by_id(id)
-        mod_version_combo = [(Mod.get_by_id(build_modversion.mod_id), build_modversion) for build_modversion in modpackbuild]
-    except connector.ProgrammingError as e:
+        print("creating combos")
+        mods = Mod.get_multi_by_id(tuple(build_modversion.mod_id for build_modversion in modpackbuild))
+        mod_mapping = {mod.id: mod for mod in mods}
+        mod_version_combo = [(mod_mapping[build_modversion.mod_id], build_modversion) for build_modversion in modpackbuild]
+        print(mod_version_combo)
+    except connector.ProgrammingError as _:
+        raise _
         Database.create_tables()
         mod_version_combo = []
 

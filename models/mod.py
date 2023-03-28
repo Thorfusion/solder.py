@@ -34,6 +34,17 @@ class Mod:
             return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"])
         return None
 
+    @staticmethod
+    def get_multi_by_id(ids: tuple):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        print(ids)
+        cur.execute(f"SELECT * FROM mods WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
+        rows = cur.fetchall()
+        if rows:
+            return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"]) for row in rows]
+        return None
+
     @classmethod
     def get_by_name(cls, name):
         conn = Database.get_connection()
