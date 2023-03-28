@@ -155,6 +155,13 @@ class Database:
                         api_key VARCHAR(255) NOT NULL UNIQUE
                         )"""
             )
+            cur.execute(
+                """CREATE TABLE IF NOT EXISTS sessions (
+                    token VARCHAR(80) NOT NULL PRIMARY KEY,
+                    ip INT NOT NULL,
+                    expiry TIMESTAMP NOT NULL
+                )"""
+            )
             con.commit()
             con.close()
         except Exception:

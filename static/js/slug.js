@@ -20,4 +20,6 @@ function string_to_slug (str) {
 
     return str;
 }
+
+// Thanks https://gist.github.com/codeguy/6684588?permalink_comment_id=3777802
     

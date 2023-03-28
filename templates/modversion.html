@@ -8,7 +8,7 @@
             <tr>
                 <form method="post" action="">
                     <th scope="col">
-                        <label for=" version" class=" form-label ">Version number</label>
+                        <label for=" version" class=" form-label ">Version</label>
                         <input type=" text " class=" form-control " name="version" id="version">
                     </th>
                     <th scope="col">
@@ -30,7 +30,7 @@
                 <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5"
                         id="md5">
                 </td>
-                <td>test</td>
+                <td><a class="link-primary" href="{{mirror_url}}{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip">{{ mod.name }}-{{versions.version}}.zip</a></td>
                 <td>{{versions.filesize}} bytes</td>
                 <td> 
                     <div class="maxcont">

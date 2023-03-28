@@ -17,6 +17,28 @@ function tablesearches(column) {
     }
 }
 
+// Thanks https://gist.github.com/effeect/58d50fc7b8db60cf558da183a55eb1ae
+
 function buttonpress(id, val) {
     document.getElementById(id).value = val;
+}
+
+/* test code for md5
+function buttonpress2() {
+    vers = document.getElementById('version').value
+    hash = md5(vers);
+    document.getElementById('md5').value = hash;
+}
+*/
+
+function hashmd5() {
+    let fileSelect = document.getElementById('file')
+    let files = fileSelect.files
+    let file = files[0]
+
+    var reader = new FileReader();
+    reader.onload = function (event) {
+        document.getElementById('md5').value = md5(event.target.result)
+    };
+    reader.readAsArrayBuffer(file);
 }

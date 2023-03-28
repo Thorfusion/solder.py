@@ -44,7 +44,7 @@ class Build:
         builds = cursor.fetchall()
         if builds:
             return [Build(**build) for build in builds]
-        return None
+        return []
 
     @classmethod
     def get_by_modpack_version(cls, modpack, version):

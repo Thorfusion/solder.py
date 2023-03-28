@@ -63,7 +63,7 @@
     <form method="post" action="">
         <div class="mb-3">
             <label for="build_name" class="form-label">selected modpack</label>
-            <input type="text" class="form-control" name="build_name" id="build_name" value="{{ packbuild.modpack_id }}"
+            <input type="text" class="form-control" name="build_name" id="build_name" value="{{ packbuildname.slug }}"
                 disabled readonly></input>
         </div>
         <div class="mb-3">
@@ -77,14 +77,26 @@
                 value="{{ packbuild.minecraft }}"></input>
         </div>
         <div class="mb-3">
-            <label for="description" class="form-label">Minium Java Version</label>
+            <label for="description" class="form-label">Minimum Java Version</label>
             <select class="form-select" name="description" id="description">
-                {% if packbuild.min_java != 1.8 %}
-                <option>No requirement</option>
+                <option>{{ packbuild.min_java }}</option>
+                {% if packbuild.min_java != "Null" %}
+                <option>Null</option>
                 {% endif %}
+                {% if packbuild.min_java != "1.6" %}
+                <option>1.6</option>
+                {% endif %}
+                {% if packbuild.min_java != "1.7" %}
+                <option>1.7</option>
+                {% endif %}
+                {% if packbuild.min_java != "1.8" %}
                 <option>1.8</option>
-                {% if packbuild.min_java == 1.8 %}
-                <option>No requirement</option>
+                {% endif %}
+                {% if packbuild.min_java != "16" %}
+                <option>16</option>
+                {% endif %}
+                {% if packbuild.min_java != "17" %}
+                <option>17</option>
                 {% endif %}
             </select>
         </div>

@@ -46,7 +46,7 @@
       </div>
       <div class="mb-3">
         <label for="formFile" class="form-label">Select file</label>
-        <input class="form-control" type="file" id="formFile">
+        <input class="form-control" type="file" id="file" onchange="hashmd5();">
       </div>
       <div class="mb-3">
         <label for="md5" class="form-label">md5</label>
@@ -98,5 +98,7 @@
 
 
 <script src="{{ url_for('static',filename='js/tablesearch.js') }}"></script>
+<script src="{{ url_for('static',filename='js/md5.min.js') }}"></script>
+<script src="{{ url_for('static',filename='js/filemd5.js') }}"></script>
 
 {% endblock %}
