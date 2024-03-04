@@ -23,9 +23,11 @@ from api import api
 
 from datetime import datetime
 
+new_user = False
 load_dotenv(".env")
 host = os.getenv("APP_URL")
 port = os.getenv("APP_PORT")
+new_user = os.getenv("NEW_USER")
 debug = False
 try:
     debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
@@ -45,8 +47,10 @@ app.secret_key = secrets.token_hex()
 
 Session.start_session_loop()
 
+
 def createFolder(dirName):
     os.makedirs(dirName, exist_ok=True)
+
 
 @app.route("/")
 def index():
@@ -56,9 +60,12 @@ def index():
 
     return render_template("index.html")
 
-@app.route("/setup", methods=["GET", "POST"])
+
+@app.route("/setup", methods=["GET"])
 def setup():
     if request.method == "GET":
+        if new_user:
+            return render_template("setup.html")
         if Database.is_setup():
             return redirect(url_for("index"))
         Database.create_tables()
@@ -68,6 +75,21 @@ def setup():
             return Response(status=400)
         return redirect(url_for("index"))
 
+
+@app.route("/setup", methods=["POST"])
+def setup_creation():
+    if new_user:
+        if request.form["setupemail"] is None:
+            print("setup failed")
+            return render_template("setup.html", failed=True)
+        if request.form["setuppassword"] is None:
+            print("setup failed")
+            return render_template("setup.html", failed=True)
+        User.new(request.form["setupemail"], request.form["setupemail"],
+                 request.form["setuppassword"], request.remote_addr, "root")
+        return render_template("login.html", failed=False)
+
+
 @app.route("/login", methods=["GET"])
 def login_page():
     if "key" in session and Session.verify_session(session["token"], request.remote_addr):
@@ -75,6 +97,7 @@ def login_page():
         return redirect(url_for("index"))
 
     return render_template("login.html", failed=False)
+
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -89,11 +112,14 @@ def login():
         return render_template("login.html", failed=True)
     else:
         if user.verify_password(request.form["password"]):
+            if new_user:
+                return render_template("login.html", failed=True)
             session["token"] = Session.new_session(request.remote_addr)
             print("login success")
             return redirect(url_for("index"))
         else:
             return render_template("login.html", failed=True)
+
 
 @app.route("/logout")
 def logout():
@@ -143,6 +169,7 @@ def modversion(id):
 
     return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod, mirror_url=mirror_url)
 
+
 @app.route("/newmod")
 def newmod():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
@@ -150,6 +177,7 @@ def newmod():
         return redirect(url_for("login"))
 
     return render_template("newmod.html")
+
 
 @app.route("/modpack/<id>", methods=["GET", "POST"])
 def modpack(id):
@@ -166,6 +194,7 @@ def modpack(id):
 
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
 
+
 @app.route("/mainsettings")
 def mainsettings():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
@@ -173,6 +202,7 @@ def mainsettings():
         return redirect(url_for("login"))
 
     return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=r2_url, db_name=db_name)
+
 
 @app.route("/apikeylibrary")
 def apikeylibrary():
@@ -188,6 +218,7 @@ def apikeylibrary():
 
     return render_template("apikeylibrary.html", keys=keys)
 
+
 @app.route("/clientlibrary")
 def clientlibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
@@ -201,6 +232,7 @@ def clientlibrary():
         clients = []
 
     return render_template("clientlibrary.html", clients=clients)
+
 
 @app.route("/userlibrary")
 def userlibrary():
@@ -216,6 +248,7 @@ def userlibrary():
 
     return render_template("userlibrary.html", users=users)
 
+
 @app.route("/modpackbuild/<id>", methods=["GET", "POST"])
 def modpackbuild(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
@@ -227,9 +260,11 @@ def modpackbuild(id):
         packbuild = Build.get_by_id(id)
         modpackbuild = packbuild.get_modversions_minimal()
         packbuildname = Modpack.get_by_id(id)
-        mods = Mod.get_multi_by_id(tuple(build_modversion.mod_id for build_modversion in modpackbuild))
+        mods = Mod.get_multi_by_id(
+            tuple(build_modversion.mod_id for build_modversion in modpackbuild))
         mod_mapping = {mod.id: mod for mod in mods}
-        mod_version_combo = [(mod_mapping[build_modversion.mod_id], build_modversion) for build_modversion in modpackbuild]
+        mod_version_combo = [(mod_mapping[build_modversion.mod_id],
+                              build_modversion) for build_modversion in modpackbuild]
         print(mod_version_combo)
     except connector.ProgrammingError as _:
         raise _
@@ -237,6 +272,7 @@ def modpackbuild(id):
         mod_version_combo = []
 
     return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname)
+
 
 @app.route("/modlibrary")
 def modlibrary():
@@ -252,6 +288,7 @@ def modlibrary():
 
     return render_template("modlibrary.html", mods=mods)
 
+
 @app.route("/modpacklibrary")
 def modpacklibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
@@ -265,6 +302,7 @@ def modpacklibrary():
         modpacklibrary = []
 
     return render_template("modpacklibrary.html", modpacklibrary=modpacklibrary)
+
 
 @app.route("/newmod", methods=["POST"])
 def newmod_submit():
@@ -289,9 +327,11 @@ def newmod_submit():
 
     return Response(status=204)
 
+
 @app.errorhandler(404)
 def page_not_found(e):
     return render_template("404.html", error=e), 404
+
 
 @app.route("/clients/<id>", methods=["GET", "POST"])
 def clients(id):
@@ -306,6 +346,7 @@ def clients(id):
         packs = []
 
     return render_template("clients.html", clients=packs)
+
 
 if __name__ == "__main__":
     app.run(debug=debug, use_reloader=False, host=host, port=port)
