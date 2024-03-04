@@ -86,7 +86,7 @@ def setup_creation():
             print("setup failed")
             return render_template("setup.html", failed=True)
         User.new(request.form["setupemail"], request.form["setupemail"],
-                 request.form["setuppassword"], request.remote_addr, "root")
+                 request.form["setuppassword"], request.remote_addr, "1")
         return render_template("login.html", failed=False)
 
 
@@ -112,8 +112,8 @@ def login():
         return render_template("login.html", failed=True)
     else:
         if user.verify_password(request.form["password"]):
-            if new_user:
-                return render_template("login.html", failed=True)
+            # if new_user:
+                # return render_template("login.html", failed=True)
             session["token"] = Session.new_session(request.remote_addr)
             print("login success")
             return redirect(url_for("index"))
