@@ -87,7 +87,7 @@ def setup_creation():
             return render_template("setup.html", failed=True)
         User.new(request.form["setupemail"], request.form["setupemail"],
                  request.form["setuppassword"], request.remote_addr, "1")
-        return render_template("login.html", failed=False)
+        return redirect(url_for("login"))
 
 
 @app.route("/login", methods=["GET"])
