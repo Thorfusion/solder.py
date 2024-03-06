@@ -238,7 +238,7 @@ def clientlibrary():
     return render_template("clientlibrary.html", clients=clients)
 
 
-@app.route("/userlibrary")
+@app.route("/userlibrary", methods=["GET"])
 def userlibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -252,6 +252,28 @@ def userlibrary():
 
     return render_template("userlibrary.html", users=users)
 
+@app.route("/userlibrary", methods=["POST"])
+def userlibrary_post():
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+    if request.method == "POST":
+        if "form-submit" in request.form:
+            if "newemail" not in request.form:
+                return redirect(url_for("userlibrary"))
+            if "newpassword" not in request.form:
+                return redirect(url_for("userlibrary"))
+            if "newuser" not in request.form:
+                return redirect(url_for("userlibrary"))
+            User.new(request.form["newuser"], request.form["newemail"], request.form["newpassword"], request.remote_addr, '1')
+            return redirect(url_for("userlibrary"))
+        if "form2-submit" in request.form:
+            if "delete_id" not in request.form:
+                return redirect(url_for("userlibrary"))
+            User.delete(request.form["delete_id"])
+            return redirect(url_for("userlibrary"))
+
+    return redirect(url_for("userlibrary"))
 
 @app.route("/modpackbuild/<id>", methods=["GET", "POST"])
 def modpackbuild(id):

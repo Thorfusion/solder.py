@@ -31,6 +31,14 @@ class User:
         return cls(id, username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
 
     @classmethod
+    def delete(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("DELETE FROM users WHERE id=%s", (id,))
+        conn.commit()
+        return None
+
+    @classmethod
     def get_by_id(cls, id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
