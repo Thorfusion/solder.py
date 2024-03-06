@@ -93,15 +93,15 @@ class Database:
                         mod_id INT NOT NULL,
                         version VARCHAR(255) NOT NULL,
                         md5 VARCHAR(255) NOT NULL,
-                        filesize INT,
-                        optional enum('TRUE', 'FALSE')
+                        filesize INT
                         )"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS build_modversion (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         modversion_id INT NOT NULL,
-                        buildversion_id INT NOT NULL
+                        buildversion_id INT NOT NULL,
+                        optional enum('TRUE', 'FALSE')
                         )"""
             )
             cur.execute(
@@ -191,6 +191,12 @@ class Database:
                     MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
                 """
             )
+            cur.execute(
+                """ALTER TABLE build_modversion
+                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                """
+            )
             con.commit()
             cur.execute(
                 """ALTER TABLE modpacks
@@ -206,7 +212,7 @@ class Database:
                 """
             )
             cur.execute(
-                """ALTER TABLE modversions
+                """ALTER TABLE build_modversion
                     ADD COLUMN optional enum('TRUE', 'FALSE');
                 """
             )
