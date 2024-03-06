@@ -25,7 +25,7 @@ class Database:
                 database=db_name,
             )
         except Exception as e:
-            errorPrinter.message("Error connecting to database", e)
+            print("Error connecting to database", e)
         return conn
 
     @staticmethod
@@ -55,10 +55,10 @@ class Database:
                         name VARCHAR(255) NOT NULL UNIQUE,
                         slug VARCHAR(255) NOT NULL UNIQUE,
                         user_id INT NOT NULL,
-                        minecraft VARCHAR(65535) NOT NULL DEFAULT(''),
-                        forge VARCHAR(65535),
-                        recommended VARCHAR(65535),
-                        latest VARCHAR(65535),
+                        minecraft VARCHAR(255) NOT NULL DEFAULT(''),
+                        forge VARCHAR(255),
+                        recommended VARCHAR(255),
+                        latest VARCHAR(255),
                         `order` INT DEFAULT(0),
                         hidden BOOLEAN DEFAULT(1),
                         private BOOLEAN DEFAULT(0)
@@ -68,10 +68,10 @@ class Database:
                 """CREATE TABLE IF NOT EXISTS builds (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         modpack_id INT NOT NULL,
-                        version VARCHAR(65535) NOT NULL,
+                        version VARCHAR(255) NOT NULL,
                         is_published BOOLEAN DEFAULT(0),
                         private BOOLEAN DEFAULT(0),
-                        min_java VARCHAR(65535),
+                        min_java VARCHAR(255),
                         min_memory INT
                         )"""
             )
@@ -79,20 +79,20 @@ class Database:
                 """CREATE TABLE IF NOT EXISTS mods (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         name VARCHAR(255) NOT NULL UNIQUE,
-                        pretty_name VARCHAR(65535) DEFAULT(''),
-                        description VARCHAR(65535),
-                        author VARCHAR(65535),
-                        link VARCHAR(65535),
+                        pretty_name VARCHAR(255) DEFAULT(''),
+                        description VARCHAR(255),
+                        author VARCHAR(255),
+                        link VARCHAR(255),
                         side enum('CLIENT', 'SERVER', 'BOTH'),
-                        note VARCHAR(65535)
+                        note TEXT
                         )"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS modversions (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         mod_id INT NOT NULL,
-                        version VARCHAR(65535) NOT NULL,
-                        md5 VARCHAR(65535) NOT NULL,
+                        version VARCHAR(255) NOT NULL,
+                        md5 VARCHAR(255) NOT NULL,
                         filesize INT
                         )"""
             )
@@ -106,13 +106,13 @@ class Database:
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS users (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                        username VARCHAR(65535) NOT NULL,
-                        email VARCHAR(65535) NOT NULL,
-                        password VARCHAR(65535) NOT NULL,
-                        created_ip VARCHAR(65535) NOT NULL,
-                        last_ip VARCHAR(65535),
-                        remember_token VARCHAR(65535) DEFAULT(''),
-                        updated_by_ip VARCHAR(65535),
+                        username VARCHAR(255) NOT NULL,
+                        email VARCHAR(255) NOT NULL,
+                        password VARCHAR(255) NOT NULL,
+                        created_ip VARCHAR(255) NOT NULL,
+                        last_ip VARCHAR(255),
+                        remember_token VARCHAR(255) DEFAULT(''),
+                        updated_by_ip VARCHAR(255),
                         created_by_user_id INT DEFAULT(1),
                         updated_by_user_id INT
                         )"""
@@ -131,7 +131,7 @@ class Database:
                         modpacks_create BOOLEAN DEFAULT(0),
                         modpacks_manage BOOLEAN DEFAULT(0),
                         modpacks_delete BOOLEAN DEFAULT(0),
-                        modpacks VARCHAR(65535)
+                        modpacks VARCHAR(255)
                         )"""
             )
             cur.execute(
@@ -166,3 +166,46 @@ class Database:
             con.close()
         except Exception:
             errorPrinter.message("Error creating tables", e)
+
+    @staticmethod
+    def migratetechnic_tables() -> bool:
+        try:
+            con = Database.get_connection()
+            cur = con.cursor()
+            cur.execute(
+                """ALTER TABLE modpacks
+                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                """
+            )
+            cur.execute(
+                """ALTER TABLE mods
+                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                """
+            )
+            con.commit()
+            cur.execute(
+                """ALTER TABLE modpacks
+                    ADD COLUMN user_id INT NOT NULL AFTER slug,
+                    ADD COLUMN minecraft VARCHAR(255) NOT NULL DEFAULT(''),
+                    ADD COLUMN forge VARCHAR(255);
+                """
+            )
+            cur.execute(
+                """ALTER TABLE mods
+                    ADD COLUMN side enum('CLIENT', 'SERVER', 'BOTH') AFTER link,
+                    ADD COLUMN note VARCHAR(255);
+                """
+            )
+            cur.execute(
+                """CREATE TABLE IF NOT EXISTS sessions (
+                    token VARCHAR(80) NOT NULL PRIMARY KEY,
+                    ip INT NOT NULL,
+                    expiry TIMESTAMP NOT NULL
+                )"""
+            )
+            con.commit()
+            con.close()
+        except Exception:
+            print.message("Error migration technic tables", Exception)

@@ -24,10 +24,12 @@ from api import api
 from datetime import datetime
 
 new_user = False
+migratetechnic = False
 load_dotenv(".env")
 host = os.getenv("APP_URL")
 port = os.getenv("APP_PORT")
 new_user = os.getenv("NEW_USER")
+migratetechnic = os.getenv("TECHNIC_MIGRATION")
 debug = False
 try:
     debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
@@ -65,6 +67,8 @@ def index():
 def setup():
     if request.method == "GET":
         if new_user:
+            if migratetechnic:
+                Database.migratetechnic_tables()
             return render_template("setup.html")
         if Database.is_setup():
             return redirect(url_for("index"))
