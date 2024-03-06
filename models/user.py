@@ -21,7 +21,10 @@ class User:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO users (username, email, password, created_ip, last_ip, created_at, updated_at, updated_by_ip, created_by_user_id, updated_by_user_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (username, email, password, ip, ip, now, now, ip, creator_id, creator_id))
+        add_user = ("INSERT INTO users (username, email, password, created_ip, last_ip, created_at, updated_at, updated_by_ip, created_by_user_id, updated_by_user_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+        data_user = (username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
+        cur.execute(add_user, data_user)
+        conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
