@@ -83,7 +83,7 @@ class Session:
             cur.execute("DELETE FROM sessions WHERE expiry < NOW()")
             conn.commit()
             conn.close()
-            time.sleep(30)
+            time.sleep(3600)
 
     @staticmethod
     def start_session_loop():
