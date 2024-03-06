@@ -48,7 +48,7 @@ class Session:
         conn = Database.get_connection()
         cur = conn.cursor()
         cur.execute("DELETE FROM sessions WHERE ip = %s", (Session.ip_to_int(ip),))
-        cur.execute("INSERT INTO sessions (token, ip, expiry) VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 1 HOURS))", (token, Session.ip_to_int(ip)))
+        cur.execute("INSERT INTO sessions (token, ip, expiry) VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 1 HOUR))", (token, Session.ip_to_int(ip)))
         conn.commit()
         conn.close()
         return token
