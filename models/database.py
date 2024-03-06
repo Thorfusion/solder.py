@@ -210,7 +210,7 @@ class Database:
                 """
             )
             cur.execute(
-                """ALTER TABLE keys
+                """ALTER TABLE `keys`
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                     MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
                 """
