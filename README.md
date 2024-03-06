@@ -166,6 +166,16 @@ R2_ACCESS_KEY=123
 R2_SECRET_KEY=123
 ```
 
+Enables the /setup page if the database already exists and you need to add a new user
+```bash
+NEW_USER=True
+```
+
+If new user is enabled, you can enable this migration tool for technic solder database, to migrate it to solder.py, mainly fixes mysql database bugs and adds columns
+```bash
+TECHNIC_MIGRATION=True
+```
+
 NOTE: The docker image does not and will not support https, therefore it is required to run an reverse proxy
 
 ## TODO for docker
