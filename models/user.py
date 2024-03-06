@@ -17,10 +17,11 @@ class User:
         self.updated_by_user_id = updated_by_user_id
 
     @classmethod
-    def new(cls, username, email, password, ip, creator_id):
+    def new(cls, username, email, hash1, ip, creator_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
+        password = Passhasher.hasher(hash1, username)
         add_user = ("INSERT INTO users (username, email, password, created_ip, last_ip, created_at, updated_at, updated_by_ip, created_by_user_id, updated_by_user_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
         data_user = (username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
         cur.execute(add_user, data_user)
