@@ -93,7 +93,8 @@ class Database:
                         mod_id INT NOT NULL,
                         version VARCHAR(255) NOT NULL,
                         md5 VARCHAR(255) NOT NULL,
-                        filesize INT
+                        filesize INT,
+                        optional enum('TRUE', 'FALSE')
                         )"""
             )
             cur.execute(
@@ -184,6 +185,12 @@ class Database:
                     MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
                 """
             )
+            cur.execute(
+                """ALTER TABLE modversions
+                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                """
+            )
             con.commit()
             cur.execute(
                 """ALTER TABLE modpacks
@@ -196,6 +203,11 @@ class Database:
                 """ALTER TABLE mods
                     ADD COLUMN side enum('CLIENT', 'SERVER', 'BOTH') AFTER link,
                     ADD COLUMN note VARCHAR(255);
+                """
+            )
+            cur.execute(
+                """ALTER TABLE modversions
+                    ADD COLUMN optional enum('TRUE', 'FALSE');
                 """
             )
             cur.execute(
