@@ -402,7 +402,7 @@ def page_not_found(e):
     return render_template("404.html", error=e), 404
 
 
-@app.route("/clients/<id>", methods=["GET"])
+@app.route("/clients/<id>", methods=["GET", "POST"])
 def clients(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -414,26 +414,19 @@ def clients(id):
         Database.create_tables()
         packs = []
 
-    return render_template("clients.html", clients=packs)
-
-@app.route("/clients/<id>", methods=["POST"])
-def clients_post(id):
-    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
-        # New or invalid session, send to login
-        return redirect(url_for("login"))
     if request.method == "POST":
         if "form-submit" in request.form:
             if "modpack" not in request.form:
-                return redirect(url_for("clients"))
-            User.new(request.form["modpack"])
-            return redirect(url_for("clients"))
+                return render_template("clients.html")
+            Client_modpack.new(id, request.form["modpack"])
+            return render_template("clients.html")
         if "form2-submit" in request.form:
             if "delete_id" not in request.form:
-                return redirect(url_for("clients"))
+                return render_template("clients.html")
             Client_modpack.delete_client_modpack(request.form["delete_id"])
-            return redirect(url_for("clients"))
+            return render_template("clients.html")
 
-    return redirect(url_for("clients"))
+    return render_template("clients.html", clients=packs)
 
 
 if __name__ == "__main__":
