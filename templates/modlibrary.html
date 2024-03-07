@@ -44,10 +44,6 @@
 <div class="">
   <form method="post" action="" enctype="multipart/form-data">
     <div class="mb-3">
-      <label for="mod" class="form-label">selected mod id</label>
-      <input type="text" class="form-control" name="modid" id="modid" readonly>
-    </div>
-    <div class="mb-3">
       <label for="mod" class="form-label">selected mod</label>
       <input type="text" class="form-control" name="mod" id="mod" readonly>
     </div>
@@ -91,6 +87,9 @@
       <label class="form-check-label" for="lastbuild">Add to latest build?</label>
     </div>
     <input class="btn btn-success" type="submit" value="Add Version" name="form-submit">
+    <div class="mb-3">
+      <input type="text" class="form-control invisible" name="modid" id="modid" readonly>
+    </div>
   </form>
   {% if success %}
   <div class="alert alert-success loginfail mx-auto" role="alert">
