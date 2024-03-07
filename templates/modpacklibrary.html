@@ -23,9 +23,9 @@
                 <td>{{mod.name}} ({{mod.slug}})</td>
                 <td>{{mod.recommended}}</td>
                 <td>{{mod.latest}}</td>
-                <td><input class="form-check-input" type="checkbox" value="" id="hidden_{{mod.id}}"{% if mod.hidden %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}"{% if mod.private %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="pin_{{mod.id}}"{% if mod.pin %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="hidden_{{mod.id}}"{% if mod.hidden %}checked{% endif %} disabled></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}"{% if mod.private %}checked{% endif %} disabled></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="pin_{{mod.id}}"{% if mod.pin %}checked{% endif %} disabled></td>
                 <td>
                     <a href="./modpack/{{mod.id}}"><button type="button" class="btn btn-primary buttonwidth">Manage</button></a>
                 </td>
@@ -47,14 +47,14 @@
                 <input type="text" class="form-control" name="name" id="name" readonly>
             </div>
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="" id="Hidden">
-                <label class="form-check-label" for="Hidden">Hidden</label>
+                <input class="form-check-input" type="checkbox" value="1" id="hidden" name="hidden">
+                <label class="form-check-label" for="hidden">Hidden</label>
             </div>
             <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="" id="Private">
-                <label class="form-check-label" for="Private">Private</label>
+                <input class="form-check-input" type="checkbox" value="1" id="private" name="private">
+                <label class="form-check-label" for="private">Private</label>
             </div>
-            <input class="btn btn-success" type="submit" value="Add modpack">
+            <input class="btn btn-success" type="submit" value="Add modpack" name="form-submit">
         </form>
         {% if success %}
         <div class="alert alert-success loginfail mx-auto " role="alert ">

@@ -390,7 +390,7 @@ def modlibrary_post():
     return redirect(url_for("modlibrary"))
 
 
-@app.route("/modpacklibrary")
+@app.route("/modpacklibrary", methods=["GET"])
 def modpacklibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -403,6 +403,24 @@ def modpacklibrary():
         modpacklibrary = []
 
     return render_template("modpacklibrary.html", modpacklibrary=modpacklibrary)
+
+@app.route("/modpacklibrary", methods=["POST"])
+def modpacklibrary_post():
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+    if request.method == "POST":
+        if "form-submit" in request.form:
+            hidden="0"
+            private="0"
+            if "hidden" in request.form:
+                hidden=request.form['hidden']
+            if "private" in request.form:
+                private=request.form['private']
+            Modpack.new(request.form["pretty_name"], request.form["name"], hidden, private, "0")
+            return redirect(url_for("modpacklibrary"))
+
+    return redirect(url_for("modpacklibrary"))
 
 
 @app.errorhandler(404)
