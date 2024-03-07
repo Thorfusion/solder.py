@@ -7,30 +7,33 @@
     <table class="table table-striped table-hover placeone maxheighttable">
         <thead class="table-light sticky-md-top">
             <tr>
-                <form method="post" action=""></form>
+                
                 <th scope="col">ID</th>
                 <th scope="col">EMAIL</th>
                 <th scope="col">USERNAME</th>
                 <th scope="col" class="tablewidthsearch">Actions</th>
-                </form>
             </tr>
         </thead>
         <tbody class="">
             {%for mod in users%}
             <tr>
-                <td class="tablewidthid">{{mod.id}}</td>
+                <td class="tablewidthid">{{mod.id}}</input></td>
                 <td class="tablemaxwidth">{{mod.email}}</td>
                 <td class="tablemaxwidth">{{mod.username}}</td>
                 <td>
                     <div class="maxcont">
                         <a href="#"><button type="button" class="btn btn-primary" disabled readonly>Manage</button></a>
-                        <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+                        <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{mod.id}}')">Delete</button>  
                     </div>
                 </td>
             </tr>
             {%endfor%}
         </tbody>
     </table>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="form2-submit" id="form2-submit" value="Delete">
+    </form>
 </div>
 {% endblock %}
 {%block aside%}
@@ -38,17 +41,17 @@
     <form method="post" action="">
         <div class="mb-3">
             <label for="newemail" class="form-label">EMAIL</label>
-            <input type="text" class="form-control" name="newemail" id="newemail">
+            <input type="email" class="form-control" name="newemail" id="newemail">
         </div>
         <div class="mb-3">
-            <label for="newusername" class="form-label">Username</label>
-            <input type="text" class="form-control" name="newusername" id="newusername">
+            <label for="newuser" class="form-label">Username</label>
+            <input type="text" class="form-control" name="newuser" id="newusernewusername">
         </div>
         <div class="mb-3">
-            <label for="newpass" class="form-label">Password</label>
-            <input type="password" name="newpass" class="pass form-control">
+            <label for="newpassword" class="form-label">Password</label>
+            <input type="password" name="newpassword" class="pass form-control">
         </div>
-        <input class="btn btn-success" type="submit" value="Add User">
+        <input class="btn btn-success" type="submit" name="form-submit" id="form-submit" value="Add User">
     </form>
     {% if success %}
     <div class="alert alert-success loginfail mx-auto" role="alert">
@@ -63,5 +66,5 @@
     {% endif %}
 </div>
 
-
+<script src="{{ url_for('static',filename='js/tablesearch.js') }}"></script>
 {% endblock %}

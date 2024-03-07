@@ -1,6 +1,6 @@
 from .database import Database
 from .errorPrinter import ErrorPrinter
-from datetime import datetime
+import datetime
 class Key:
     def __init__(self, id, name, key, created_at, updated_at):
         self.id = id
@@ -81,3 +81,24 @@ class Key:
         except Exception as e:
             ErrorPrinter.message("An error occurred whilst trying to fetch an API key", e)
         conn.close()
+
+    @classmethod
+    def delete_key(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("DELETE FROM `keys` WHERE id=%s", (id,))
+        conn.commit()
+        return None
+    
+    @classmethod
+    def new_key(cls, name, key):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        add_key = ("INSERT INTO `keys` (name, api_key, created_at, updated_at) VALUES (%s, %s, %s, %s)")
+        data_key = (name, key, now, now)
+        cur.execute(add_key, data_key)
+        conn.commit()
+        cur.execute("SELECT LAST_INSERT_ID() AS id")
+        id = cur.fetchone()["id"]
+        return cls(id, name, key, now, now)

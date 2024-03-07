@@ -17,13 +17,26 @@ class User:
         self.updated_by_user_id = updated_by_user_id
 
     @classmethod
-    def new(cls, username, email, password, ip, creator_id):
+    def new(cls, username, email, hash1, ip, creator_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO users (username, email, password, created_ip, last_ip, created_at, updated_at, updated_by_ip, created_by_user_id, updated_by_user_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id", (username, email, password, ip, ip, now, now, ip, creator_id, creator_id))
+        password = Passhasher.hasher(hash1, username)
+        add_user = ("INSERT INTO users (username, email, password, created_ip, last_ip, created_at, updated_at, updated_by_ip, created_by_user_id, updated_by_user_id) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)")
+        data_user = (username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
+        cur.execute(add_user, data_user)
+        conn.commit()
+        cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
+
+    @classmethod
+    def delete(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("DELETE FROM users WHERE id=%s", (id,))
+        conn.commit()
+        return None
 
     @classmethod
     def get_by_id(cls, id):

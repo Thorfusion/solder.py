@@ -17,13 +17,16 @@ class Modpack:
         self.private = private
 
     @classmethod
-    def new(cls, name, slug, recommended, latest, url, order, hidden, private):
+    def new(cls, name, slug, hidden, private, user_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO modpacks (name, slug, recommended, latest, url, created_at, updated_at, order, hidden, private) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id", (name, slug, recommended, latest, url, now, now, order, hidden, private))
+        cur.execute("INSERT INTO modpacks (name, slug, created_at, updated_at, hidden, private, user_id) VALUES (%s, %s, %s, %s, %s, %s, %s)", (name, slug, now, now, hidden, private, user_id))
+        conn.commit()
+        cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
-        return cls(id, name, slug, recommended, latest, url, now, now, order, hidden, private)
+        return None
+        return cls(id, name, slug, now, now, hidden, private)
 
     @classmethod
     def get_by_id(cls, id):

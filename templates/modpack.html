@@ -25,18 +25,18 @@
                 <td>{{mod.minecraft}}</td>
                 <td>{{mod.author}}</td>
                 <td><input class="form-check-input" type="radio" name="flexRadioDefault" value="" id="rec_{{mod.id}}" {%
-                        if modpackname.recommended == mod.version %}checked{% endif %}></td>
+                        if modpackname.recommended == mod.version %}checked{% endif %} disabled></td>
                 <td><input class="form-check-input" type="radio" name="flexRadioDefault1" value=""
-                        id="latest_{{mod.id}}" {% if modpackname.latest == mod.version %}checked{% endif %}></td>
+                        id="latest_{{mod.id}}" {% if modpackname.latest == mod.version %}checked{% endif %} disabled></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="published_{{mod.id}}" {% if
-                        mod.is_published %}checked{% endif %}></td>
+                        mod.is_published %}checked{% endif %} disabled></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" {% if mod.private
-                        %}checked{% endif %}></td>
+                        %}checked{% endif %} disabled></td>
                 <td>
                     <div class="maxcont">
                         <a href="../modpackbuild/{{mod.id}}"><button type="button"
                                 class="btn btn-primary buttonwidth">Manage</button></a>
-                        <a href="../modpackbuild/{{mod.id}}"><button type="button" class="btn btn-secondary buttonwidthmcil">Export
+                        <a href="../modpackbuild/{{mod.id}}"><button type="button" class="btn btn-secondary buttonwidthmcil" disabled>Export
                                 MCIL</button></a>
                     </div>
                 </td>
@@ -86,7 +86,7 @@
             <label for="memory" class="form-label">Minimum Memory requirement in MB, 0 for disable</label>
             <input type="text" class="form-control" name="memory" id="memory" value="0"></input>
         </div>
-        <input class="btn btn-success" type="submit" value="Add build"></input>
+        <input class="btn btn-success" type="submit" value="Add build" disabled></input>
     </form>
     {% if success %}
     <div class="alert alert-success loginfail mx-auto" role="alert">

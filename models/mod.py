@@ -20,9 +20,35 @@ class Mod:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id", (name, description, author, link, now, now, pretty_name, side, note))
+        cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, note))
+        conn.commit()
+        cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, name, description, author, link, now, now, pretty_name, side, note)
+    
+    @classmethod
+    def update(cls, id, name, description, author, link, pretty_name, side, note):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        cur.execute("""UPDATE mods 
+            SET name = %s, description = %s, author = %s, link = %s, updated_at = %s, pretty_name = %s, side = %s, note = %s 
+            WHERE id = %s;""", (name, description, author, link, now, pretty_name, side, note, id))
+        conn.commit()
+        cur.execute("SELECT LAST_INSERT_ID() AS id")
+        id = cur.fetchone()["id"]
+        return None
+
+    @classmethod
+    def delete_mod(cls, id):
+        return None
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("DELETE FROM mods WHERE id=%s", (id,))
+        # need to add code to delete all modversions in said mods in all modpack builds, until then, deleting mods are disabled
+        cur.execute("DELETE * FROM modversions WHERE mod_id = %s", (id,))
+        conn.commit()
+        return None
 
     @classmethod
     def get_by_id(cls, id):

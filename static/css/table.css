@@ -23,6 +23,10 @@
   max-width: 30vw;
 }
 
+.maxhiddenwidth {
+  max-width: 1px;
+}
+
 .tablewidth70 {
   width: 70%;
 }
