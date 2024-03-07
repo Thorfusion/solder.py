@@ -168,10 +168,15 @@ def modversion(id):
     #         print("error")
 
     try:
-        modversions = mod.get_versions()
+        modversions = Mod.get_versions()
     except connector.ProgrammingError as e:
         Database.create_tables()
         modversions = []
+
+    if request.method == "POST":
+        radio = request.form['flexRadioDefault']
+        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
+        return redirect(id)
 
     return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod, mirror_url=mirror_url)
 
