@@ -15,9 +15,19 @@ class Client:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO clients (name, uuid, created_at, updated_at) VALUES (%s, %s, %s, %s) RETURNING id", (name, uuid, now, now))
+        cur.execute("INSERT INTO clients (name, uuid, created_at, updated_at) VALUES (%s, %s, %s, %s)", (name, uuid, now, now))
+        conn.commit()
+        cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, name, uuid, now, now)
+    
+    @classmethod
+    def delete_client(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("DELETE FROM clients WHERE id=%s", (id,))
+        conn.commit()
+        return None
 
     @classmethod
     def get_by_id(cls, id):

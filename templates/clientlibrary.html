@@ -27,13 +27,17 @@
                     <div class="maxcont">
                         <a href="../clients/{{mod.id}}"><button type="button"
                                 class="btn btn-primary">Manage</button></a>
-                        <a href="#"><button type="button" class="btn btn-danger">Delete</button></a>
+                        <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{mod.id}}')">Delete</button>  
                     </div>
                 </td>
             </tr>
             {%endfor%}
         </tbody>
     </table>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="form2-submit" id="form2-submit" value="Delete">
+    </form>
 </div>
 
 {% endblock %}
@@ -42,14 +46,14 @@
 <div class="">
     <form method="post" action="">
         <div class="mb-3">
-            <label for="client" class="form-label">CLIENT NAME</label>
-            <input type="text" class="form-control" name="client" id="client">
+            <label for="client_name" class="form-label">CLIENT NAME</label>
+            <input type="text" class="form-control" name="client_name" id="client_name">
         </div>
         <div class="mb-3">
-            <label for="UUID" class="form-label">CLIENT UUID</label>
-            <input type="text" class="form-control" name="UUID" id="UUID">
+            <label for="client_UUID" class="form-label">CLIENT UUID</label>
+            <input type="text" class="form-control" name="client_UUID" id="client_UUID">
         </div>
-        <input class="btn btn-success" type="submit" value="Add client UUID">
+        <input class="btn btn-success" type="submit" name="form-submit" id="form-submit" value="Add client UUID">
     </form>
     {% if success %}
     <div class="alert alert-success loginfail mx-auto" role="alert">
@@ -64,4 +68,6 @@
     {% endif %}
 </div>
 
+
+<script src="{{ url_for('static',filename='js/tablesearch.js') }}"></script>
 {% endblock %}

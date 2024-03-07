@@ -244,7 +244,7 @@ def apikeylibrary_post():
     return redirect(url_for("apikeylibrary"))
 
 
-@app.route("/clientlibrary")
+@app.route("/clientlibrary", methods=["GET"])
 def clientlibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -257,6 +257,27 @@ def clientlibrary():
         clients = []
 
     return render_template("clientlibrary.html", clients=clients)
+
+@app.route("/clientlibrary", methods=["POST"])
+def clientlibrary_post():
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+    if request.method == "POST":
+        if "form-submit" in request.form:
+            if "client_name" not in request.form:
+                return redirect(url_for("clientlibrary"))
+            if "client_UUID" not in request.form:
+                return redirect(url_for("clientlibrary"))
+            Client.new(request.form["client_name"], request.form["client_UUID"])
+            return redirect(url_for("clientlibrary"))
+        if "form2-submit" in request.form:
+            if "delete_id" not in request.form:
+                return redirect(url_for("clientlibrary"))
+            Client.delete_client(request.form["delete_id"])
+            return redirect(url_for("clientlibrary"))
+
+    return redirect(url_for("clientlibrary"))
 
 
 @app.route("/userlibrary", methods=["GET"])
