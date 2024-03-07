@@ -378,23 +378,10 @@ def newmod_submit():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
+    radio = request.form['flexRadioDefault']
+    Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
 
-    form = request.form
-    print(form)
-
-    name = form['name']
-    pretty_name = form['pretty_name']
-    author = form['author']
-    description = form['description']
-    link = form['link']
-    client = form['client']
-    server = form['server']
-    note = form['internal_note']
-
-    print(client)
-    print(server)
-
-    return Response(status=204)
+    return render_template("modpacklibrary.html")
 
 
 @app.errorhandler(404)
