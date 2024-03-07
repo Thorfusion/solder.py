@@ -174,9 +174,20 @@ def modversion(id):
         modversions = []
 
     if request.method == "POST":
-        radio = request.form['flexRadioDefault']
-        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
-        return redirect(id)
+        if "form-submit" in request.form:
+            radio = request.form['flexRadioDefault']
+            Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
+            return redirect(id)
+        if "form2-submit" in request.form:
+            if "delete_id" not in request.form:
+                return redirect(url_for("clientlibrary"))
+            Modversion.delete_modversion(request.form["delete_id"])
+            return redirect(id)
+        if "form3-submit" in request.form:
+            if "delete_id" not in request.form:
+                return redirect(url_for("clientlibrary"))
+            Mod.delete_mod(request.form["delete_id"])
+            return redirect(id)
 
     return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod, mirror_url=mirror_url)
 

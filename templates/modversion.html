@@ -35,13 +35,17 @@
                 <td> 
                     <div class="maxcont">
                     <a href="#"><button type="button" class="btn btn-primary buttonwidth" disabled>Rehash</button></a>
-                    <a href="#"><button type="button" class="btn btn-danger buttonwidth">Delete</button></a>
+                    <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}')">Delete</button>  
                 </div>
                 </td>
             </tr>
             {%endfor%}
         </tbody>
     </table>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="form2-submit" id="form2-submit" value="Delete">
+    </form>
 </div>
 {% endblock %}
 {%block aside%}
@@ -91,8 +95,8 @@
             <label for="internal_note" class="form-label">Internal note</label>
             <textarea name="internal_note" id="internal_note" class="form-control" rows="5">{{ mod.note }}</textarea>
         </div>
-        <input class="btn btn-success" type="submit" value="Save changes">
-        <input class="btn btn-danger" type="submit" value="Delete Mod">
+        <input class="btn btn-success" type="submit" value="Save changes" name="form-submit" id="form-submit">
+        <input class="btn btn-danger" type="submit" value="Delete Mod" name="form3-submit" id="form3-submit" disabled>
     </form>
 </div>
 <script src="{{ url_for('static',filename='js/slug.js') }}"></script>

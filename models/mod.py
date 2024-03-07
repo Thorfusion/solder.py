@@ -40,6 +40,17 @@ class Mod:
         return None
 
     @classmethod
+    def delete_mod(cls, id):
+        return None
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("DELETE FROM mods WHERE id=%s", (id,))
+        # need to add code to delete all modversions in said mods in all modpack builds, until then, deleting mods are disabled
+        cur.execute("DELETE * FROM modversions WHERE mod_id = %s", (id,))
+        conn.commit()
+        return None
+
+    @classmethod
     def get_by_id(cls, id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)

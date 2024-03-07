@@ -22,6 +22,15 @@ class Modversion:
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, mod_id, version, md5, now, now, filesize)
+    
+    @classmethod
+    def delete_modversion(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("DELETE FROM modversions WHERE id=%s", (id,))
+        cur.execute("DELETE * FROM build_modversion WHERE modversion_id = %s", (id,))
+        conn.commit()
+        return None
 
     @classmethod
     def get_by_id(cls, id):
