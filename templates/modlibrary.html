@@ -29,7 +29,7 @@
         <td>
           <div class="maxcont">
             <button type="button" class="btn btn-primary buttonwidth"
-              onclick="buttonpress('mod', '{{mod.name}}'); toslug(md5, mod);">Select</button>
+              onclick="buttonpress('modid', '{{mod.id}}'); buttonpress('mod', '{{mod.name}}'); toslug(md5, mod); ">Select</button>
             <a href="./modversion/{{mod.id}}"><button type="button"
                 class="btn btn-secondary buttonwidth">Manage</button></a>
           </div>
@@ -43,6 +43,10 @@
 {%block aside%}
 <div class="">
   <form method="post" action="" enctype="multipart/form-data">
+    <div class="mb-3">
+      <label for="mod" class="form-label">selected mod id</label>
+      <input type="text" class="form-control" name="modid" id="modid" readonly>
+    </div>
     <div class="mb-3">
       <label for="mod" class="form-label">selected mod</label>
       <input type="text" class="form-control" name="mod" id="mod" readonly>
@@ -86,7 +90,7 @@
       <input class="form-check-input" type="checkbox" value="" id="lastbuild" disabled>
       <label class="form-check-label" for="lastbuild">Add to latest build?</label>
     </div>
-    <input class="btn btn-success" type="submit" value="Add Version">
+    <input class="btn btn-success" type="submit" value="Add Version" name="form-submit">
   </form>
   {% if success %}
   <div class="alert alert-success loginfail mx-auto" role="alert">

@@ -17,6 +17,7 @@ from models.client import Client
 from models.modpack import Modpack
 from models.session import Session
 from models.client_modpack import Client_modpack
+from models.modversion import Modversion
 
 from mysql import connector
 
@@ -343,7 +344,7 @@ def modpackbuild(id):
     return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname)
 
 
-@app.route("/modlibrary")
+@app.route("/modlibrary", methods=["GET"])
 def modlibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -356,6 +357,18 @@ def modlibrary():
         mods = []
 
     return render_template("modlibrary.html", mods=mods)
+
+@app.route("/modlibrary", methods=["POST"])
+def modlibrary_post():
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+    if request.method == "POST":
+        if "form-submit" in request.form:
+            Modversion.new(request.form["modid"], request.form["version"], request.form["md5"], request.form["filesize"])
+            return redirect(url_for("modlibrary"))
+
+    return redirect(url_for("modlibrary"))
 
 
 @app.route("/modpacklibrary")
