@@ -31,11 +31,13 @@ class Mod:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO mods (name, description, author, link, updated_at, pretty_name, side, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, note))
+        cur.execute("""UPDATE mods 
+            SET name = %s, description = %s, author = %s, link = %s, updated_at = %s, pretty_name = %s, side = %s, note = %s 
+            WHERE id = %s;""", (name, description, author, link, now, pretty_name, side, note, id))
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
-        return cls(id, name, description, author, link, now, now, pretty_name, side, note)
+        return None
 
     @classmethod
     def get_by_id(cls, id):
