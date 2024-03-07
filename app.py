@@ -208,7 +208,7 @@ def mainsettings():
     return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=r2_url, db_name=db_name)
 
 
-@app.route("/apikeylibrary")
+@app.route("/apikeylibrary", methods=["GET"])
 def apikeylibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -221,6 +221,27 @@ def apikeylibrary():
         keys = []
 
     return render_template("apikeylibrary.html", keys=keys)
+
+@app.route("/apikeylibrary", methods=["POST"])
+def apikeylibrary_post():
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+    if request.method == "POST":
+        if "form-submit" in request.form:
+            if "keyname" not in request.form:
+                return redirect(url_for("apikeylibrary"))
+            if "api_key" not in request.form:
+                return redirect(url_for("apikeylibrary"))
+            Key.new_key(request.form["keyname"], request.form["api_key"])
+            return redirect(url_for("apikeylibrary"))
+        if "form2-submit" in request.form:
+            if "delete_id" not in request.form:
+                return redirect(url_for("apikeylibrary"))
+            Key.delete_key(request.form["delete_id"])
+            return redirect(url_for("apikeylibrary"))
+
+    return redirect(url_for("apikeylibrary"))
 
 
 @app.route("/clientlibrary")
