@@ -59,3 +59,8 @@ function hashmd5() {
     };
     reader.readAsArrayBuffer(file);
 }
+
+
+function filesizecalc(input) {
+    document.getElementById('filesize').value = input.files[0].size;
+  }

@@ -45,31 +45,35 @@
   <form method="post" action="" enctype="multipart/form-data">
     <div class="mb-3">
       <label for="mod" class="form-label">selected mod</label>
-      <input type="text" class="form-control" name="mod" id="mod" disabled readonly>
+      <input type="text" class="form-control" name="mod" id="mod" readonly>
     </div>
     <div class="mb-3">
-      <label for="formFile" class="form-label">Select file</label>
-      <input class="form-control" type="file" id="file" onchange="hashmd5();">
+      <label for="formFile" class="form-label">Select file only used for md5 hashing for now</label>
+      <input class="form-control" type="file" id="file" onchange="hashmd5(); filesizecalc(this);">
     </div>
     <div class="mb-3">
       <label for="md5" class="form-label">md5</label>
-      <input type="text" class="form-control" name="md5" id="md5" disabled readonly>
+      <input type="text" class="form-control" name="md5" id="md5" readonly>
+    </div>
+    <div class="mb-3">
+      <label for="filesize" class="form-label">filesize</label>
+      <input type="text" class="form-control" name="filesize" id="filesize" readonly>
     </div>
     <label>Select type</label>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" checked>
+      <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" checked disabled>
       <label class="form-check-label" for="flexRadioDefault1">
         MOD.JAR
       </label>
     </div>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2">
+      <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" disabled>
       <label class="form-check-label" for="flexRadioDefault2">
         Launcher
       </label>
     </div>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3">
+      <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" disabled>
       <label class="form-check-label" for="flexRadioDefault3">
         ZIP
       </label>
@@ -79,7 +83,7 @@
       <input type="text" class="form-control" name="version" id="version">
     </div>
     <div class="form-check">
-      <input class="form-check-input" type="checkbox" value="" id="lastbuild">
+      <input class="form-check-input" type="checkbox" value="" id="lastbuild" disabled>
       <label class="form-check-label" for="lastbuild">Add to latest build?</label>
     </div>
     <input class="btn btn-success" type="submit" value="Add Version">
