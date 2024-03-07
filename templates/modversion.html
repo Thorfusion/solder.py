@@ -68,16 +68,24 @@
             <label for="link" class="form-label">Mod Website</label>
             <input type="text" class="form-control" name="link" value="{{ mod.link }}" id="link">
         </div>
-        <label>Select type</label>
+        <label>Select side</label>
         <div class="form-check">
-            <input class="form-check-input" type="checkbox" value="" id="client" {% if mod.side=="CLIENT" and
-                mod.side=="BOTH" %}checked{% endif %}>
-            <label class="form-check-label" for="client">Client</label>
+          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="CLIENT" {% if mod.side=="CLIENT" %}checked{% endif %}>
+          <label class="form-check-label" for="flexRadioDefault1">
+            Client
+          </label>
         </div>
         <div class="form-check">
-            <input class="form-check-input" type="checkbox" value="" id="server" {% if mod.side=="SERVER" and
-                mod.side=="BOTH" %}checked{% endif %}>
-            <label class="form-check-label" for="server">Server</label>
+          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="SERVER" {% if mod.side=="SERVER" %}checked{% endif %}>
+          <label class="form-check-label" for="flexRadioDefault2">
+            Server
+          </label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" value="BOTH" {% if mod.side=="BOTH" %}checked{% endif %}>
+          <label class="form-check-label" for="flexRadioDefault3">
+            Both
+          </label>
         </div>
         <div class="mb-3">
             <label for="internal_note" class="form-label">Internal note</label>
