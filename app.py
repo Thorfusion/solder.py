@@ -417,14 +417,14 @@ def clients(id):
     if request.method == "POST":
         if "form-submit" in request.form:
             if "modpack" not in request.form:
-                return render_template("clients.html")
+                return redirect(id)
             Client_modpack.new(id, request.form["modpack"])
-            return render_template("clients.html")
+            return redirect(id)
         if "form2-submit" in request.form:
             if "delete_id" not in request.form:
-                return render_template("clients.html")
+                return redirect(id)
             Client_modpack.delete_client_modpack(request.form["delete_id"])
-            return render_template("clients.html")
+            return redirect(id)
 
     return render_template("clients.html", clients=packs)
 
