@@ -143,9 +143,9 @@ def modversion(id):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    # mod = Mod.get_by_id(id)
-    # name = ""
-    # size = ""
+    mod = Mod.get_by_id(id)
+    name = ""
+    size = ""
     # if request.method == "POST":
     #     # make check later (check if modid  exists in database)
     #     modver = request.form["modver"]
@@ -168,7 +168,7 @@ def modversion(id):
     #         print("error")
 
     try:
-        modversions = Mod.get_versions()
+        modversions = mod.get_versions()
     except connector.ProgrammingError as e:
         Database.create_tables()
         modversions = []
