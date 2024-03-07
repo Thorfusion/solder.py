@@ -48,13 +48,13 @@
 <div class="">
     <form method="post" action="" enctype="multipart/form-data">
         <div class="mb-3">
-            <label for="mod_name" class="form-label">Mod Name</label>
-            <input type="text" class="form-control" name="mod_name" value="{{ mod.pretty_name }}" id="mod_name"
+            <label for="pretty_name" class="form-label">Mod Name</label>
+            <input type="text" class="form-control" name="pretty_name" value="{{ mod.pretty_name }}" id="pretty_name"
                 onkeyup="toslug('mod_slug', 'mod_name')">
         </div>
         <div class="mb-3">
-            <label for="mod_slug" class="form-label">Mod Slug</label>
-            <input type="text" class="form-control" name="mod_slug" value="{{ mod.name }}" id="mod_slug" readonly>
+            <label for="name" class="form-label">Mod Slug</label>
+            <input type="text" class="form-control" name="name" value="{{ mod.name }}" id="name" readonly>
         </div>
         <div class="mb-3">
             <label for="author" class="form-label">Author</label>
