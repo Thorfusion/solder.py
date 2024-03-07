@@ -26,7 +26,7 @@ class Client:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM clients WHERE id=%s", (id,))
-        cur.execute("DELETE * FROM client_modpack WHERE client_id = %s", (id,))
+        cur.execute("DELETE FROM client_modpack WHERE client_id = %s", (id,))
         conn.commit()
         return None
 

@@ -28,7 +28,7 @@ class Modversion:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM modversions WHERE id=%s", (id,))
-        cur.execute("DELETE * FROM build_modversion WHERE modversion_id = %s", (id,))
+        cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s", (id,))
         conn.commit()
         return None
 
