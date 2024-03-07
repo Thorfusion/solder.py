@@ -7,8 +7,9 @@
         <thead class="table-light sticky-md-top">
             <tr>
                 <th scope="col">Client</th>
-                <th scope="col">Modpack</th>
-                <th scope="col" class="tablewidthsearch">Allow</th>
+                <th scope="col">Modpack ID</th>
+                <th scope="col">Modpack Name</th>
+                <th scope="col">Action</th>
             </tr>
         </thead>
         <tbody class="">
@@ -16,11 +17,41 @@
             <tr>
                 <td class="tablemaxwidth">{{mod.client_id}}</td>
                 <td class="tablemaxwidth">{{mod.modpack_id}}</td>
-                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}"{% if mod.private %}checked{% endif %}></td>
+                <td class="tablemaxwidth">{{mod.modpack_id}}</td>
+                <td><button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{mod.id}}')">Delete</button></td>
             </tr>
             {%endfor%}
         </tbody>
     </table>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="form2-submit" id="form2-submit" value="Delete">
+    </form>
 </div>
 
+{% endblock %}
+
+{%block aside%}
+<div class="">
+    <form method="post" action="">
+        <div class="mb-3">
+            <label for="modpack" class="form-label">Modpack</label>
+            <input type="email" class="form-control" name="modpack" id="modpack">
+        </div>
+        <input class="btn btn-success" type="submit" name="form-submit" id="form-submit" value="Add Modpack">
+    </form>
+    {% if success %}
+    <div class="alert alert-success loginfail mx-auto" role="alert">
+        <p>{{mod.vmd5}}</p>
+        <p>{{mod.vurl}}</p>
+    </div>
+    {% endif %}
+    {% if failed %}
+    <div class="alert alert-danger loginfail mx-auto" role="alert">
+        <p>Failed!</p>
+    </div>
+    {% endif %}
+</div>
+
+<script src="{{ url_for('static',filename='js/tablesearch.js') }}"></script>
 {% endblock %}
