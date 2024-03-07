@@ -176,22 +176,14 @@ def modversion(id):
     return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod, mirror_url=mirror_url)
 
 
-@app.route("/newmod", methods=["GET"])
+@app.route("/newmod", methods=["GET", "POST"])
 def newmod():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
-
-    return render_template("newmod.html")
-
-
-@app.route("/newmod", methods=["POST"])
-def newmod_submit():
-    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
-        # New or invalid session, send to login
-        return redirect(url_for("login"))
-    radio = request.form['flexRadioDefault']
-    Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
+    if request.method == "POST":
+        radio = request.form['flexRadioDefault']
+        Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
 
     return render_template("newmod.html")
 
