@@ -25,6 +25,17 @@ class Mod:
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, name, description, author, link, now, now, pretty_name, side, note)
+    
+    @classmethod
+    def update(cls, id, name, description, author, link, pretty_name, side, note):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        cur.execute("INSERT INTO mods (name, description, author, link, updated_at, pretty_name, side, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, note))
+        conn.commit()
+        cur.execute("SELECT LAST_INSERT_ID() AS id")
+        id = cur.fetchone()["id"]
+        return cls(id, name, description, author, link, now, now, pretty_name, side, note)
 
     @classmethod
     def get_by_id(cls, id):
