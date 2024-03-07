@@ -143,29 +143,29 @@ def modversion(id):
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    mod = Mod.get_by_id(id)
-    name = ""
-    size = ""
-    if request.method == "POST":
-        # make check later (check if modid  exists in database)
-        modver = request.form["modver"]
-        jarfile = request.files["jarfile"]
+    # mod = Mod.get_by_id(id)
+    # name = ""
+    # size = ""
+    # if request.method == "POST":
+    #     # make check later (check if modid  exists in database)
+    #     modver = request.form["modver"]
+    #     jarfile = request.files["jarfile"]
 
-        if modver != "" and jarfile != "":
-            jarfile.save(secure_filename(jarfile.filename))
-            size = len(jarfile.read())
-            name = jarfile.filename.strip(".jar")
-            # createFolder("/mods")
-            createFolder("mods/" + modSlug)
-            # zipObj = ZipFile(mod.slug+"-"+modver, 'w')
+    #     if modver != "" and jarfile != "":
+    #         jarfile.save(secure_filename(jarfile.filename))
+    #         size = len(jarfile.read())
+    #         name = jarfile.filename.strip(".jar")
+    #         # createFolder("/mods")
+    #         createFolder("mods/" + modSlug)
+    #         # zipObj = ZipFile(mod.slug+"-"+modver, 'w')
 
-            # zipObj.write(jarfile.read())
-            # zipObj.close()
+    #         # zipObj.write(jarfile.read())
+    #         # zipObj.close()
 
-            # add_modversion_db(id,modver,hash,size)
+    #         # add_modversion_db(id,modver,hash,size)
 
-        else:
-            print("error")
+    #     else:
+    #         print("error")
 
     try:
         modversions = mod.get_versions()
@@ -176,11 +176,22 @@ def modversion(id):
     return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod, mirror_url=mirror_url)
 
 
-@app.route("/newmod")
+@app.route("/newmod", methods=["GET"])
 def newmod():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
+
+    return render_template("newmod.html")
+
+
+@app.route("/newmod", methods=["POST"])
+def newmod_submit():
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+    radio = request.form['flexRadioDefault']
+    Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
 
     return render_template("newmod.html")
 
@@ -384,17 +395,6 @@ def modpacklibrary():
         modpacklibrary = []
 
     return render_template("modpacklibrary.html", modpacklibrary=modpacklibrary)
-
-
-@app.route("/newmod", methods=["POST"])
-def newmod_submit():
-    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
-        # New or invalid session, send to login
-        return redirect(url_for("login"))
-    radio = request.form['flexRadioDefault']
-    Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
-
-    return render_template("modpacklibrary.html")
 
 
 @app.errorhandler(404)
