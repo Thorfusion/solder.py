@@ -67,24 +67,19 @@ def index():
 
 @app.route("/setup", methods=["GET"])
 def setup():
-    if request.method == "GET":
-        if new_user:
-            if migratetechnic:
-                Database.migratetechnic_tables()
-            return render_template("setup.html")
-        if Database.is_setup():
-            return redirect(url_for("index"))
+    if not Database.is_setup():
         Database.create_tables()
+    if new_user or not User.any_user_exists():
+        if migratetechnic:
+            Database.migratetechnic_tables()
+            return render_template("setup.html")
         return render_template("setup.html")
     else:
-        if Database.is_setup():
-            return Response(status=400)
         return redirect(url_for("index"))
-
 
 @app.route("/setup", methods=["POST"])
 def setup_creation():
-    if new_user:
+    if new_user or not User.any_user_exists():
         if request.form["setupemail"] is None:
             print("setup failed")
             return render_template("setup.html", failed=True)
@@ -92,8 +87,8 @@ def setup_creation():
             print("setup failed")
             return render_template("setup.html", failed=True)
         User.new(request.form["setupemail"], request.form["setupemail"],
-                 request.form["setuppassword"], request.remote_addr, '1')
-        return redirect(url_for("login"))
+            request.form["setuppassword"], request.remote_addr, '1')
+        return redirect(url_for("index"))
 
 
 @app.route("/login", methods=["GET"])

@@ -65,6 +65,13 @@ class User:
         cur.execute("SELECT * FROM users")
         return [User(row["id"], row["username"], row["email"], row["password"], row["created_ip"], row["last_ip"], row["created_at"], row["updated_at"], row["updated_by_ip"], row["created_by_user_id"], row["updated_by_user_id"]) for row in cur.fetchall()]
 
+    @staticmethod
+    def any_user_exists() -> bool:
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM users")
+        return cur.fetchone() is not None
+
     def get_allowed_packs(self):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)

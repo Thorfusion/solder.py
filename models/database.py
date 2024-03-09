@@ -112,6 +112,8 @@ class Database:
                         password VARCHAR(255) NOT NULL,
                         created_ip VARCHAR(255) NOT NULL,
                         last_ip VARCHAR(255),
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         remember_token VARCHAR(255) DEFAULT(''),
                         updated_by_ip VARCHAR(255),
                         created_by_user_id INT DEFAULT(1),
@@ -176,61 +178,61 @@ class Database:
             cur.execute(
                 """ALTER TABLE modpacks
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
                 """
             )
             cur.execute(
                 """ALTER TABLE mods
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
                 """
             )
             cur.execute(
                 """ALTER TABLE modversions
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
                 """
             )
             cur.execute(
                 """ALTER TABLE build_modversion
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
                 """
             )
             cur.execute(
                 """ALTER TABLE builds
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
                 """
             )
             cur.execute(
                 """ALTER TABLE clients
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
                 """
             )
             cur.execute(
                 """ALTER TABLE `keys`
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
                 """
             )
             cur.execute(
                 """ALTER TABLE builds
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
                 """
             )
             cur.execute(
                 """ALTER TABLE user_permissions
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
                 """
             )
             cur.execute(
                 """ALTER TABLE users
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
                 """
             )
             con.commit()
