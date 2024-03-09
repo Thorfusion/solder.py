@@ -153,27 +153,27 @@ class Database:
                 """CREATE TABLE IF NOT EXISTS clients (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         name VARCHAR(255) NOT NULL UNIQUE,
-                        uuid VARCHAR(255) NOT NULL UNIQUE
+                        uuid VARCHAR(255) NOT NULL UNIQUE,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                         )"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS client_modpack (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         client_id INT NOT NULL,
-                        modpack_id INT NOT NULL
+                        modpack_id INT NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                         )"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS `keys` (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         name VARCHAR(255) NOT NULL UNIQUE,
-                        api_key VARCHAR(255) NOT NULL UNIQUE
+                        api_key VARCHAR(255) NOT NULL UNIQUE,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                         )"""
             )
             cur.execute(
@@ -185,8 +185,8 @@ class Database:
             )
             con.commit()
             con.close()
-        except Exception:
-            errorPrinter.message("Error creating tables", e)
+        except Exception as e:
+            ErrorPrinter.message("Error creating tables", e)
 
     @staticmethod
     def migratetechnic_tables() -> bool:
