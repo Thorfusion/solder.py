@@ -59,6 +59,8 @@ class Database:
                         forge VARCHAR(255),
                         recommended VARCHAR(255),
                         latest VARCHAR(255),
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         `order` INT DEFAULT(0),
                         hidden BOOLEAN DEFAULT(1),
                         private BOOLEAN DEFAULT(0)
@@ -69,6 +71,8 @@ class Database:
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         modpack_id INT NOT NULL,
                         version VARCHAR(255) NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         is_published BOOLEAN DEFAULT(0),
                         private BOOLEAN DEFAULT(0),
                         min_java VARCHAR(255),
@@ -84,6 +88,8 @@ class Database:
                         author VARCHAR(255),
                         link VARCHAR(255),
                         side enum('CLIENT', 'SERVER', 'BOTH'),
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         note TEXT
                         )"""
             )
@@ -93,6 +99,8 @@ class Database:
                         mod_id INT NOT NULL,
                         version VARCHAR(255) NOT NULL,
                         md5 VARCHAR(255) NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         filesize INT
                         )"""
             )
@@ -100,7 +108,9 @@ class Database:
                 """CREATE TABLE IF NOT EXISTS build_modversion (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         modversion_id INT NOT NULL,
-                        buildversion_id INT NOT NULL,
+                        build_id INT NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         optional enum('TRUE', 'FALSE')
                         )"""
             )
@@ -131,6 +141,8 @@ class Database:
                         mods_create BOOLEAN DEFAULT(0),
                         mods_manage BOOLEAN DEFAULT(0),
                         mods_delete BOOLEAN DEFAULT(0),
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         modpacks_create BOOLEAN DEFAULT(0),
                         modpacks_manage BOOLEAN DEFAULT(0),
                         modpacks_delete BOOLEAN DEFAULT(0),
@@ -142,6 +154,8 @@ class Database:
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         name VARCHAR(255) NOT NULL UNIQUE,
                         uuid VARCHAR(255) NOT NULL UNIQUE
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         )"""
             )
             cur.execute(
@@ -149,6 +163,8 @@ class Database:
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         client_id INT NOT NULL,
                         modpack_id INT NOT NULL
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         )"""
             )
             cur.execute(
@@ -156,6 +172,8 @@ class Database:
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         name VARCHAR(255) NOT NULL UNIQUE,
                         api_key VARCHAR(255) NOT NULL UNIQUE
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         )"""
             )
             cur.execute(
