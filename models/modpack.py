@@ -66,7 +66,7 @@ class Modpack:
         rows = cur.fetchall()
         if rows:
             return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["url"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"]) for row in rows]
-        return None
+        return []
 
     def get_builds(self):
         return Build.get_by_modpack(self)
