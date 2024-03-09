@@ -55,16 +55,16 @@
             <input type="text" class="form-control" name="selected_name" id="selected_name" value="{{modpackname.slug}}" disabled readonly></input>
         </div>
         <div class="mb-3">
-            <label for="buildnumber" class="form-label">Build number</label>
-            <input type="text" class="form-control" name="buildnumber" id="buildnumber"></input>
+            <label for="version" class="form-label">Build number</label>
+            <input type="number" class="form-control" name="version" id="version" required></input>
         </div>
         <div class="mb-3">
             <label for="mcversion" class="form-label">Minecraft version</label>
-            <input type="text" class="form-control" name="mcversion" id="mcversion"></input>
+            <input type="number" class="form-control" name="mcversion" id="mcversion" required></input>
         </div>
         <div class="mb-3">
             <label for="clonebuild" class="form-label">Clone build</label>
-            <select class="form-select" name="clonebuild" id="clonebuild">
+            <select class="form-select" name="clonebuild" id="clonebuild" disabled>
                 <option>Do not clone</option>
                 {%for mod in modpack%}
                 <option>{{mod.version}}</option>
@@ -74,7 +74,7 @@
         <div class="mb-3">
             <label for="min_java" class="form-label">Minium Java Version</label>
             <select class="form-select" name="min_java" id="min_java">
-                <option>No requirement</option>
+                <option>NONE</option>
                 <option>1.6</option>
                 <option>1.7</option>
                 <option>1.8</option>
@@ -84,9 +84,17 @@
         </div>
         <div class="mb-3">
             <label for="memory" class="form-label">Minimum Memory requirement in MB, 0 for disable</label>
-            <input type="text" class="form-control" name="memory" id="memory" value="0"></input>
+            <input type="number" class="form-control" name="memory" id="memory" value="0"></input>
         </div>
-        <input class="btn btn-success" type="submit" value="Add build" disabled></input>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="1" id="publish" name="publish">
+            <label class="form-check-label" for="publish">Publish</label>
+          </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="1" id="private" name="private" checked>
+            <label class="form-check-label" for="private">Private</label>
+        </div>
+        <input class="btn btn-success" type="submit" value="Add build" name="form-submit" id="form-submit"></input>
     </form>
     {% if success %}
     <div class="alert alert-success loginfail mx-auto" role="alert">

@@ -18,13 +18,15 @@ class Build:
         self.min_memory = min_memory
 
     @classmethod
-    def new(cls, modpack_id, version, minecraft, forge, is_published, private, min_java, min_memory):
+    def new(cls, modpack_id, version, minecraft, is_published, private, min_java, min_memory):
         conn = Database.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cursor.execute("INSERT INTO builds (modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id", (modpack_id, version, now, now, minecraft, forge, is_published, private, min_java, min_memory))
-        id = cursor.fetchone()["id"]
-        cls(id, modpack_id, version, now, now, minecraft, forge, is_published, private, min_java, min_memory)
+        cur.execute("INSERT INTO builds (modpack_id, version, created_at, updated_at, minecraft, is_published, private, min_java, min_memory) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (modpack_id, version, now, now, minecraft, is_published, private, min_java, min_memory))
+        conn.commit()
+        cur.execute("SELECT LAST_INSERT_ID() AS id")
+        id = cur.fetchone()["id"]
+        cls(id, modpack_id, version, now, now, minecraft, "0", is_published, private, min_java, min_memory)
 
     @classmethod
     def get_by_id(cls, id):

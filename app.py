@@ -212,6 +212,21 @@ def modpack(id):
         Database.create_tables()
         builds = []
 
+    if request.method == "POST":
+        if "form-submit" in request.form:
+            publish="0"
+            private="0"
+            if "min_java" in request.form:
+                min_java=request.form['min_java']
+                if "NONE" in min_java:
+                    min_java=None
+            if "publish" in request.form:
+                publish=request.form['publish']
+            if "private" in request.form:
+                private=request.form['private']
+            Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
+            return redirect(id)
+
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
 
 
