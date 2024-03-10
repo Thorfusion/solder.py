@@ -83,8 +83,8 @@
       <input type="text" class="form-control" name="version" id="version">
     </div>
     <div class="form-check">
-      <input class="form-check-input" type="checkbox" value="" id="lastbuild" disabled>
-      <label class="form-check-label" for="lastbuild">Add to latest build?</label>
+      <input class="form-check-input" type="checkbox" value="1" id="markedbuild" name="markedbuild">
+      <label class="form-check-label" for="markedbuild">Add to marked build?</label>
     </div>
     <input class="btn btn-success" type="submit" value="Add Version" name="form-submit">
     <div class="mb-3">
@@ -111,8 +111,7 @@
 </div>
 
 
-<script src="{{ url_for('static',filename='js/tablesearch.js') }}"></script>
+<script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 <script src="{{ url_for('static',filename='js/md5.min.js') }}"></script>
-<script src="{{ url_for('static',filename='js/filemd5.js') }}"></script>
 
 {% endblock %}

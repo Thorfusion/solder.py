@@ -13,7 +13,7 @@ class Modversion:
         self.optional = optional
 
     @classmethod
-    def new(cls, mod_id, version, md5, filesize):
+    def new(cls, mod_id, version, md5, filesize, markedbuild):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -21,8 +21,13 @@ class Modversion:
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
+        if markedbuild is "1":
+            cur.execute("SELECT id FROM builds WHERE marked = 1")
+            marked_build_id = cur.fetchone()["id"]
+            cur.execute("INSERT INTO build_modversion (modversion_id, build_id) VALUES (%s, %s)", (id, marked_build_id))
+            conn.commit()
         return cls(id, mod_id, version, md5, now, now, filesize)
-    
+
     @classmethod
     def delete_modversion(cls, id):
         conn = Database.get_connection()

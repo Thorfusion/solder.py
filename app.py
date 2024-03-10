@@ -18,6 +18,7 @@ from models.modpack import Modpack
 from models.session import Session
 from models.client_modpack import Client_modpack
 from models.modversion import Modversion
+from models.build_modversion import Build_modversion
 
 from mysql import connector
 
@@ -67,24 +68,19 @@ def index():
 
 @app.route("/setup", methods=["GET"])
 def setup():
-    if request.method == "GET":
-        if new_user:
-            if migratetechnic:
-                Database.migratetechnic_tables()
-            return render_template("setup.html")
-        if Database.is_setup():
-            return redirect(url_for("index"))
+    if not Database.is_setup():
         Database.create_tables()
+    if new_user or not User.any_user_exists():
+        if migratetechnic:
+            Database.migratetechnic_tables()
+            return render_template("setup.html")
         return render_template("setup.html")
     else:
-        if Database.is_setup():
-            return Response(status=400)
         return redirect(url_for("index"))
-
 
 @app.route("/setup", methods=["POST"])
 def setup_creation():
-    if new_user:
+    if new_user or not User.any_user_exists():
         if request.form["setupemail"] is None:
             print("setup failed")
             return render_template("setup.html", failed=True)
@@ -92,8 +88,8 @@ def setup_creation():
             print("setup failed")
             return render_template("setup.html", failed=True)
         User.new(request.form["setupemail"], request.form["setupemail"],
-                 request.form["setuppassword"], request.remote_addr, '1')
-        return redirect(url_for("login"))
+            request.form["setuppassword"], request.remote_addr, '1')
+        return redirect(url_for("index"))
 
 
 @app.route("/login", methods=["GET"])
@@ -216,6 +212,36 @@ def modpack(id):
     except connector.ProgrammingError as e:
         Database.create_tables()
         builds = []
+
+    if request.method == "POST":
+        if "form-submit" in request.form:
+            publish="0"
+            private="0"
+            if "min_java" in request.form:
+                min_java=request.form['min_java']
+                if "NONE" in min_java:
+                    min_java=None
+            if "publish" in request.form:
+                publish=request.form['publish']
+            if "private" in request.form:
+                private=request.form['private']
+            Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
+            return redirect(id)
+        if "recommended_submit" in request.form:
+            Build.update_checkbox(id, request.form["recommended_modid"], "recommended", "modpacks")
+            return redirect(id)
+        if "latest_submit" in request.form:
+            Build.update_checkbox(id, request.form["latest_modid"], "latest", "modpacks")
+            return redirect(id)
+        if "is_published_submit" in request.form:
+            Build.update_checkbox(request.form["is_published_modid"], request.form["is_published_check"], "is_published", "builds")
+            return redirect(id)
+        if "private_submit" in request.form:
+            Build.update_checkbox(request.form["private_modid"], request.form["private_check"], 'private', 'builds')
+            return redirect(id)
+        if "marked_submit" in request.form:
+            Build.update_checkbox_marked(request.form["marked_modid"], request.form["marked_check"])
+            return redirect(id)
 
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
 
@@ -348,7 +374,7 @@ def modpackbuild(id):
     try:
         packbuild = Build.get_by_id(id)
         modpackbuild = packbuild.get_modversions_minimal()
-        packbuildname = Modpack.get_by_id(id)
+        packbuildname = Build.get_modpackname_by_id(id)
         mods = Mod.get_multi_by_id(
             tuple(build_modversion.mod_id for build_modversion in modpackbuild))
         mod_mapping = {mod.id: mod for mod in mods}
@@ -359,6 +385,29 @@ def modpackbuild(id):
         raise _
         Database.create_tables()
         mod_version_combo = []
+
+    if request.method == "POST":
+        if "form-submit" in request.form:
+            publish="0"
+            private="0"
+            if "min_java" in request.form:
+                min_java=request.form['min_java']
+                if "NONE" in min_java:
+                    min_java=None
+            if "publish" in request.form:
+                publish=request.form['publish']
+            if "private" in request.form:
+                private=request.form['private']
+            Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
+            return redirect(id)
+        if "optional_submit" in request.form:
+            Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"])
+            return redirect(id)
+        if "delete_submit" in request.form:
+            if "delete_id" not in request.form:
+                return redirect(id)
+            Build_modversion.delete_build_modversion(request.form["delete_id"])
+            return redirect(id)
 
     return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname)
 
@@ -384,7 +433,10 @@ def modlibrary_post():
         return redirect(url_for("login"))
     if request.method == "POST":
         if "form-submit" in request.form:
-            Modversion.new(request.form["modid"], request.form["version"], request.form["md5"], request.form["filesize"])
+            markedbuild="0"
+            if "markedbuild" in request.form:
+                markedbuild=request.form['markedbuild']
+            Modversion.new(request.form["modid"], request.form["version"], request.form["md5"], request.form["filesize"], markedbuild)
             return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))
@@ -419,6 +471,12 @@ def modpacklibrary_post():
                 private=request.form['private']
             Modpack.new(request.form["pretty_name"], request.form["name"], hidden, private, "0")
             return redirect(url_for("modpacklibrary"))
+        if "hidden_submit" in request.form:
+            Modpack.update_checkbox(request.form["hidden_modid"], request.form["hidden_check"], "hidden", "modpacks")
+        if "private_submit" in request.form:
+            Modpack.update_checkbox(request.form["private_modid"], request.form["private_check"], "private", "modpacks")
+        if "pinned_submit" in request.form:
+            Modpack.update_checkbox(request.form["pinned_modid"], request.form["pinned_check"], "pinned", "modpacks")
 
     return redirect(url_for("modpacklibrary"))
 

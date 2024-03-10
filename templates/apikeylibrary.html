@@ -24,7 +24,7 @@
                 <td class="tablemaxwidth">{{mod.name}}</td>
                 <td class="tablemaxwidth">{{mod.api_key}}</td>
                 <td>
-                    <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{mod.id}}')">Delete</button>
+                    <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{mod.id}}', 'form2-submit')">Delete</button>
                 </td>
             </tr>
             {%endfor%}
@@ -62,5 +62,5 @@
     {% endif %}
 </div>
 
-<script src="{{ url_for('static',filename='js/tablesearch.js') }}"></script>
+<script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 {% endblock %}

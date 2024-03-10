@@ -35,7 +35,7 @@
                 <td> 
                     <div class="maxcont">
                     <a href="#"><button type="button" class="btn btn-primary buttonwidth" disabled>Rehash</button></a>
-                    <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}')">Delete</button>  
+                    <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'form2-submit')">Delete</button>  
                 </div>
                 </td>
             </tr>
@@ -99,6 +99,5 @@
         <input class="btn btn-danger" type="submit" value="Delete Mod" name="form3-submit" id="form3-submit" disabled>
     </form>
 </div>
-<script src="{{ url_for('static',filename='js/slug.js') }}"></script>
-<script src="{{ url_for('static',filename='js/tablesearch.js') }}"></script>
+<script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 {% endblock %}

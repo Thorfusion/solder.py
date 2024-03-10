@@ -88,7 +88,7 @@ class Mod:
         rows = cur.fetchall()
         if rows:
             return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"]) for row in rows]
-        return None
+        return []
 
     def get_versions(self):
         conn = Database.get_connection()
@@ -97,7 +97,7 @@ class Mod:
         rows = cur.fetchall()
         if rows:
             return [Modversion(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
-        return None
+        return []
 
     def get_versions_by_id(self, id):
         conn = Database.get_connection()

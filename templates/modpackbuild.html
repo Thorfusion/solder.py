@@ -27,18 +27,28 @@
                     </select>
                 </td>
                 <td>
-                    <input class="form-check-input" type="checkbox" value="" id="hidden" {% if combo[1].optional
-                        %}checked{% endif %} disabled>
+                    {{combo[1].optional}}
+                    <input class="form-check-input" type="checkbox" value="" id="optional_{{combo[1].id}}" onclick="submitecheckedpress('optional_modid', '{{combo[1].id}}', 'optional_check', 'optional_{{combo[1].id}}', 'optional_submit')" {% if combo[1].optional
+                        %}checked{% endif %}>
                 </td>
                 <td>
                     <div class="maxcont">
-                        <a href=""><button type="button" class="btn btn-danger buttonwidth" disabled>Remove</button></a>
+                        <a href=""><button type="button" class="btn btn-danger buttonwidth" onclick="submitbuttonpress('delete_id', '{{combo[1].id}}', 'delete_submit')">Remove</button></a>
                     </div>
                 </td>
             </tr>
             {%endfor%}
         </tbody>
     </table>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="optional_check" id="optional_check" readonly>
+        <input type="text" class="form-control invisible" name="optional_modid" id="optional_modid" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="optional_submit" id="optional_submit" value="optional">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="delete_submit" id="delete_submit" value="Delete">
+    </form>
 </div>
 {% endblock %}
 {%block aside%}
@@ -57,18 +67,22 @@
             <label for="modversion" class="form-label">Modversion</label>
             <input type="text" class="form-control" name="modversion" id="modversion"></input>
         </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="1" id="optional" name="optional">
+            <label class="form-check-label" for="optional">optional</label>
+        </div>
         <input class="btn btn-success" type="submit" value="Add Mod" disabled>
     </form>
     <div class="divider"></div>
     <form method="post" action="">
         <div class="mb-3">
-            <label for="build_name" class="form-label">selected modpack</label>
-            <input type="text" class="form-control" name="build_name" id="build_name" value="{{ packbuildname.slug }}"
+            <label for="build_name" class="form-label">Selected modpack</label>
+            <input type="text" class="form-control" name="build_name" id="build_name" value="{{ packbuildname }}"
                 disabled readonly></input>
         </div>
         <div class="mb-3">
-            <label for="buildnumber" class="form-label">Build number</label>
-            <input type="text" class="form-control" name="buildnumber" id="buildnumber"
+            <label for="version" class="form-label">Build number</label>
+            <input type="text" class="form-control" name="version" id="version"
                 value="{{ packbuild.version }}"></input>
         </div>
         <div class="mb-3">
@@ -77,11 +91,11 @@
                 value="{{ packbuild.minecraft }}"></input>
         </div>
         <div class="mb-3">
-            <label for="description" class="form-label">Minimum Java Version</label>
-            <select class="form-select" name="description" id="description">
+            <label for="min_java" class="form-label">Minimum Java Version</label>
+            <select class="form-select" name="min_java" id="min_java">
                 <option>{{ packbuild.min_java }}</option>
-                {% if packbuild.min_java != "Null" %}
-                <option>Null</option>
+                {% if packbuild.min_java != "None" %}
+                <option>None</option>
                 {% endif %}
                 {% if packbuild.min_java != "1.6" %}
                 <option>1.6</option>
@@ -105,7 +119,15 @@
             <input type="text" class="form-control" name="memory" id="memory"
                 value="{{ packbuild.min_memory }}"></input>
         </div>
-        <input class="btn btn-success" type="submit" value="Save changes" disabled></input>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="1" id="publish" name="publish" {% if packbuild.is_published %}checked{% endif %}>
+            <label class="form-check-label" for="publish">Published</label>
+        </div>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="1" id="private" name="private" {% if packbuild.private %}checked{% endif %}>
+            <label class="form-check-label" for="private">Private</label>
+        </div>
+        <input class="btn btn-success" type="submit" value="Save Changes" name="form-submit">
         <input class="btn btn-danger" type="submit" value="Delete build" disabled></input>
     </form>
     {% if success %}
@@ -121,6 +143,6 @@
     {% endif %}
 </div>
 
-<script src="{{ url_for('static',filename='js/tablesearch.js') }}"></script>
+<script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 
 {% endblock %}

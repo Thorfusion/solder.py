@@ -4,7 +4,7 @@ from .mod import Mod
 from .modversion import Modversion
 
 class Build:
-    def __init__(self, id, modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory):
+    def __init__(self, id, modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory, marked):
         self.id = id
         self.modpack_id = modpack_id
         self.version = version
@@ -16,15 +16,58 @@ class Build:
         self.private = private
         self.min_java = min_java
         self.min_memory = min_memory
+        self.marked = marked
 
     @classmethod
-    def new(cls, modpack_id, version, minecraft, forge, is_published, private, min_java, min_memory):
+    def new(cls, modpack_id, version, minecraft, is_published, private, min_java, min_memory):
         conn = Database.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cursor.execute("INSERT INTO builds (modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id", (modpack_id, version, now, now, minecraft, forge, is_published, private, min_java, min_memory))
-        id = cursor.fetchone()["id"]
-        cls(id, modpack_id, version, now, now, minecraft, forge, is_published, private, min_java, min_memory)
+        cur.execute("INSERT INTO builds (modpack_id, version, created_at, updated_at, minecraft, is_published, private, min_java, min_memory) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (modpack_id, version, now, now, minecraft, is_published, private, min_java, min_memory))
+        conn.commit()
+        cur.execute("SELECT LAST_INSERT_ID() AS id")
+        id = cur.fetchone()["id"]
+        cls(id, modpack_id, version, now, now, minecraft, "0", is_published, private, min_java, min_memory, "0")
+
+    @classmethod
+    def update(cls, id, version, minecraft, is_published, private, min_java, min_memory):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        cur.execute("""UPDATE builds 
+            SET version = %s, minecraft = %s, is_published = %s, private = %s, min_java = %s, min_memory = %s
+            WHERE id = %s;""", ( version, minecraft, is_published, private, min_java, min_memory, id))
+        conn.commit()
+        return None
+
+    @classmethod
+    def update_checkbox(cls, id, value, column, table):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, id))
+        conn.commit()
+        return None
+    
+    @classmethod
+    def update_checkbox_marked(cls, id, value):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("UPDATE builds SET marked = '0'")
+        cur.execute("UPDATE builds SET marked = %s WHERE id = %s", (value, id))
+        conn.commit()
+        return None
+
+    @classmethod
+    def get_modpackname_by_id(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT modpack_id FROM builds WHERE id = %s", (id,))
+        modpack_id = cur.fetchone()["modpack_id"]
+        cur.execute("SELECT name FROM modpacks WHERE id = %s", (modpack_id,))
+        name = cur.fetchone()["name"]
+        if name is None:
+            return None
+        return (name)
 
     @classmethod
     def get_by_id(cls, id):
