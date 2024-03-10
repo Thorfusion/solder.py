@@ -1,3 +1,6 @@
+
+// Function for search tables
+// Thanks https://gist.github.com/effeect/58d50fc7b8db60cf558da183a55eb1ae
 function tablesearches(column) {
     var input, filter, table, tr, td, i;
     input = document.getElementById("search");
@@ -17,12 +20,9 @@ function tablesearches(column) {
     }
 }
 
-// Thanks https://gist.github.com/effeect/58d50fc7b8db60cf558da183a55eb1ae
 
-function buttonpress(id, val) {
-    document.getElementById(id).value = val;
-}
-
+// sleep function
+// https://stackoverflow.com/questions/16873323/javascript-sleep-wait-before-continuing
 function sleep(milliseconds) {
     var start = new Date().getTime();
     for (var i = 0; i < 1e7; i++) {
@@ -32,8 +32,14 @@ function sleep(milliseconds) {
     }
   }
 
-// https://stackoverflow.com/questions/16873323/javascript-sleep-wait-before-continuing
 
+// Used to set the value inputed to a selected id box, ie text input form gets data from a selected row
+function buttonpress(id, val) {
+    document.getElementById(id).value = val;
+}
+
+
+// Allows to have delete buttons in a table row, see usages
 function submitbuttonpress(id, val, submitid) {
     document.getElementById(id).value = val;
     submit2 = '[name="' + submitid + '"]';
@@ -41,6 +47,8 @@ function submitbuttonpress(id, val, submitid) {
     document.querySelector(submit2).click();
 }
 
+
+// Used for checkboxes in table rows to check and uncheck them and sending formdata for the update
 function submitecheckedpress(id, val, textform, check, submitid) {
     document.getElementById(id).value = val;
     if (document.getElementById(check).checked) {
@@ -53,6 +61,7 @@ function submitecheckedpress(id, val, textform, check, submitid) {
     document.querySelector(submit1).click();
 }
 
+
 /* test code for md5
 function buttonpress2() {
     vers = document.getElementById('version').value
@@ -61,6 +70,8 @@ function buttonpress2() {
 }
 */
 
+
+// Hashing md5 files
 function hashmd5() {
     let fileSelect = document.getElementById('file')
     let files = fileSelect.files
@@ -74,15 +85,20 @@ function hashmd5() {
 }
 
 
+// Calculates the filesize
 function filesizecalc(input) {
     document.getElementById('filesize').value = input.files[0].size;
 }
 
 
+// takes an input string and converts it into a slug
 function toslug(slug, string){
     document.getElementById(slug).value = string_to_slug(document.getElementById(string).value);
 }
 
+
+// Function block used in toslug to convert string to slug
+// Thanks https://gist.github.com/codeguy/6684588?permalink_comment_id=3777802
 function string_to_slug (str) {
     str = str.replace(/^\s+|\s+$/g, ''); // trim
     str = str.toLowerCase();
@@ -101,6 +117,4 @@ function string_to_slug (str) {
 
     return str;
 }
-
-// Thanks https://gist.github.com/codeguy/6684588?permalink_comment_id=3777802
     
