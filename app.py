@@ -18,6 +18,7 @@ from models.modpack import Modpack
 from models.session import Session
 from models.client_modpack import Client_modpack
 from models.modversion import Modversion
+from models.build_modversion import Build_modversion
 
 from mysql import connector
 
@@ -383,6 +384,14 @@ def modpackbuild(id):
             if "private" in request.form:
                 private=request.form['private']
             Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
+            return redirect(id)
+        if "optional_submit" in request.form:
+            Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"])
+            return redirect(id)
+        if "delete_submit" in request.form:
+            if "delete_id" not in request.form:
+                return redirect(id)
+            Build_modversion.delete_build_modversion(request.form["delete_id"])
             return redirect(id)
 
     return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname)
