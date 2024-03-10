@@ -62,8 +62,8 @@ class Database:
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         `order` INT DEFAULT(0),
-                        hidden BOOLEAN DEFAULT(1),
-                        private BOOLEAN DEFAULT(0)
+                        hidden TINYINT(1) DEFAULT(1),
+                        private TINYINT(1) DEFAULT(0)
                         )"""
             )
             cur.execute(
@@ -73,8 +73,8 @@ class Database:
                         version VARCHAR(255) NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        is_published BOOLEAN DEFAULT(0),
-                        private BOOLEAN DEFAULT(0),
+                        is_published TINYINT(1) DEFAULT(0),
+                        private TINYINT(1) DEFAULT(0),
                         min_java VARCHAR(255),
                         min_memory INT
                         )"""
@@ -111,7 +111,7 @@ class Database:
                         build_id INT NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        optional enum('TRUE', 'FALSE')
+                        optional TINYINT(1) NOT NULL DEFAULT(0)
                         )"""
             )
             cur.execute(
@@ -269,7 +269,7 @@ class Database:
             )
             cur.execute(
                 """ALTER TABLE build_modversion
-                    ADD COLUMN optional enum('TRUE', 'FALSE');
+                    ADD COLUMN optional TINYINT(1) NOT NULL DEFAULT(0);
                 """
             )
             cur.execute(
