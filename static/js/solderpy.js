@@ -34,10 +34,11 @@ function sleep(milliseconds) {
 
 // https://stackoverflow.com/questions/16873323/javascript-sleep-wait-before-continuing
 
-function submitbuttonpress(id, val) {
+function submitbuttonpress(id, val, submitid) {
     document.getElementById(id).value = val;
+    submit2 = '[name="' + submitid + '"]';
     sleep(25)
-    document.querySelector('[name="form2-submit"]').click();
+    document.querySelector(submit2).click();
 }
 
 function submitecheckedpress(id, val, textform, check, submitid) {
