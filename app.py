@@ -429,6 +429,10 @@ def modpacklibrary_post():
                 private=request.form['private']
             Modpack.new(request.form["pretty_name"], request.form["name"], hidden, private, "0")
             return redirect(url_for("modpacklibrary"))
+        if "hidden_submit" in request.form:
+            Modpack.updatehidden(request.form["hidden_modid"], request.form["hidden_check"])
+        if "private_submit" in request.form:
+            Modpack.updateprivate(request.form["private_modid"], request.form["private_check"])
 
     return redirect(url_for("modpacklibrary"))
 

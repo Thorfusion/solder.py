@@ -26,7 +26,27 @@ class Modpack:
         id = cur.fetchone()["id"]
         return None
         return cls(id, name, slug, now, now, hidden, private)
-
+    
+    @classmethod
+    def updatehidden(cls, id, hidden):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""UPDATE modpacks 
+            SET hidden = %s 
+            WHERE id = %s;""", (hidden, id))
+        conn.commit()
+        return None
+    
+    @classmethod
+    def updateprivate(cls, id, private):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""UPDATE modpacks 
+            SET private = %s 
+            WHERE id = %s;""", (private, id))
+        conn.commit()
+        return None
+    
     @classmethod
     def get_by_id(cls, id):
         conn = Database.get_connection()

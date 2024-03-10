@@ -40,6 +40,18 @@ function submitbuttonpress(id, val) {
     document.querySelector('[name="form2-submit"]').click();
 }
 
+function submitecheckedpress(id, val, textform, check, submitid) {
+    document.getElementById(id).value = val;
+    if (document.getElementById(check).checked) {
+        document.getElementById(textform).value = "1";
+    } else {
+        document.getElementById(textform).value = "0";
+    } 
+    submit1 = '[name="' + submitid + '"]';
+    sleep(25)
+    document.querySelector(submit1).click();
+}
+
 /* test code for md5
 function buttonpress2() {
     vers = document.getElementById('version').value
