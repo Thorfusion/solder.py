@@ -239,6 +239,9 @@ def modpack(id):
         if "private_submit" in request.form:
             Build.update_checkbox(request.form["private_modid"], request.form["private_check"], 'private', 'builds')
             return redirect(id)
+        if "marked_submit" in request.form:
+            Build.update_checkbox_marked(request.form["marked_modid"], request.form["marked_check"])
+            return redirect(id)
 
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
 

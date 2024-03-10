@@ -14,6 +14,7 @@
                 <th scope="col">Latest</th>
                 <th scope="col">Published</th>
                 <th scope="col">Private</th>
+                <th scope="col">Marked</th>
                 <th scope="col" class="actionmcil">Actions</th>
             </tr>
         </thead>
@@ -31,6 +32,8 @@
                 <td><input class="form-check-input" type="checkbox" value="" id="published_{{mod.id}}" onclick="submitecheckedpress('is_published_modid', '{{mod.id}}', 'is_published_check', 'published_{{mod.id}}', 'is_published_submit')" {% if
                         mod.is_published %}checked{% endif %} ></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" onclick="submitecheckedpress('private_modid', '{{mod.id}}', 'private_check', 'private_{{mod.id}}', 'private_submit')" {% if mod.private
+                        %}checked{% endif %} ></td>
+                <td><input class="form-check-input" type="radio" name="markedbuild" id="marked_{{mod.id}}" onclick="submitecheckedpress('marked_modid', '{{mod.id}}', 'marked_check', 'marked_{{mod.id}}', 'marked_submit')" {% if mod.marked
                         %}checked{% endif %} ></td>
                 <td>
                     <div class="maxcont">
@@ -63,6 +66,11 @@
         <input type="text" class="form-control invisible" name="private_check" id="private_check" readonly>
         <input type="text" class="form-control invisible" name="private_modid" id="private_modid" readonly>
         <input class="btn btn-danger invisible" type="submit" name="private_submit" id="private_submit" value="Delete">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="marked_check" id="marked_check" readonly>
+        <input type="text" class="form-control invisible" name="marked_modid" id="marked_modid" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="marked_submit" id="marked_submit" value="Delete">
     </form>
 </div>
 {% endblock %}
