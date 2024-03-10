@@ -10,48 +10,51 @@
 
 # About solder.py
 
-With critical missing features in technic solder and solder.cf mothballed right now we needed an more modern solder to use.
-With new features like allowing solder to be used on multiple platforms and much simpler in design than original solder, its much easier to install and maintain.
+With critical missing features in technic solder and solder.cf now costs money and is mothballed right now we needed an more modern solder to use.
+With new features like allowing solder to be used on multiple launchers and much simpler in design than original solder, its much easier to install and maintain.
 We strive to keep the efficiency and simplicity of use at a top, removing unnecessary steps and keeping a simple look.
 solder.py is even compatible with original solder's database, visit the install section below.
 
-## Features over original solder (features not done yet)
+## Features over original solder when solder.py is released
 
-+ Designed by and for modpack creators, allowing fewer clicks therefore less time consuming
-+ Mod upload
-+ MCIL export support with optional mod tag
-  + finally solder is multi launcher compatible
-+ Easy install with docker
-+ Internal descriptions of mods
++ Native Mod uploading
++ MCIL optional mod tag
 + Pin your favorite modpacks to your menu!
 + Clone builds from other modpacks
-+ [Planned]R2 bucket integration, host your files on the cloud!
-+ [Planned]Maven integration
-+ [Planned]Modrinth integration
++ R2 bucket integration, host your files on the cloud!  
 
-Note that planned features will not be available on first release
+# Features to be added after release
 
-## Working features
++ Maven integration
++ Modrinth integration
++ MCIL export support
++ Advanced user management
 
+
+## Features over original solder when solder.py working as of now
+
++ Easy install with docker
++ Internal descriptions of mods
++ Ability to automaticly add mods to a selected modpack build
 + Technic solder api
-  + yes, solder.py can actually host, you can't edit stuff yet
-+ Basic view of solder
+  + yes, solder.py can actually host
++ You can view everything, and edit most of the settings.
+
 
 ## Features in dev
 
 + Mod uploading
-+ MCIL export support
-+ Internal descriptions of mods
-+ Editing the solder database
++ Adding mods in modpack builds
++ Hashing mods, partially done
++ Clone modpack builds
++ Pinning modpack to menu
++ Changing mod version in modpack builds
 
-## Native features not to be expected soon
-
-+ Advanced user management
 
 # Installation/Updating
 
 solder.py is compatible with the original database and only adds columns to tables for the extra features we have, you can even dual run with both solder.py and original solder.
-Users of solder.cf need to use the migrating tool available
+Users of solder.cf need to use the migrating tool which isn't available at this stage.
 
 ## Pre-install
 
@@ -166,21 +169,21 @@ R2_ACCESS_KEY=123
 R2_SECRET_KEY=123
 ```
 
+#### Adding a new user
+
 Enables the /setup page if the database already exists and you need to add a new user
 ```bash
 NEW_USER=True
 ```
 
-If new user is enabled, you can enable this migration tool for technic solder database, to migrate it to solder.py, mainly fixes mysql database bugs and adds columns
+#### Migration from technic solder database to solder.py
+
+If new user is enabled, you can enable this migration tool for technic solder database, to migrate it to solder.py, mainly fixes mysql database bugs and adds columns and is reverse compatible with original technic solder
 ```bash
 TECHNIC_MIGRATION=True
 ```
 
 NOTE: The docker image does not and will not support https, therefore it is required to run an reverse proxy
-
-## TODO for docker
-
-+ Enable filehosting for like mods n shit
 
 ## Dev Enviroment
 
