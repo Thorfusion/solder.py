@@ -268,6 +268,10 @@ class Database:
                 """ALTER TABLE mods
                     ADD COLUMN side enum('CLIENT', 'SERVER', 'BOTH') AFTER link,
                     ADD COLUMN note VARCHAR(255),
+                """
+            )
+            cur.execute(
+                """ALTER TABLE builds
                     ADD COLUMN marked TINYINT(1) NOT NULL DEFAULT(0);
                 """
             )
