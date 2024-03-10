@@ -227,6 +227,18 @@ def modpack(id):
                 private=request.form['private']
             Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
             return redirect(id)
+        if "recommended_submit" in request.form:
+            Build.update_checkbox(id, request.form["recommended_modid"], "recommended", "modpacks")
+            return redirect(id)
+        if "latest_submit" in request.form:
+            Build.update_checkbox(id, request.form["latest_modid"], "latest", "modpacks")
+            return redirect(id)
+        if "is_published_submit" in request.form:
+            Build.update_checkbox(request.form["is_published_modid"], request.form["is_published_check"], "is_published", "builds")
+            return redirect(id)
+        if "private_submit" in request.form:
+            Build.update_checkbox(request.form["private_modid"], request.form["private_check"], 'private', 'builds')
+            return redirect(id)
 
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
 

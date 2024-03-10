@@ -24,14 +24,14 @@
                 <td>{{mod.version}}</td>
                 <td>{{mod.minecraft}}</td>
                 <td>{{mod.author}}</td>
-                <td><input class="form-check-input" type="radio" name="flexRadioDefault" value="" id="rec_{{mod.id}}" {%
-                        if modpackname.recommended == mod.version %}checked{% endif %} disabled></td>
+                <td><input class="form-check-input" type="radio" name="flexRadioDefault" value="" id="rec_{{mod.id}}" onclick="submitecheckedpress('recommended_modid', '{{mod.version}}', 'recommended_check', 'rec_{{mod.id}}', 'recommended_submit')" {%
+                        if modpackname.recommended == mod.version %}checked{% endif %} ></td>
                 <td><input class="form-check-input" type="radio" name="flexRadioDefault1" value=""
-                        id="latest_{{mod.id}}" {% if modpackname.latest == mod.version %}checked{% endif %} disabled></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="published_{{mod.id}}" {% if
-                        mod.is_published %}checked{% endif %} disabled></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" {% if mod.private
-                        %}checked{% endif %} disabled></td>
+                        id="latest_{{mod.id}}" onclick="submitecheckedpress('latest_modid', '{{mod.version}}', 'latest_check', 'latest_{{mod.id}}', 'latest_submit')" {% if modpackname.latest == mod.version %}checked{% endif %} ></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="published_{{mod.id}}" onclick="submitecheckedpress('is_published_modid', '{{mod.id}}', 'is_published_check', 'published_{{mod.id}}', 'is_published_submit')" {% if
+                        mod.is_published %}checked{% endif %} ></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" onclick="submitecheckedpress('private_modid', '{{mod.id}}', 'private_check', 'private_{{mod.id}}', 'private_submit')" {% if mod.private
+                        %}checked{% endif %} ></td>
                 <td>
                     <div class="maxcont">
                         <a href="../modpackbuild/{{mod.id}}"><button type="button"
@@ -44,6 +44,26 @@
             {%endfor%}
         </tbody>
     </table>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="recommended_check" id="recommended_check" readonly>
+        <input type="text" class="form-control invisible" name="recommended_modid" id="recommended_modid" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="recommended_submit" id="recommended_submit" value="Delete">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="latest_check" id="latest_check" readonly>
+        <input type="text" class="form-control invisible" name="latest_modid" id="latest_modid" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="latest_submit" id="latest_submit" value="Delete">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="is_published_check" id="is_published_check" readonly>
+        <input type="text" class="form-control invisible" name="is_published_modid" id="is_published_modid" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="is_published_submit" id="is_published_submit" value="Delete">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="private_check" id="private_check" readonly>
+        <input type="text" class="form-control invisible" name="private_modid" id="private_modid" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="private_submit" id="private_submit" value="Delete">
+    </form>
 </div>
 {% endblock %}
 {%block aside%}
@@ -109,4 +129,5 @@
     {% endif %}
 </div>
 
+<script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 {% endblock %}

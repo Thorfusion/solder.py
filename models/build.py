@@ -40,6 +40,14 @@ class Build:
         return None
 
     @classmethod
+    def update_checkbox(cls, id, value, column, table):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, id))
+        conn.commit()
+        return None
+
+    @classmethod
     def get_modpackname_by_id(cls, id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
