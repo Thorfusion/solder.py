@@ -433,7 +433,10 @@ def modlibrary_post():
         return redirect(url_for("login"))
     if request.method == "POST":
         if "form-submit" in request.form:
-            Modversion.new(request.form["modid"], request.form["version"], request.form["md5"], request.form["filesize"])
+            markedbuild="0"
+            if "markedbuild" in request.form:
+                markedbuild=request.form['markedbuild']
+            Modversion.new(request.form["modid"], request.form["version"], request.form["md5"], request.form["filesize"], markedbuild)
             return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))
