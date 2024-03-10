@@ -40,6 +40,18 @@ class Build:
         return None
 
     @classmethod
+    def get_modpackname_by_id(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT modpack_id FROM builds WHERE id = %s", (id,))
+        modpack_id = cur.fetchone()["modpack_id"]
+        cur.execute("SELECT name FROM modpacks WHERE id = %s", (modpack_id,))
+        name = cur.fetchone()["name"]
+        if name is None:
+            return None
+        return (name)
+
+    @classmethod
     def get_by_id(cls, id):
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)

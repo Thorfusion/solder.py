@@ -359,7 +359,7 @@ def modpackbuild(id):
     try:
         packbuild = Build.get_by_id(id)
         modpackbuild = packbuild.get_modversions_minimal()
-        packbuildname = Modpack.get_by_id(id)
+        packbuildname = Build.get_modpackname_by_id(id)
         mods = Mod.get_multi_by_id(
             tuple(build_modversion.mod_id for build_modversion in modpackbuild))
         mod_mapping = {mod.id: mod for mod in mods}
