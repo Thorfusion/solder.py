@@ -29,6 +29,17 @@ class Build:
         cls(id, modpack_id, version, now, now, minecraft, "0", is_published, private, min_java, min_memory)
 
     @classmethod
+    def update(cls, id, version, minecraft, is_published, private, min_java, min_memory):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        cur.execute("""UPDATE builds 
+            SET version = %s, minecraft = %s, is_published = %s, private = %s, min_java = %s, min_memory = %s
+            WHERE id = %s;""", ( version, minecraft, is_published, private, min_java, min_memory, id))
+        conn.commit()
+        return None
+
+    @classmethod
     def get_by_id(cls, id):
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
