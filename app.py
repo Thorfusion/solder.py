@@ -469,9 +469,11 @@ def modpacklibrary_post():
             Modpack.new(request.form["pretty_name"], request.form["name"], hidden, private, "0")
             return redirect(url_for("modpacklibrary"))
         if "hidden_submit" in request.form:
-            Modpack.updatehidden(request.form["hidden_modid"], request.form["hidden_check"])
+            Modpack.update_checkbox(request.form["hidden_modid"], request.form["hidden_check"], "hidden", "modpacks")
         if "private_submit" in request.form:
-            Modpack.updateprivate(request.form["private_modid"], request.form["private_check"])
+            Modpack.update_checkbox(request.form["private_modid"], request.form["private_check"], "private", "modpacks")
+        if "pinned_submit" in request.form:
+            Modpack.update_checkbox(request.form["pinned_modid"], request.form["pinned_check"], "pinned", "modpacks")
 
     return redirect(url_for("modpacklibrary"))
 
