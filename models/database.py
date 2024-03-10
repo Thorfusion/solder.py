@@ -64,6 +64,7 @@ class Database:
                         `order` INT DEFAULT(0),
                         hidden TINYINT(1) DEFAULT(1),
                         private TINYINT(1) DEFAULT(0)
+                        pinned TINYINT(1) NOT NULL DEFAULT(0)
                         )"""
             )
             cur.execute(
@@ -77,6 +78,7 @@ class Database:
                         private TINYINT(1) DEFAULT(0),
                         min_java VARCHAR(255),
                         min_memory INT
+                        marked TINYINT(1) NOT NULL DEFAULT(0)
                         )"""
             )
             cur.execute(
@@ -258,13 +260,15 @@ class Database:
                 """ALTER TABLE modpacks
                     ADD COLUMN user_id INT NOT NULL AFTER slug,
                     ADD COLUMN minecraft VARCHAR(255) NOT NULL DEFAULT(''),
-                    ADD COLUMN forge VARCHAR(255);
+                    ADD COLUMN forge VARCHAR(255),
+                    ADD COLUMN pinned TINYINT(1) NOT NULL DEFAULT(0);
                 """
             )
             cur.execute(
                 """ALTER TABLE mods
                     ADD COLUMN side enum('CLIENT', 'SERVER', 'BOTH') AFTER link,
-                    ADD COLUMN note VARCHAR(255);
+                    ADD COLUMN note VARCHAR(255),
+                    ADD COLUMN marked TINYINT(1) NOT NULL DEFAULT(0);
                 """
             )
             cur.execute(
