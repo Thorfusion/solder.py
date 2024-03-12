@@ -175,7 +175,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
         let container = new DataTransfer();
         container.items.add(finalfile);
     
-        input.files = container.files;
+        dataSelect.files = container.files;
 
         submit2 = '[name="' + 'form-submit' + '"]';
         sleep(25)
