@@ -149,7 +149,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
         if (data.name == "modpack.jar") { // if the filename is detected to be modpack.jar
             // adds a folder "bin" inside zipfile
             var bin = zip.folder("bin");
-            // adds the file uploaded inside mods folder with correct naming scheme
+            // adds the file uploaded inside bin folder with correct naming scheme
             bin.file("modpack.jar", data);
         }
         if (data.type == "application/json") { // if the filetype is detected to be json
