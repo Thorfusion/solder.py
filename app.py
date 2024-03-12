@@ -436,7 +436,7 @@ def modlibrary_post():
             markedbuild="0"
             if "markedbuild" in request.form:
                 markedbuild=request.form['markedbuild']
-            Modversion.new(request.form["modid"], request.form["version"], request.form["md5"], request.form["filesize"], markedbuild)
+            Modversion.new(request.form["modid"], request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
             return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))

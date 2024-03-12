@@ -100,6 +100,7 @@ class Database:
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         mod_id INT NOT NULL,
                         version VARCHAR(255) NOT NULL,
+                        mcversion VARCHAR(255) NOT NULL,
                         md5 VARCHAR(255) NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -278,6 +279,11 @@ class Database:
             cur.execute(
                 """ALTER TABLE build_modversion
                     ADD COLUMN optional TINYINT(1) NOT NULL DEFAULT(0);
+                """
+            )
+            cur.execute(
+                """ALTER TABLE modversions
+                    ADD COLUMN mcversion VARCHAR(255) NOT NULL DEFAULT(0) AFTER version;
                 """
             )
             cur.execute(

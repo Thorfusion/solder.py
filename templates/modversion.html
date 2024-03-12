@@ -12,6 +12,10 @@
                         <input type=" text " class=" form-control " name="version" id="version">
                     </th>
                     <th scope="col">
+                        <label for=" version" class=" form-label ">MC Version</label>
+                        <input type=" text " class=" form-control " name="version" id="version">
+                    </th>
+                    <th scope="col">
                         <label for="md5" class="form-label">md5</label>
                         <input type="text" class="form-control md5_width" name="md5" id="md5">
                     </th>
@@ -27,6 +31,7 @@
             {%for versions in modversions%}
             <tr>
                 <td>{{versions.version}}</td>
+                <td>{{versions.mcversion}}</td>
                 <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5"
                         id="md5">
                 </td>
