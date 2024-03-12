@@ -96,7 +96,7 @@ class Mod:
         cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (self.id,))
         rows = cur.fetchall()
         if rows:
-            return [Modversion(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
+            return [Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
         return []
 
     def get_versions_by_id(self, id):

@@ -29,7 +29,7 @@
         <td>
           <div class="maxcont">
             <button type="button" class="btn btn-primary buttonwidth"
-              onclick="buttonpress('modid', '{{mod.id}}'); buttonpress('mod', '{{mod.name}}'); toslug(md5, mod); ">Select</button>
+              onclick="buttonpress('modid', '{{mod.id}}'); buttonpress('mod', '{{mod.name}}'); zipfile_mods('mod', 'mcversion', 'version', 'file', '0');">Select</button>
             <a href="./modversion/{{mod.id}}"><button type="button"
                 class="btn btn-secondary buttonwidth">Manage</button></a>
           </div>
@@ -45,52 +45,62 @@
   <form method="post" action="" enctype="multipart/form-data">
     <div class="mb-3">
       <label for="mod" class="form-label">selected mod</label>
-      <input type="text" class="form-control" name="mod" id="mod" readonly>
+      <input type="text" class="form-control" name="mod" id="mod" required onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '0')">
     </div>
     <div class="mb-3">
-      <label for="formFile" class="form-label">Select file only used for md5 hashing for now</label>
-      <input class="form-control" type="file" id="file" onchange="hashmd5(); filesizecalc(this);">
+      <label for="formFile" class="form-label">Select file</label>
+      <input class="form-control" type="file" id="file" required onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '1')">
     </div>
     <div class="mb-3">
-      <label for="md5" class="form-label">md5</label>
+      <label for="md5" class="form-label">md5; note that hashing also changes for timestamp</label>
       <input type="text" class="form-control" name="md5" id="md5" readonly>
     </div>
     <div class="mb-3">
       <label for="filesize" class="form-label">filesize</label>
       <input type="text" class="form-control" name="filesize" id="filesize" readonly>
     </div>
-    <label>Select type</label>
+    <label>Select type (it autodetects, to be deleted)</label>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" checked disabled>
-      <label class="form-check-label" for="flexRadioDefault1">
-        MOD.JAR
+      <input class="form-check-input" type="radio" name="filetype" id="filetypejar" checked disabled onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '0')">
+      <label class="form-check-label" for="filetypejar">
+        .jar
       </label>
     </div>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" disabled>
-      <label class="form-check-label" for="flexRadioDefault2">
+      <input class="form-check-input" type="radio" name="filetype" id="filetypelauncher" disabled>
+      <label class="form-check-label" for="filetypelauncher">
         Launcher
       </label>
     </div>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" disabled>
-      <label class="form-check-label" for="flexRadioDefault3">
-        ZIP
+      <input class="form-check-input" type="radio" name="filetype" id="filetypezip" disabled onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '0')">
+      <label class="form-check-label" for="filetypezip">
+        .zip
       </label>
     </div>
     <div class="mb-3">
-      <label for="version" class="form-label">Version number</label>
-      <input type="text" class="form-control" name="version" id="version">
+      <label for="mcversion" class="form-label">Minecraft Version number</label>
+      <input type="text" class="form-control" name="mcversion" id="mcversion" required onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '0')">
+    </div>
+    <div class="mb-3">
+      <label for="version" class="form-label">Mod Version number</label>
+      <input type="text" class="form-control" name="version" id="version" required onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '0')">
     </div>
     <div class="form-check">
       <input class="form-check-input" type="checkbox" value="1" id="markedbuild" name="markedbuild">
       <label class="form-check-label" for="markedbuild">Add to marked build?</label>
     </div>
-    <input class="btn btn-success" type="submit" value="Add Version" name="form-submit">
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" value="1" id="downloadzip" name="downloadzip" checked>
+      <label class="form-check-label" for="downloadzip">Download finished zip file?</label>
+    </div>
+    <button type="button" class="btn btn-success" onclick="zipfile_mods('mod', 'mcversion', 'version', 'file', '3')">Submit</button>
+    <input class="btn btn-success invisible" type="submit" value="Add Version" name="form-submit" name="form-submit" id="form-submit">
     <div class="mb-3">
       <input type="text" class="form-control invisible" name="modid" id="modid" readonly>
     </div>
   </form>
+  
   {% if success %}
   <div class="alert alert-success loginfail mx-auto" role="alert">
     <p>{{mod.vmd5}}</p>
@@ -113,5 +123,7 @@
 
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 <script src="{{ url_for('static',filename='js/md5.min.js') }}"></script>
+<script src="{{ url_for('static',filename='js/jszip.min.js') }}"></script>
+<script src="{{ url_for('static',filename='js/FileSaver.min.js') }}"></script>
 
 {% endblock %}
