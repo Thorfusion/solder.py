@@ -117,4 +117,68 @@ function string_to_slug (str) {
 
     return str;
 }
+
+function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
+    // selects the file
+    let dataSelect = document.getElementById(input);
+    let datas = dataSelect.files;
+    let data = datas[0];
+
+    if (verchange == "1") {
+        // Adds the version number in the file provided to minecraft version and mod version boxes
+        filename = data.name
+        filenamenumb = filename.replace(/^\D+/g, '')
+        document.getElementById(mcversion).value = filenamenumb;
+        document.getElementById(modversion).value = filenamenumb;
+    }
+
+    // gets the values in the text boxes
+    modslugname = document.getElementById(modslug).value;
+    mcversionname = document.getElementById(mcversion).value;
+    modversionname = document.getElementById(modversion).value;
+
+    if (document.getElementById("filetypejar").checked) {
+        var zip = new JSZip();
+        var mods = zip.folder("mods");
+        mods.file(modslugname + "-" + mcversionname + "-" + modversionname + ".jar", data);
+        zip.generateAsync({type:"blob"})
+        .then(function(blob) {
+            let file = blob
+        
+            var reader = new FileReader();
+            reader.onload = function (event) {
+                document.getElementById('md5').value = md5(event.target.result)
+            }; 
+            reader.readAsArrayBuffer(file);
+            document.getElementById('filesize').value = file.size;
+            if (verchange == "3") {
+                saveAs(file, modslugname + "-" + mcversionname + "-" + modversionname + ".zip");
+            }
+        });
+    }
+    if (document.getElementById("filetypezip").checked) {
+        let file = data;
     
+        var reader = new FileReader();
+        reader.onload = function (event) {
+            document.getElementById('md5').value = md5(event.target.result)
+        };
+        reader.readAsArrayBuffer(file);
+        document.getElementById('filesize').value = file.size;
+        if (verchange == "3") {
+            saveAs(file, modslugname + "-" + mcversionname + "-" + modversionname + ".zip");
+        }
+    }
+    if (verchange == "3") {
+        let finalfile = new File([file], modslugname + "-" + mcversionname + "-" + modversionname + ".zip",{type:"mime/type", lastModified:new Date().getTime()});
+
+        let container = new DataTransfer();
+        container.items.add(finalfile);
+    
+        input.files = container.files;
+
+        submit2 = '[name="' + 'form-submit' + '"]';
+        sleep(25)
+        document.querySelector(submit2).click();
+    }
+}
