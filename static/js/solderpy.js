@@ -151,7 +151,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             }; 
             reader.readAsArrayBuffer(file);
             document.getElementById('filesize').value = file.size;
-            if (verchange == "3") {
+            if (verchange == "3" & document.getElementById("downloadzip").checked) {
                 saveAs(file, modslugname + "-" + mcversionname + "-" + modversionname + ".zip");
             }
         });
@@ -165,7 +165,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
         };
         reader.readAsArrayBuffer(file);
         document.getElementById('filesize').value = file.size;
-        if (verchange == "3") {
+        if (verchange == "3" & document.getElementById("downloadzip").checked) {
             saveAs(file, modslugname + "-" + mcversionname + "-" + modversionname + ".zip");
         }
     }
