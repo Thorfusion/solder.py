@@ -6,23 +6,23 @@
     <form method="post" action="" enctype="multipart/form-data">
         <div class="mb-3">
             <label for="pretty_name" class="form-label">Mod Name</label>
-            <input type="text" class="form-control" name="pretty_name" id="pretty_name" onkeyup="toslug('name', 'pretty_name')">
+            <input type="text" class="form-control" name="pretty_name" id="pretty_name" required onkeyup="toslug('name', 'pretty_name')">
         </div>
         <div class="mb-3">
             <label for="name" class="form-label">Mod Slug</label>
-            <input type="text" class="form-control" name="name" id="name" readonly>
+            <input type="text" class="form-control" name="name" id="name" required readonly>
         </div>
         <div class="mb-3">
             <label for="author" class="form-label">Author</label>
-            <input type="text" class="form-control" name="author" id="author">
+            <input type="text" class="form-control" name="author" id="author" required>
         </div>
         <div class="mb-3">
             <label for="description" class="form-label">Description</label>
-            <textarea name="description" id="description" class="form-control" rows="5"></textarea>
+            <textarea name="description" id="description" class="form-control" rows="5" required></textarea>
         </div>
         <div class="mb-3">
             <label for="link" class="form-label">Mod Website</label>
-            <input type="text" class="form-control" name="link" id="link">
+            <input type="text" class="form-control" name="link" id="link" required>
         </div>
         <label>Select side</label>
         <div class="form-check">
@@ -38,7 +38,7 @@
           </label>
         </div>
         <div class="form-check">
-          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" value="BOTH">
+          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" value="BOTH" checked>
           <label class="form-check-label" for="flexRadioDefault3">
             Both
           </label>
