@@ -36,7 +36,11 @@
     <form method="post" action="">
         <div class="mb-3">
             <label for="modpack" class="form-label">Modpack</label>
-            <input type="number" class="form-control" name="modpack" id="modpack">
+            <select class="form-select" name="modpack" id="modpack">
+                {%for mod in modpacklibrary%}
+                <option value="{{mod.id}}">{{mod.name}}</option>
+                {%endfor%}
+            </select>
         </div>
         <input class="btn btn-success" type="submit" name="form-submit" id="form-submit" value="Add Modpack">
     </form>

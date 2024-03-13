@@ -529,7 +529,13 @@ def clients(id):
             Client_modpack.delete_client_modpack(request.form["delete_id"])
             return redirect(id)
 
-    return render_template("clients.html", clients=packs)
+    try:
+        modpacklibrary = Modpack.get_all()
+    except connector.ProgrammingError as e:
+        Database.create_tables()
+        modpacklibrary = []
+    
+    return render_template("clients.html", clients=packs, modpacklibrary=modpacklibrary)
 
 
 if __name__ == "__main__":
