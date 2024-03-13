@@ -6,7 +6,6 @@
     <table class="table table-striped table-hover maxheighttable">
         <thead class="table-light sticky-md-top">
             <tr>
-                <form method="post" action="">
                     <th scope="col">
                         <label for="version" class="form-label">Version</label>
                         <input type="text" class="form-control" name="version" id="version">
@@ -22,9 +21,8 @@
                     <th scope="col">Download URL</th>
                     <th scope="col">Filesize</th>
                     <th>
-                        <input class="btn btn-success tablewidthsearch" type="submit" value="Add Version" name="newmodvermanual_submit" id="newmodvermanual_submit">
+                        <button type="button" class="btn btn-success tablewidthsearch" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpress2('version', 'mcversion', '{{ mod.name }}', '{{mirror_url}}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
                     </th>
-                </form>
             </tr>
         </thead>
         <tbody class="">
@@ -56,6 +54,13 @@
         <input type="text" class="form-control invisible" name="rehash_id" id="rehash_id" readonly>
         <input type="text" class="form-control invisible" name="rehash_url" id="rehash_url" readonly>
         <input class="btn btn-danger invisible" type="submit" name="rehash_submit" id="rehash_submit" value="Delete">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control " name="newmodvermanual_md5" id="newmodvermanual_md5" readonly>
+        <input type="text" class="form-control " name="newmodvermanual_version" id="newmodvermanual_version" readonly>
+        <input type="text" class="form-control " name="newmodvermanual_mcversion" id="newmodvermanual_mcversion" readonly>
+        <input type="text" class="form-control " name="newmodvermanual_url" id="newmodvermanual_url" readonly>
+        <input class="btn btn-danger " type="submit" name="newmodvermanual_submit" id="newmodvermanual_submit" value="Delete">
     </form>
 </div>
 {% endblock %}
