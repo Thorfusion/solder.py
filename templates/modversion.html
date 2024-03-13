@@ -39,7 +39,7 @@
                 <td>{{versions.filesize}} bytes</td>
                 <td> 
                     <div class="maxcont">
-                    <button type="button" class="btn btn-primary buttonwidth" onclick="copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
+                    <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('rehash_url', '{{mirror_url}}{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip'); copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
                     <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'deleteversion_submit')">Delete</button>  
                 </div>
                 </td>
@@ -54,6 +54,7 @@
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="rehash_md5" id="rehash_md5" readonly>
         <input type="text" class="form-control invisible" name="rehash_id" id="rehash_id" readonly>
+        <input type="text" class="form-control invisible" name="rehash_url" id="rehash_url" readonly>
         <input class="btn btn-danger invisible" type="submit" name="rehash_submit" id="rehash_submit" value="Delete">
     </form>
 </div>
