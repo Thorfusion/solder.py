@@ -62,10 +62,11 @@ class Modversion:
 
     def rehash(self, rehash_url):
         with requests.Session() as s:
+            h = hashlib.md5()
             resp = s.get(rehash_url, stream=True)
-            data = resp.raw
-            md5 = hashlib.md5(data).hexdigest()
-            self.update_hash(md5)
+            for chunk in resp.iter_content(chunk_size=8192):
+                h.update(chunk)
+            self.update_hash(h.hexdigest())
 
     def to_json(self):
         return {
