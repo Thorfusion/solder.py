@@ -109,6 +109,16 @@
         <input class="btn btn-success" type="submit" value="Save changes" name="form-submit" id="form-submit">
         <input class="btn btn-danger" type="submit" value="Delete Mod" name="form3-submit" id="form3-submit" disabled>
     </form>
+    {% if success %}
+    <div class="alert alert-success loginfail mx-auto" role="alert">
+        <p>The server is currently hashing the file, come back again</p>
+    </div>
+    {% endif %}
+    {% if failed %}
+    <div class="alert alert-danger loginfail mx-auto" role="alert">
+        <p>Failed!</p>
+    </div>
+    {% endif %}
 </div>
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 {% endblock %}
