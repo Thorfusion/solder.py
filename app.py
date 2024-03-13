@@ -171,6 +171,9 @@ def modversion(id):
 
 @app.route("/modversion/<id>", methods=["POST"])
 def newmodversion(id):
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
     if "form-submit" in request.form:
         radio = request.form['flexRadioDefault']
         Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
