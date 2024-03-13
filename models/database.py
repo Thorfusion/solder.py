@@ -77,7 +77,7 @@ class Database:
                         is_published TINYINT(1) DEFAULT(0),
                         private TINYINT(1) DEFAULT(0),
                         min_java VARCHAR(255),
-                        min_memory INT
+                        min_memory INT,
                         marked TINYINT(1) NOT NULL DEFAULT(0)
                         )"""
             )
