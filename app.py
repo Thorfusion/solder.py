@@ -24,8 +24,6 @@ from mysql import connector
 
 from api import api
 
-from datetime import datetime
-
 new_user = False
 migratetechnic = False
 load_dotenv(".env")
