@@ -63,7 +63,7 @@ class Database:
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         `order` INT DEFAULT(0),
                         hidden TINYINT(1) DEFAULT(1),
-                        private TINYINT(1) DEFAULT(0)
+                        private TINYINT(1) DEFAULT(0),
                         pinned TINYINT(1) NOT NULL DEFAULT(0)
                         )"""
             )
@@ -77,7 +77,7 @@ class Database:
                         is_published TINYINT(1) DEFAULT(0),
                         private TINYINT(1) DEFAULT(0),
                         min_java VARCHAR(255),
-                        min_memory INT
+                        min_memory INT,
                         marked TINYINT(1) NOT NULL DEFAULT(0)
                         )"""
             )
