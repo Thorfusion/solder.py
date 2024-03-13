@@ -112,7 +112,7 @@
             <textarea name="internal_note" id="internal_note" class="form-control" rows="5">{{ mod.note }}</textarea>
         </div>
         <input class="btn btn-success" type="submit" value="Save changes" name="form-submit" id="form-submit">
-        <input class="btn btn-danger" type="submit" value="Delete Mod" name="form3-submit" id="form3-submit" disabled>
+        <button type="button" class="btn btn-danger" disabled onclick="submitbuttonpress('mod_delete_id', '{{ mod.id }}', 'deletemod_submit')">Delete Mod</button>  
     </form>
     {% if success %}
     <div class="alert alert-success loginfail mx-auto" role="alert">
@@ -124,6 +124,10 @@
         <p>Failed!</p>
     </div>
     {% endif %}
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="mod_delete_id" id="mod_delete_id" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="deletemod_submit" id="deletemod_submit" value="Delete">
+    </form>
 </div>
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 {% endblock %}
