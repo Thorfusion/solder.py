@@ -39,7 +39,7 @@
                 <td>{{versions.filesize}} bytes</td>
                 <td> 
                     <div class="maxcont">
-                    <button type="button" class="btn btn-primary buttonwidth" onclick="submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
+                    <button type="button" class="btn btn-primary buttonwidth" onclick="copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
                     <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'deleteversion_submit')">Delete</button>  
                 </div>
                 </td>

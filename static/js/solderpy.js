@@ -38,6 +38,10 @@ function buttonpress(id, val) {
     document.getElementById(id).value = val;
 }
 
+function copyformtext(out, input) {
+    document.getElementById(out).value = document.getElementById(input).value;
+}
+
 
 // Allows to have delete buttons in a table row, see usages
 function submitbuttonpress(id, val, submitid) {
