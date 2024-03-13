@@ -213,7 +213,6 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
 
         // submits the file using the invisible submit button, so this script can be run and backend see which form was submitted
         submit2 = '[name="' + 'form-submit' + '"]';
-        sleep(25)
         document.querySelector(submit2).click();
     }
 }
