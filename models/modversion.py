@@ -57,6 +57,7 @@ class Modversion:
         conn.commit()
         self.md5 = md5
         self.updated_at = datetime.datetime.now()
+        print(f"Updated hash for {self.mod_id} {self.version} to {md5}")
         return self
 
     def rehash(self, rehash_url):
