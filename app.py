@@ -188,6 +188,7 @@ def newmodversion(id):
         if "rehash_id" not in request.form:
             return redirect(url_for("clientlibrary"))
         print(request.form["rehash_id"])
+        print(request.form["rehash_md5"])
     return redirect(id)
 
 
