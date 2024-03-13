@@ -137,10 +137,10 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     mcversionname = document.getElementById(mcversion).value;
     modversionname = document.getElementById(modversion).value;
 
-    if (data.type == "application/java-archive" || data.type == "application/json") { // if the filetype is detected to be jar or json
+    if (data.type != "application/x-zip-compressed") { // if uploaded file is not a zip file
         // starts a new zipfile
         var zip = new JSZip();
-        if (data.type == "application/java-archive" && data.name != "modpack.jar") { // if the filetype is detected to be jar and filename is not modpack.jar
+        if (data.type != "application/json" && data.name != "modpack.jar") { // if the file is not modpack.jar or filetye json
             // adds a folder "mods" inside zipfile
             var mods = zip.folder("mods");
             // adds the file uploaded inside mods folder with correct naming scheme
