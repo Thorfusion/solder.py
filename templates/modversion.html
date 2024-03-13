@@ -39,7 +39,7 @@
                 <td>{{versions.filesize}} bytes</td>
                 <td> 
                     <div class="maxcont">
-                    <a href="#"><button type="button" class="btn btn-primary buttonwidth" disabled>Rehash</button></a>
+                    <button type="button" class="btn btn-primary buttonwidth" onclick="submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
                     <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'form2-submit')">Delete</button>  
                 </div>
                 </td>
@@ -50,6 +50,10 @@
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>
         <input class="btn btn-danger invisible" type="submit" name="form2-submit" id="form2-submit" value="Delete">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="rehash_id" id="rehash_id" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="rehash_submit" id="rehash_submit" value="Delete">
     </form>
 </div>
 {% endblock %}
