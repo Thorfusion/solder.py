@@ -175,7 +175,7 @@ def newmodversion(id):
         radio = request.form['flexRadioDefault']
         Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
         return redirect(id)
-    if "form2-submit" in request.form:
+    if "deleteversion_submit" in request.form:
         if "delete_id" not in request.form:
             return redirect(url_for("clientlibrary"))
         Modversion.delete_modversion(request.form["delete_id"])
