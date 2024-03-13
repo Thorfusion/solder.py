@@ -452,13 +452,12 @@ def modlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
-    if request.method == "POST":
-        if "form-submit" in request.form:
-            markedbuild=None
-            if "markedbuild" in request.form:
-                markedbuild=request.cookies.get('marked_id')
-            Modversion.new(request.form["modid"], request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
-            return redirect(url_for("modlibrary"))
+    if "form-submit" in request.form:
+        markedbuild=None
+        if "markedbuild" in request.form:
+            markedbuild=request.cookies.get('marked_id')
+        Modversion.new(request.form["modid"], request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
+        return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))
 
