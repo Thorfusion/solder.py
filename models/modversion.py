@@ -1,5 +1,7 @@
 import datetime
 from .database import Database
+import requests
+import hashlib
 
 class Modversion:
     def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=False):
@@ -56,6 +58,13 @@ class Modversion:
         self.md5 = md5
         self.updated_at = datetime.datetime.now()
         return self
+
+    def rehash(self, rehash_url):
+        with requests.Session() as s:
+            resp = s.get(rehash_url, stream=True)
+            data = resp.raw
+            md5 = hashlib.md5(data).hexdigest()
+            self.update_hash(md5)
 
     def to_json(self):
         return {

@@ -3,6 +3,8 @@ __version__ = "0.0.1-dev"
 import os
 from dotenv import load_dotenv
 
+import threading
+
 from flask import Flask, redirect, render_template, request, url_for, session, request, Response
 from werkzeug.utils import secure_filename
 
@@ -190,6 +192,14 @@ def newmodversion(id):
     if "rehash_submit" in request.form:
         if "rehash_id" not in request.form:
             return redirect(url_for("clientlibrary"))
+
+        if "rehash_md5" in request.form:
+            version = Modversion.get_by_id(request.form["rehash_id"])
+            version.update_hash(request.form["rehash_md5"])
+        else:
+            version = Modversion.get_by_id(request.form["rehash_id"])
+            t = threading.Thread(target=version.rehash, args=request.form["rehash_url"])
+            t.start()
         print(request.form["rehash_id"])
         print(request.form["rehash_md5"])
     return redirect(id)
