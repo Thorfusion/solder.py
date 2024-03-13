@@ -192,6 +192,10 @@ def newmodversion(id):
             return redirect(url_for("clientlibrary"))
         print(request.form["rehash_id"])
         print(request.form["rehash_md5"])
+    if "newmodvermanual_submit" in request.form:
+        print(request.form["version"])
+        print(request.form["mcversion"])
+        print(request.form["md5"])
     return redirect(id)
 
 
