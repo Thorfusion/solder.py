@@ -131,7 +131,7 @@ def logout():
     return redirect(url_for("login"))
 
 
-@app.route("/modversion/<id>", methods=["GET", "POST"])
+@app.route("/modversion/<id>", methods=["GET"])
 def modversion(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -167,23 +167,24 @@ def modversion(id):
         Database.create_tables()
         modversions = []
 
-    if request.method == "POST":
-        if "form-submit" in request.form:
-            radio = request.form['flexRadioDefault']
-            Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
-            return redirect(id)
-        if "form2-submit" in request.form:
-            if "delete_id" not in request.form:
-                return redirect(url_for("clientlibrary"))
-            Modversion.delete_modversion(request.form["delete_id"])
-            return redirect(id)
-        if "form3-submit" in request.form:
-            if "delete_id" not in request.form:
-                return redirect(url_for("clientlibrary"))
-            Mod.delete_mod(request.form["delete_id"])
-            return redirect(id)
-
     return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod, mirror_url=mirror_url)
+
+@app.route("/modversion/<id>", methods=["POST"])
+def newmodversion(id):
+    if "form-submit" in request.form:
+        radio = request.form['flexRadioDefault']
+        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
+        return redirect(id)
+    if "form2-submit" in request.form:
+        if "delete_id" not in request.form:
+            return redirect(url_for("clientlibrary"))
+        Modversion.delete_modversion(request.form["delete_id"])
+        return redirect(id)
+    if "form3-submit" in request.form:
+        if "delete_id" not in request.form:
+            return redirect(url_for("clientlibrary"))
+        Mod.delete_mod(request.form["delete_id"])
+    return redirect(id)
 
 
 @app.route("/newmod", methods=["GET", "POST"])
