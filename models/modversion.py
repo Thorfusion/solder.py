@@ -48,6 +48,15 @@ class Modversion:
             return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
         return None
 
+    def update_hash(self, md5):
+        conn = Database.get_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE modversions SET md5 = %s WHERE id = %s", (md5, self.id))
+        conn.commit()
+        self.md5 = md5
+        self.updated_at = datetime.datetime.now()
+        return self
+
     def to_json(self):
         return {
             "id": self.id,
@@ -56,5 +65,5 @@ class Modversion:
             "md5": self.md5,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
-            "filesize": self.filesize
+            "filesize": self.filesize,
         }
