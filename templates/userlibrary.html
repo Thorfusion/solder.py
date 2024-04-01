@@ -23,6 +23,7 @@
                 <td>
                     <div class="maxcont">
                         <a href="#"><button type="button" class="btn btn-primary" disabled readonly>Manage</button></a>
+                        <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('changeuser_user', '{{mod.username}}');buttonpress('changeuser_id', '{{mod.id}}');buttonpress('changeuser_email', '{{mod.email}}');">Select</button>
                         <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{mod.id}}', 'form2-submit')">Delete</button>  
                     </div>
                 </td>
@@ -52,6 +53,25 @@
             <input type="password" name="newpassword" class="pass form-control">
         </div>
         <input class="btn btn-success" type="submit" name="form-submit" id="form-submit" value="Add User">
+    </form>
+    <div class="divider">
+    </div>
+    <form method="post" action="">
+        <div class="mb-3">
+            <label for="changeuser_user" class="form-label">Selected User</label>
+            <input type="text" class="form-control" name="changeuser_user" id="changeuser_user">
+        </div>
+        <div class="mb-3">
+            <label for="changeuser_password" class="form-label">New Password</label>
+            <input type="password" name="changeuser_password" class="pass form-control">
+        </div>
+        <input class="btn btn-success" type="submit" name="changeuser_submit" id="changeuser_submit" value="Change password" disabled>
+        <div class="mb-3">
+            <input type="text" class="form-control invisible" name="changeuser_id" id="changeuser_id">
+        </div>
+        <div class="mb-3">
+            <input type="text" class="form-control invisible" name="changeuser_email" id="changeuser_email">
+        </div>
     </form>
     {% if success %}
     <div class="alert alert-success loginfail mx-auto" role="alert">

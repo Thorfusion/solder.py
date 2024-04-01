@@ -1,5 +1,7 @@
 import datetime
 from .database import Database
+import requests
+import hashlib
 
 class Modversion:
     def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=False):
@@ -14,7 +16,7 @@ class Modversion:
         self.optional = optional
 
     @classmethod
-    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild):
+    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild=None):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -22,10 +24,8 @@ class Modversion:
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
-        if markedbuild is "1":
-            cur.execute("SELECT id FROM builds WHERE marked = 1")
-            marked_build_id = cur.fetchone()["id"]
-            cur.execute("INSERT INTO build_modversion (modversion_id, build_id) VALUES (%s, %s)", (id, marked_build_id))
+        if markedbuild:
+            cur.execute("INSERT INTO build_modversion (modversion_id, build_id) VALUES (%s, %s)", (id, markedbuild))
             conn.commit()
         return cls(id, mod_id, version, mcversion, md5, now, now, filesize)
 
@@ -48,6 +48,24 @@ class Modversion:
             return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
         return None
 
+    def update_hash(self, md5):
+        conn = Database.get_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE modversions SET md5 = %s WHERE id = %s", (md5, self.id))
+        conn.commit()
+        self.md5 = md5
+        self.updated_at = datetime.datetime.now()
+        print(f"Updated hash for {self.mod_id} {self.version} to {md5}")
+        return self
+
+    def rehash(self, rehash_url):
+        with requests.Session() as s:
+            h = hashlib.md5()
+            resp = s.get(rehash_url, stream=True)
+            for chunk in resp.iter_content(chunk_size=8192):
+                h.update(chunk)
+            self.update_hash(h.hexdigest())
+
     def to_json(self):
         return {
             "id": self.id,
@@ -56,5 +74,5 @@ class Modversion:
             "md5": self.md5,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
-            "filesize": self.filesize
+            "filesize": self.filesize,
         }

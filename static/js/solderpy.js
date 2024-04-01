@@ -38,6 +38,10 @@ function buttonpress(id, val) {
     document.getElementById(id).value = val;
 }
 
+function copyformtext(out, input) {
+    document.getElementById(out).value = document.getElementById(input).value;
+}
+
 
 // Allows to have delete buttons in a table row, see usages
 function submitbuttonpress(id, val, submitid) {
@@ -45,6 +49,16 @@ function submitbuttonpress(id, val, submitid) {
     submit2 = '[name="' + submitid + '"]';
     sleep(25)
     document.querySelector(submit2).click();
+}
+
+function submitbuttonpress2(version, mcversion, name, url, urlform, submitid) {
+    versionname = document.getElementById(version).value;
+    mcversion = document.getElementById(mcversion).value;
+    urllink = url + name + '/' + name + '-' + mcversion + '-' + versionname + '.zip';
+    document.getElementById(urlform).value = urllink;
+    
+    submit2 = '[name="' + submitid + '"]';
+    // document.querySelector(submit2).click();
 }
 
 
@@ -137,10 +151,10 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     mcversionname = document.getElementById(mcversion).value;
     modversionname = document.getElementById(modversion).value;
 
-    if (data.type == "application/java-archive" || data.type == "application/json") { // if the filetype is detected to be jar or json
+    if (data.type != "application/x-zip-compressed") { // if uploaded file is not a zip file
         // starts a new zipfile
         var zip = new JSZip();
-        if (data.type == "application/java-archive" && data.name != "modpack.jar") { // if the filetype is detected to be jar and filename is not modpack.jar
+        if (data.type != "application/json" && data.name != "modpack.jar") { // if the file is not modpack.jar or filetye json
             // adds a folder "mods" inside zipfile
             var mods = zip.folder("mods");
             // adds the file uploaded inside mods folder with correct naming scheme
@@ -149,7 +163,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
         if (data.name == "modpack.jar") { // if the filename is detected to be modpack.jar
             // adds a folder "bin" inside zipfile
             var bin = zip.folder("bin");
-            // adds the file uploaded inside mods folder with correct naming scheme
+            // adds the file uploaded inside bin folder with correct naming scheme
             bin.file("modpack.jar", data);
         }
         if (data.type == "application/json") { // if the filetype is detected to be json
@@ -213,7 +227,6 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
 
         // submits the file using the invisible submit button, so this script can be run and backend see which form was submitted
         submit2 = '[name="' + 'form-submit' + '"]';
-        sleep(25)
         document.querySelector(submit2).click();
     }
 }

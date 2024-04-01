@@ -6,14 +6,13 @@
     <table class="table table-striped table-hover maxheighttable">
         <thead class="table-light sticky-md-top">
             <tr>
-                <form method="post" action="">
                     <th scope="col">
-                        <label for=" version" class=" form-label ">Version</label>
-                        <input type=" text " class=" form-control " name="version" id="version">
+                        <label for="version" class="form-label">Version</label>
+                        <input type="text" class="form-control" name="version" id="version">
                     </th>
                     <th scope="col">
-                        <label for=" version" class=" form-label ">MC Version</label>
-                        <input type=" text " class=" form-control " name="version" id="version">
+                        <label for="version" class="form-label">MC Version</label>
+                        <input type="text" class="form-control" name="mcversion" id="mcversion">
                     </th>
                     <th scope="col">
                         <label for="md5" class="form-label">md5</label>
@@ -22,9 +21,8 @@
                     <th scope="col">Download URL</th>
                     <th scope="col">Filesize</th>
                     <th>
-                        <input class="btn btn-success tablewidthsearch" type="submit" value="Add Version" disabled>
+                        <button type="button" class="btn btn-success tablewidthsearch" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpress2('version', 'mcversion', '{{ mod.name }}', '{{mirror_url}}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
                     </th>
-                </form>
             </tr>
         </thead>
         <tbody class="">
@@ -32,15 +30,15 @@
             <tr>
                 <td>{{versions.version}}</td>
                 <td>{{versions.mcversion}}</td>
-                <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5"
-                        id="md5">
+                <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5_{{versions.id}}"
+                        id="md5_{{versions.id}}">
                 </td>
                 <td><a class="link-primary" href="{{mirror_url}}{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip">{{ mod.name }}-{{versions.version}}.zip</a></td>
                 <td>{{versions.filesize}} bytes</td>
                 <td> 
                     <div class="maxcont">
-                    <a href="#"><button type="button" class="btn btn-primary buttonwidth" disabled>Rehash</button></a>
-                    <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'form2-submit')">Delete</button>  
+                    <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('rehash_url', '{{mirror_url}}{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip'); copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
+                    <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'deleteversion_submit')">Delete</button>  
                 </div>
                 </td>
             </tr>
@@ -49,7 +47,20 @@
     </table>
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>
-        <input class="btn btn-danger invisible" type="submit" name="form2-submit" id="form2-submit" value="Delete">
+        <input class="btn btn-danger invisible" type="submit" name="deleteversion_submit" id="deleteversion_submit" value="Delete">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="rehash_md5" id="rehash_md5" readonly>
+        <input type="text" class="form-control invisible" name="rehash_id" id="rehash_id" readonly>
+        <input type="text" class="form-control invisible" name="rehash_url" id="rehash_url" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="rehash_submit" id="rehash_submit" value="Delete">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="newmodvermanual_md5" id="newmodvermanual_md5" readonly>
+        <input type="text" class="form-control invisible" name="newmodvermanual_version" id="newmodvermanual_version" readonly>
+        <input type="text" class="form-control invisible" name="newmodvermanual_mcversion" id="newmodvermanual_mcversion" readonly>
+        <input type="text" class="form-control invisible" name="newmodvermanual_url" id="newmodvermanual_url" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="newmodvermanual_submit" id="newmodvermanual_submit" value="Delete">
     </form>
 </div>
 {% endblock %}
@@ -101,7 +112,21 @@
             <textarea name="internal_note" id="internal_note" class="form-control" rows="5">{{ mod.note }}</textarea>
         </div>
         <input class="btn btn-success" type="submit" value="Save changes" name="form-submit" id="form-submit">
-        <input class="btn btn-danger" type="submit" value="Delete Mod" name="form3-submit" id="form3-submit" disabled>
+        <button type="button" class="btn btn-danger" disabled onclick="submitbuttonpress('mod_delete_id', '{{ mod.id }}', 'deletemod_submit')">Delete Mod</button>  
+    </form>
+    {% if success %}
+    <div class="alert alert-success loginfail mx-auto" role="alert">
+        <p>The server is currently hashing the file, come back again</p>
+    </div>
+    {% endif %}
+    {% if failed %}
+    <div class="alert alert-danger loginfail mx-auto" role="alert">
+        <p>Failed!</p>
+    </div>
+    {% endif %}
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="mod_delete_id" id="mod_delete_id" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="deletemod_submit" id="deletemod_submit" value="Delete">
     </form>
 </div>
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>

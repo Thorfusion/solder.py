@@ -3,6 +3,8 @@ __version__ = "0.0.1-dev"
 import os
 from dotenv import load_dotenv
 
+import threading
+
 from flask import Flask, redirect, render_template, request, url_for, session, request, Response
 from werkzeug.utils import secure_filename
 
@@ -23,8 +25,6 @@ from models.build_modversion import Build_modversion
 from mysql import connector
 
 from api import api
-
-from datetime import datetime
 
 new_user = False
 migratetechnic = False
@@ -133,7 +133,7 @@ def logout():
     return redirect(url_for("login"))
 
 
-@app.route("/modversion/<id>", methods=["GET", "POST"])
+@app.route("/modversion/<id>", methods=["GET"])
 def modversion(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -169,23 +169,45 @@ def modversion(id):
         Database.create_tables()
         modversions = []
 
-    if request.method == "POST":
-        if "form-submit" in request.form:
-            radio = request.form['flexRadioDefault']
-            Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
-            return redirect(id)
-        if "form2-submit" in request.form:
-            if "delete_id" not in request.form:
-                return redirect(url_for("clientlibrary"))
-            Modversion.delete_modversion(request.form["delete_id"])
-            return redirect(id)
-        if "form3-submit" in request.form:
-            if "delete_id" not in request.form:
-                return redirect(url_for("clientlibrary"))
-            Mod.delete_mod(request.form["delete_id"])
-            return redirect(id)
-
     return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod, mirror_url=mirror_url)
+
+@app.route("/modversion/<id>", methods=["POST"])
+def newmodversion(id):
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+    if "form-submit" in request.form:
+        radio = request.form['flexRadioDefault']
+        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
+        return redirect(id)
+    if "deleteversion_submit" in request.form:
+        if "delete_id" not in request.form:
+            return redirect(id)
+        Modversion.delete_modversion(request.form["delete_id"])
+        return redirect(id)
+    if "deletemod_submit" in request.form:
+        if "mod_delete_id" not in request.form:
+            return redirect(id)
+        Mod.delete_mod(request.form["mod_delete_id"])
+    if "rehash_submit" in request.form:
+        if "rehash_id" not in request.form:
+            return redirect(url_for("clientlibrary"))
+
+        if request.form["rehash_md5"] != "":
+            version = Modversion.get_by_id(request.form["rehash_id"])
+            version.update_hash(request.form["rehash_md5"])
+        else:
+            version = Modversion.get_by_id(request.form["rehash_id"])
+            t = threading.Thread(target=version.rehash, args=(request.form["rehash_url"],))
+            t.start()
+        print(request.form["rehash_id"])
+        print(request.form["rehash_md5"])
+    if "newmodvermanual_submit" in request.form:
+        print(request.form["newmodvermanual_md5"])
+        print(request.form["newmodvermanual_version"])
+        print(request.form["newmodvermanual_mcversion"])
+        print(request.form["newmodvermanual_url"])
+    return redirect(id)
 
 
 @app.route("/newmod", methods=["GET", "POST"])
@@ -431,13 +453,12 @@ def modlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
-    if request.method == "POST":
-        if "form-submit" in request.form:
-            markedbuild="0"
-            if "markedbuild" in request.form:
-                markedbuild=request.form['markedbuild']
-            Modversion.new(request.form["modid"], request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
-            return redirect(url_for("modlibrary"))
+    if "form-submit" in request.form:
+        markedbuild=None
+        if "markedbuild" in request.form:
+            markedbuild=request.cookies.get('marked_id')
+        Modversion.new(request.form["modid"], request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
+        return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))
 
@@ -510,7 +531,13 @@ def clients(id):
             Client_modpack.delete_client_modpack(request.form["delete_id"])
             return redirect(id)
 
-    return render_template("clients.html", clients=packs)
+    try:
+        modpacklibrary = Modpack.get_all()
+    except connector.ProgrammingError as e:
+        Database.create_tables()
+        modpacklibrary = []
+    
+    return render_template("clients.html", clients=packs, modpacklibrary=modpacklibrary)
 
 
 if __name__ == "__main__":
