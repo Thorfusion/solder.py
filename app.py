@@ -448,6 +448,9 @@ def modpackbuild(id):
                 return redirect(id)
             Build_modversion.delete_build_modversion(request.form["delete_id"])
             return redirect(id)
+        if "deletebuild_submit" in request.form:
+            Build.delete_build(id)
+            return redirect(url_for("modpacklibrary"))
 
     return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname)
 

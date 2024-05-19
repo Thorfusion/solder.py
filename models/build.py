@@ -37,6 +37,15 @@ class Build:
         cls(id, modpack_id, version, now, now, minecraft, "0", is_published, private, min_java, min_memory, "0")
 
     @classmethod
+    def delete_build(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (id,))
+        cur.execute("DELETE FROM builds WHERE id=%s", (id,))
+        conn.commit()
+        return None
+
+    @classmethod
     def update(cls, id, version, minecraft, is_published, private, min_java, min_memory):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
