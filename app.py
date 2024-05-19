@@ -210,11 +210,11 @@ def newmodversion(id):
         print(request.form["newmodvermanual_mcversion"])
         print(request.form["newmodvermanual_url"])
         if request.form["newmodvermanual_md5"] != "":
-            markedbuild=None
+            markedbuild="0"
             # Todo Add filesize rehash
             Modversion.new(request.form[id], request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], request.form["filesize"], markedbuild)
         else:
-            markedbuild=None
+            markedbuild="0"
             # Todo Add filesize rehash and md5 hash
             Modversion.new(request.form[id], request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["hahsh_md5"], request.form["filesize"], markedbuild)
     return redirect(id)
@@ -463,10 +463,11 @@ def modlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
+
     if "form-submit" in request.form:
-        markedbuild=None
+        markedbuild="0"
         if "markedbuild" in request.form:
-            markedbuild=request.cookies.get('marked_id')
+            markedbuild=request.form['markedbuild']
         Modversion.new(request.form["modid"], request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
         return redirect(url_for("modlibrary"))
 
