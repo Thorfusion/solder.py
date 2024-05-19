@@ -9,6 +9,7 @@ from flask import Flask, redirect, render_template, request, url_for, session, r
 from werkzeug.utils import secure_filename
 
 import secrets
+import boto3
 
 from models.database import Database
 from models.user import User
@@ -53,6 +54,19 @@ app.secret_key = secrets.token_hex()
 
 Session.start_session_loop()
 
+R2_ENDPOINT = os.getenv("R2_ENDPOINT")
+R2_URL = os.getenv("R2_URL")
+R2_REGION = os.getenv("R2_REGION")
+R2_ACCESS_KEY = os.getenv("R2_ACCESS_KEY")
+R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
+R2_BUCKET = os.getenv("R2_BUCKET")
+
+
+R2 = boto3.client('s3',
+                    region_name=R2_REGION,
+                    endpoint_url=R2_ENDPOINT,
+                    aws_access_key_id=R2_ACCESS_KEY,
+                    aws_secret_access_key=R2_SECRET_KEY)
 
 def createFolder(dirName):
     os.makedirs(dirName, exist_ok=True)
@@ -473,7 +487,7 @@ def modlibrary():
 
     return render_template("modlibrary.html", mods=mods)
 
-@app.route("/modlibrary", methods=["POST"])
+@app.route("/modlibrary", methods=["POST", "PUT"])
 def modlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -496,9 +510,10 @@ def modlibrary_post():
             print("saving")
             createFolder(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/")
             filew.save(os.path.join(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/", filename))
-        print(filew.filename)
-        print(request.form["mod"])
-        return redirect(url_for("modlibrary"))
+            if R2_BUCKET != "":
+                keyname = "mods/" + request.form["mod"] + "/" + filename
+                R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + filename, R2_BUCKET, keyname)
+            return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))
 
