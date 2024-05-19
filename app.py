@@ -46,7 +46,7 @@ db_name = os.getenv("DB_DATABASE")
 app: Flask = Flask(__name__)
 app.register_blueprint(api)
 
-app.config["UPLOAD_FOLDER"] = "./static/mods/"
+app.config["UPLOAD_FOLDER"] = "./mods/"
 ALLOWED_EXTENSIONS = {'zip'}
 
 app.secret_key = secrets.token_hex()
