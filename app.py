@@ -1,4 +1,4 @@
-__version__ = "0.0.1-dev"
+__version__ = "0.1.1-dev"
 
 import os
 from dotenv import load_dotenv
@@ -292,7 +292,7 @@ def mainsettings():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=r2_url, db_name=db_name)
+    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=r2_url, db_name=db_name, versr=__version__)
 
 
 @app.route("/apikeylibrary", methods=["GET"])
