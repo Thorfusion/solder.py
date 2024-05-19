@@ -48,8 +48,8 @@
       <input type="text" class="form-control" name="mod" id="mod" required onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '0')">
     </div>
     <div class="mb-3">
-      <label for="formFile" class="form-label">Select file</label>
-      <input class="form-control" type="file" id="file" required onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '1')">
+      <label for="file" class="form-label">Select file</label>
+      <input class="form-control" type="file" id="file" name="file" required onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '1')">
     </div>
     <div class="mb-3">
       <label for="md5" class="form-label">md5; note that hashing also changes for timestamp</label>
@@ -59,7 +59,7 @@
       <label for="filesize" class="form-label">filesize</label>
       <input type="text" class="form-control" name="filesize" id="filesize" readonly>
     </div>
-    <label>Select type (it autodetects, buttons do nothing)</label>
+    <label>Type detected (buttons do nothing)</label>
     <div class="form-check">
       <input class="form-check-input" type="radio" name="filetype" id="filetypejar" readonly>
       <label class="form-check-label" for="filetypejar">

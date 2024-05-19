@@ -46,7 +46,8 @@ db_name = os.getenv("DB_DATABASE")
 app: Flask = Flask(__name__)
 app.register_blueprint(api)
 
-app.config["UPLOAD_FOLDER"] = "./mods/"
+app.config["UPLOAD_FOLDER"] = "./static/mods/"
+ALLOWED_EXTENSIONS = {'zip'}
 
 app.secret_key = secrets.token_hex()
 
@@ -56,6 +57,9 @@ Session.start_session_loop()
 def createFolder(dirName):
     os.makedirs(dirName, exist_ok=True)
 
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route("/")
 def index():
@@ -480,6 +484,20 @@ def modlibrary_post():
         if "markedbuild" in request.form:
             markedbuild=request.form['markedbuild']
         Modversion.new(request.form["modid"], request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
+        if 'file' not in request.files:
+            print('No file part')
+            return redirect(url_for("modlibrary"))
+        filew = request.files['file']
+        if filew.filename == '':
+            print('No selected file')
+            return redirect(url_for("modlibrary"))
+        if filew and allowed_file(filew.filename):
+            filename = secure_filename(filew.filename)
+            print("saving")
+            createFolder(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/")
+            filew.save(os.path.join(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/", filename))
+        print(filew.filename)
+        print(request.form["mod"])
         return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))
