@@ -19,7 +19,7 @@ class Build:
         self.marked = marked
 
     @classmethod
-    def new(cls, modpack_id, version, minecraft, is_published, private, min_java, min_memory):
+    def new(cls, modpack_id, version, minecraft, is_published, private, min_java, min_memory, clone_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -27,6 +27,13 @@ class Build:
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
+        if clone_id != "":
+            cur.execute("SELECT * FROM build_modversion WHERE build_id = %s", (clone_id,))
+            modversions = cur.fetchall()
+            if modversions:
+                for mv in modversions:
+                    cur.execute("INSERT INTO build_modversion (modversion_id, build_id) VALUES (%s, %s)", (mv["modversion_id"], id))
+            conn.commit()
         cls(id, modpack_id, version, now, now, minecraft, "0", is_published, private, min_java, min_memory, "0")
 
     @classmethod

@@ -92,10 +92,10 @@
         </div>
         <div class="mb-3">
             <label for="clonebuild" class="form-label">Clone build</label>
-            <select class="form-select" name="clonebuild" id="clonebuild" disabled>
-                <option>Do not clone</option>
+            <select class="form-select" name="clonebuild" id="clonebuild">
+                <option value="">Do not clone</option>
                 {%for mod in modpack%}
-                <option>{{mod.version}}</option>
+                <option value="{{mod.id}}">{{mod.version}}</option>
                 {%endfor%}
             </select>
         </div>

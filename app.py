@@ -262,7 +262,10 @@ def modpack(id):
                 publish=request.form['publish']
             if "private" in request.form:
                 private=request.form['private']
-            Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
+            clonebuild=""
+            if "clonebuild" in request.form:
+                clonebuild=request.form['clonebuild']
+            Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild)
             return redirect(id)
         if "recommended_submit" in request.form:
             Build.update_checkbox(id, request.form["recommended_modid"], "recommended", "modpacks")
