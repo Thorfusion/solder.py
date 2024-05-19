@@ -28,7 +28,7 @@ class Modversion:
             cur.execute("SELECT id FROM builds WHERE marked = 1")
             marked_build_id = cur.fetchone()["id"]
             # Todo when new modversion is added to build, old modversion gets deleted, quite tricky as both values are unique each time and you need to get all modversion and delete them on said build.
-            cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (mod_id))
+            cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (mod_id,))
             modversions = cur.fetchall()
             if modversions:
                 for mv in modversions:
