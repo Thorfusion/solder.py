@@ -58,7 +58,7 @@ function submitbuttonpress2(version, mcversion, name, url, urlform, submitid) {
     document.getElementById(urlform).value = urllink;
     
     submit2 = '[name="' + submitid + '"]';
-    // document.querySelector(submit2).click();
+    document.querySelector(submit2).click();
 }
 
 
