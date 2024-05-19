@@ -59,23 +59,23 @@
       <label for="filesize" class="form-label">filesize</label>
       <input type="text" class="form-control" name="filesize" id="filesize" readonly>
     </div>
-    <label>Select type (it autodetects, to be deleted)</label>
+    <label>Select type (it autodetects, buttons do nothing)</label>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="filetype" id="filetypejar" checked disabled onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '0')">
+      <input class="form-check-input" type="radio" name="filetype" id="filetypejar" readonly>
       <label class="form-check-label" for="filetypejar">
-        .jar
+        mod.jar
       </label>
     </div>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="filetype" id="filetypelauncher" disabled>
+      <input class="form-check-input" type="radio" name="filetype" id="filetypelauncher" readonly>
       <label class="form-check-label" for="filetypelauncher">
         Launcher
       </label>
     </div>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="filetype" id="filetypezip" disabled onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '0')">
+      <input class="form-check-input" type="radio" name="filetype" id="filetypezip" readonly>
       <label class="form-check-label" for="filetypezip">
-        .zip
+        any.zip
       </label>
     </div>
     <div class="mb-3">

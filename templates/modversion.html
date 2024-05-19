@@ -7,11 +7,11 @@
         <thead class="table-light sticky-md-top">
             <tr>
                     <th scope="col">
-                        <label for="version" class="form-label">Version</label>
+                        <label for="version" class="form-label">MC_Version-MOD_Version</label>
                         <input type="text" class="form-control" name="version" id="version">
                     </th>
                     <th scope="col">
-                        <label for="version" class="form-label">MC Version</label>
+                        <label for="version" class="form-label">MC Version in Database</label>
                         <input type="text" class="form-control" name="mcversion" id="mcversion">
                     </th>
                     <th scope="col">
@@ -21,7 +21,7 @@
                     <th scope="col">Download URL</th>
                     <th scope="col">Filesize</th>
                     <th>
-                        <button type="button" class="btn btn-success tablewidthsearch" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpress2('version', 'mcversion', '{{ mod.name }}', '{{mirror_url}}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
+                        <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpress2('version', 'mcversion', '{{ mod.name }}', '{{mirror_url}}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
                     </th>
             </tr>
         </thead>
@@ -38,7 +38,8 @@
                 <td> 
                     <div class="maxcont">
                     <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('rehash_url', '{{mirror_url}}{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip'); copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
-                    <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'deleteversion_submit')">Delete</button>  
+                    <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'deleteversion_submit')">Delete</button>
+                    <button type="button" class="btn btn-secondary" onclick="submitbuttonpress('addtoselbuild_id', '{{versions.id}}', 'addtoselbuild_submit')">AddToSelBuild</button>   
                 </div>
                 </td>
             </tr>
@@ -48,6 +49,10 @@
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>
         <input class="btn btn-danger invisible" type="submit" name="deleteversion_submit" id="deleteversion_submit" value="Delete">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="addtoselbuild_id" id="addtoselbuild_id" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="addtoselbuild_submit" id="addtoselbuild_submit" value="Delete">
     </form>
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="rehash_md5" id="rehash_md5" readonly>

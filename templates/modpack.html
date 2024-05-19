@@ -33,7 +33,7 @@
                         mod.is_published %}checked{% endif %} ></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" onclick="submitecheckedpress('private_modid', '{{mod.id}}', 'private_check', 'private_{{mod.id}}', 'private_submit')" {% if mod.private
                         %}checked{% endif %} ></td>
-                <td><input class="form-check-input" type="radio" name="markedbuild" id="marked_{{mod.id}}" onclick="document.cookie='marked_id={{mod.id}}'"; {% if mod.marked
+                <td><input class="form-check-input" type="radio" name="markedbuild" id="marked_{{mod.id}}" onclick="submitecheckedpress('marked_modid', '{{mod.id}}', 'marked_check', 'marked_{{mod.id}}', 'marked_submit')" {% if mod.marked
                         %}checked{% endif %} ></td>
                 <td>
                     <div class="maxcont">
@@ -92,10 +92,10 @@
         </div>
         <div class="mb-3">
             <label for="clonebuild" class="form-label">Clone build</label>
-            <select class="form-select" name="clonebuild" id="clonebuild" disabled>
-                <option>Do not clone</option>
+            <select class="form-select" name="clonebuild" id="clonebuild">
+                <option value="">Do not clone</option>
                 {%for mod in modpack%}
-                <option>{{mod.version}}</option>
+                <option value="{{mod.id}}">{{mod.version}}</option>
                 {%endfor%}
             </select>
         </div>

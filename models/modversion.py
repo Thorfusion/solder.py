@@ -16,7 +16,7 @@ class Modversion:
         self.optional = optional
 
     @classmethod
-    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild=None):
+    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -24,10 +24,30 @@ class Modversion:
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
-        if markedbuild:
-            cur.execute("INSERT INTO build_modversion (modversion_id, build_id) VALUES (%s, %s)", (id, markedbuild))
+        if markedbuild is "1":
+            cur.execute("SELECT id FROM builds WHERE marked = 1")
+            marked_build_id = cur.fetchone()["id"]
+            # when new modversion is added to build, old modversion gets deleted, quite tricky as both values are unique each time and you need to get all modversion and delete them on said build.
+            cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (mod_id,))
+            modversions = cur.fetchall()
+            if modversions:
+                for mv in modversions:
+                    cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s AND build_id = %s", (mv["id"], marked_build_id))
+            cur.execute("INSERT INTO build_modversion (modversion_id, build_id) VALUES (%s, %s)", (id, marked_build_id))
             conn.commit()
         return cls(id, mod_id, version, mcversion, md5, now, now, filesize)
+    
+    @classmethod
+    def add_modversion_to_selected_build(cls, modver_id, mod_id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id FROM builds WHERE marked = 1")
+        marked_build_id = cur.fetchone()["id"]
+        # when new modversion is added to build, old modversion gets deleted, quite tricky as both values are unique each time and you need to get all modversion and delete them on said build.
+        cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s AND build_id = %s", (mod_id, marked_build_id))
+        cur.execute("INSERT INTO build_modversion (modversion_id, build_id) VALUES (%s, %s)", (modver_id, marked_build_id))
+        conn.commit()
+        return None
 
     @classmethod
     def delete_modversion(cls, id):

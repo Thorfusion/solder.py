@@ -1,4 +1,4 @@
-__version__ = "0.0.1-dev"
+__version__ = "0.1.1-dev"
 
 import os
 from dotenv import load_dotenv
@@ -185,6 +185,11 @@ def newmodversion(id):
             return redirect(id)
         Modversion.delete_modversion(request.form["delete_id"])
         return redirect(id)
+    if "addtoselbuild_submit" in request.form:
+        if "addtoselbuild_id" not in request.form:
+            return redirect(id)
+        Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id)
+        return redirect(id)
     if "deletemod_submit" in request.form:
         if "mod_delete_id" not in request.form:
             return redirect(id)
@@ -194,9 +199,11 @@ def newmodversion(id):
             return redirect(url_for("clientlibrary"))
 
         if request.form["rehash_md5"] != "":
+            # Todo Add filesize rehash
             version = Modversion.get_by_id(request.form["rehash_id"])
             version.update_hash(request.form["rehash_md5"])
         else:
+            # Todo Add filesize rehash
             version = Modversion.get_by_id(request.form["rehash_id"])
             t = threading.Thread(target=version.rehash, args=(request.form["rehash_url"],))
             t.start()
@@ -207,6 +214,14 @@ def newmodversion(id):
         print(request.form["newmodvermanual_version"])
         print(request.form["newmodvermanual_mcversion"])
         print(request.form["newmodvermanual_url"])
+        if request.form["newmodvermanual_md5"] != "":
+            markedbuild="0"
+            # Todo Add filesize rehash
+            Modversion.new(request.form[id], request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], request.form["filesize"], markedbuild)
+        else:
+            markedbuild="0"
+            # Todo Add filesize rehash and md5 hash
+            Modversion.new(request.form[id], request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["hahsh_md5"], request.form["filesize"], markedbuild)
     return redirect(id)
 
 
@@ -247,7 +262,10 @@ def modpack(id):
                 publish=request.form['publish']
             if "private" in request.form:
                 private=request.form['private']
-            Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
+            clonebuild=""
+            if "clonebuild" in request.form:
+                clonebuild=request.form['clonebuild']
+            Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild)
             return redirect(id)
         if "recommended_submit" in request.form:
             Build.update_checkbox(id, request.form["recommended_modid"], "recommended", "modpacks")
@@ -274,7 +292,7 @@ def mainsettings():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=r2_url, db_name=db_name)
+    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=r2_url, db_name=db_name, versr=__version__)
 
 
 @app.route("/apikeylibrary", methods=["GET"])
@@ -430,6 +448,9 @@ def modpackbuild(id):
                 return redirect(id)
             Build_modversion.delete_build_modversion(request.form["delete_id"])
             return redirect(id)
+        if "deletebuild_submit" in request.form:
+            Build.delete_build(id)
+            return redirect(url_for("modpacklibrary"))
 
     return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname)
 
@@ -453,10 +474,11 @@ def modlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
+
     if "form-submit" in request.form:
-        markedbuild=None
+        markedbuild="0"
         if "markedbuild" in request.form:
-            markedbuild=request.cookies.get('marked_id')
+            markedbuild=request.form['markedbuild']
         Modversion.new(request.form["modid"], request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
         return redirect(url_for("modlibrary"))
 

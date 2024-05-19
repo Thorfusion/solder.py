@@ -58,7 +58,7 @@ function submitbuttonpress2(version, mcversion, name, url, urlform, submitid) {
     document.getElementById(urlform).value = urllink;
     
     submit2 = '[name="' + submitid + '"]';
-    // document.querySelector(submit2).click();
+    document.querySelector(submit2).click();
 }
 
 
@@ -159,18 +159,21 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             var mods = zip.folder("mods");
             // adds the file uploaded inside mods folder with correct naming scheme
             mods.file(modslugname + "-" + mcversionname + "-" + modversionname + ".jar", data);
+            document.getElementById("filetypejar").checked = true;
         }
         if (data.name == "modpack.jar") { // if the filename is detected to be modpack.jar
             // adds a folder "bin" inside zipfile
             var bin = zip.folder("bin");
             // adds the file uploaded inside bin folder with correct naming scheme
             bin.file("modpack.jar", data);
+            document.getElementById("filetypelauncher").checked = true;
         }
         if (data.type == "application/json") { // if the filetype is detected to be json
             // adds a folder "bin" inside zipfile
             var bin = zip.folder("bin");
             // adds the file uploaded inside bin folder with correct naming scheme
             bin.file("version.json", data);
+            document.getElementById("filetypelauncher").checked = true;
             
         }
         // generates the zipfile
@@ -213,6 +216,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
         if (verchange == "3" & document.getElementById("downloadzip").checked) {
             saveAs(file, modslugname + "-" + mcversionname + "-" + modversionname + ".zip");
         }
+        document.getElementById("filetypezip").checked = true;
     } 
     if (verchange == "3") { // if submitting the form
 
