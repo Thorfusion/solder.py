@@ -185,6 +185,11 @@ def newmodversion(id):
             return redirect(id)
         Modversion.delete_modversion(request.form["delete_id"])
         return redirect(id)
+    if "addtoselbuild_submit" in request.form:
+        if "addtoselbuild_id" not in request.form:
+            return redirect(id)
+        Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id)
+        return redirect(id)
     if "deletemod_submit" in request.form:
         if "mod_delete_id" not in request.form:
             return redirect(id)
