@@ -15,41 +15,29 @@ With new features like allowing solder to be used on multiple launchers and much
 We strive to keep the efficiency and simplicity of use at a top, removing unnecessary steps and keeping a simple look.
 solder.py is even compatible with original solder's database, visit the install section below.
 
-## Features over original solder when solder.py is released
+## Features over original solder
 
++ Easy install with docker
 + Native Mod uploading
-+ MCIL optional mod tag
-+ Pin your favorite modpacks to your menu!
++ Internal descriptions of mods
++ Function that allows mod version being uploaded/added to auto add/replace in selected build
 + Clone builds from other modpacks
-+ R2 bucket integration, host your files on the cloud!  
++ R2 bucket integration with mod uploading, host your files on the cloud!  
 
-# Features to be added after release
+# Features to be added in the future
 
 + Maven integration
 + Modrinth integration
 + MCIL export support
 + Advanced user management
 
-
-## Features over original solder when solder.py working as of now
-
-+ Easy install with docker
-+ Internal descriptions of mods
-+ Ability to automaticly add mods to a selected modpack build
-+ Technic solder api
-  + yes, solder.py can actually host
-+ You can view everything, and edit most of the settings.
-
-
 ## Features in dev
 
-+ Mod uploading
-+ Adding mods in modpack builds
++ MCIL optional mod tag
++ Adding mods in modpack builds, you can currently use add to selected build function
 + Hashing mods, partially done
-+ Clone modpack builds
-+ Pinning modpack to menu
 + Changing mod version in modpack builds
-
++ Pin your favorite modpacks to your menu!
 
 # Installation/Updating
 
@@ -155,7 +143,7 @@ This is the location of your mod reposistory. This can be a URL (remote repo), o
 SOLDER_REPO_LOCATION=https://solder.example.com/mods/
 ```
 
-#### R2 Bucket Variables (Not implemented as of yet)
+#### R2 Bucket Variables
 
 ```bash
 R2_ENDPOINT=
@@ -169,6 +157,10 @@ R2_ACCESS_KEY=123
 R2_SECRET_KEY=123
 ```
 
+```bash
+R2_BUCKET=
+```
+
 #### Adding a new user
 
 Enables the /setup page if the database already exists and you need to add a new user
@@ -176,7 +168,7 @@ Enables the /setup page if the database already exists and you need to add a new
 NEW_USER=True
 ```
 
-#### Migration from technic solder database to solder.py
+#### Upgrading technic solder database to solder.py, keeps compability to technic solder
 
 If new user is enabled, you can enable this migration tool for technic solder database, to migrate it to solder.py, mainly fixes mysql database bugs and adds columns and is reverse compatible with original technic solder
 ```bash
@@ -191,4 +183,6 @@ NOTE: The docker image does not and will not support https, therefore it is requ
 python -m pip install pipenv
 python -m pipenv install
 python -m pipenv run app
+
+python -m pipenv lock
 ```
