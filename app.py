@@ -1,4 +1,4 @@
-__version__ = "0.1.1-dev"
+__version__ = "0.1.2-dev"
 
 import os
 from dotenv import load_dotenv
@@ -9,6 +9,7 @@ from flask import Flask, redirect, render_template, request, url_for, session, r
 from werkzeug.utils import secure_filename
 
 import secrets
+import boto3
 
 from models.database import Database
 from models.user import User
@@ -47,15 +48,32 @@ app: Flask = Flask(__name__)
 app.register_blueprint(api)
 
 app.config["UPLOAD_FOLDER"] = "./mods/"
+ALLOWED_EXTENSIONS = {'zip'}
 
 app.secret_key = secrets.token_hex()
 
 Session.start_session_loop()
 
+R2_ENDPOINT = os.getenv("R2_ENDPOINT")
+R2_URL = os.getenv("R2_URL")
+R2_REGION = os.getenv("R2_REGION")
+R2_ACCESS_KEY = os.getenv("R2_ACCESS_KEY")
+R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
+R2_BUCKET = os.getenv("R2_BUCKET")
+
+
+R2 = boto3.client('s3',
+                    region_name=R2_REGION,
+                    endpoint_url=R2_ENDPOINT,
+                    aws_access_key_id=R2_ACCESS_KEY,
+                    aws_secret_access_key=R2_SECRET_KEY)
 
 def createFolder(dirName):
     os.makedirs(dirName, exist_ok=True)
 
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route("/")
 def index():
@@ -263,8 +281,10 @@ def modpack(id):
             if "private" in request.form:
                 private=request.form['private']
             clonebuild=""
-            if "clonebuild" in request.form:
+            if "clonebuild" in request.form and request.form['clonebuild'] != "":
                 clonebuild=request.form['clonebuild']
+            if "clonebuildman" in request.form and request.form['clonebuildman'] != "":
+                clonebuild=request.form['clonebuildman']
             Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild)
             return redirect(id)
         if "recommended_submit" in request.form:
@@ -292,7 +312,7 @@ def mainsettings():
         # New or invalid session, send to login
         return redirect(url_for("login"))
 
-    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=r2_url, db_name=db_name, versr=__version__)
+    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET)
 
 
 @app.route("/apikeylibrary", methods=["GET"])
@@ -469,7 +489,7 @@ def modlibrary():
 
     return render_template("modlibrary.html", mods=mods)
 
-@app.route("/modlibrary", methods=["POST"])
+@app.route("/modlibrary", methods=["POST", "PUT"])
 def modlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -480,7 +500,22 @@ def modlibrary_post():
         if "markedbuild" in request.form:
             markedbuild=request.form['markedbuild']
         Modversion.new(request.form["modid"], request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
-        return redirect(url_for("modlibrary"))
+        if 'file' not in request.files:
+            print('No file part')
+            return redirect(url_for("modlibrary"))
+        filew = request.files['file']
+        if filew.filename == '':
+            print('No selected file')
+            return redirect(url_for("modlibrary"))
+        if filew and allowed_file(filew.filename):
+            filename = secure_filename(filew.filename)
+            print("saving")
+            createFolder(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/")
+            filew.save(os.path.join(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/", filename))
+            if R2_BUCKET != "":
+                keyname = "mods/" + request.form["mod"] + "/" + filename
+                R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + filename, R2_BUCKET, keyname)
+            return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))
 

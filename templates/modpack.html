@@ -90,14 +90,17 @@
             <label for="mcversion" class="form-label">Minecraft version</label>
             <input type="text" class="form-control" name="mcversion" id="mcversion" required></input>
         </div>
-        <div class="mb-3">
-            <label for="clonebuild" class="form-label">Clone build</label>
-            <select class="form-select" name="clonebuild" id="clonebuild">
-                <option value="">Do not clone</option>
+        <div class="mb-3 gridswrapper">
+            <label for="clonebuild" class="form-label grid1">Clone build</label>
+            <label for="clonebuildman" class="form-label grid3">Clone Build ID</label>
+            <select class="form-select grid2" name="clonebuild" id="clonebuild">
+                <option value="">N/A</option>
                 {%for mod in modpack%}
                 <option value="{{mod.id}}">{{mod.version}}</option>
                 {%endfor%}
             </select>
+            
+            <input type="text" class="form-control grid4" name="clonebuildman" id="clonebuildman"></input>
         </div>
         <div class="mb-3">
             <label for="min_java" class="form-label">Minium Java Version</label>
