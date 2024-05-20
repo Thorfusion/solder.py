@@ -15,9 +15,9 @@
         <tbody class="">
             {%for mod in clients%}
             <tr>
-                <td class="tablemaxwidth">{{mod.client_id}}</td>
+                <td class="tablemaxwidth">{{mod.client_name}}</td>
                 <td class="tablemaxwidth">{{mod.modpack_id}}</td>
-                <td class="tablemaxwidth">{{mod.modpack_id}}</td>
+                <td class="tablemaxwidth">{{mod.modpack_name}}</td>
                 <td><button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{mod.id}}', 'form2-submit')">Delete</button></td>
             </tr>
             {%endfor%}
