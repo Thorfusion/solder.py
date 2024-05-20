@@ -217,11 +217,11 @@ def newmodversion(id):
             return redirect(url_for("clientlibrary"))
 
         if request.form["rehash_md5"] != "":
-            # Todo Add filesize rehash, if fails do not update
+            # Todo Add filesize rehash, if fails do not update filesize
             version = Modversion.get_by_id(request.form["rehash_id"])
             version.update_hash(request.form["rehash_md5"])
         else:
-            # Todo Add filesize rehash, if fails do not update
+            # Todo Add filesize rehash, if fails do not update filesize
             version = Modversion.get_by_id(request.form["rehash_id"])
             t = threading.Thread(target=version.rehash, args=(request.form["rehash_url"],))
             t.start()
