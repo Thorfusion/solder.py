@@ -434,12 +434,16 @@ def modpackbuild(id):
     try:
         packbuild = Build.get_by_id(id)
         modpackbuild = packbuild.get_modversions_minimal()
+        
         packbuildname = Build.get_modpackname_by_id(id)
-        mods = Mod.get_multi_by_id(
-            tuple(build_modversion.mod_id for build_modversion in modpackbuild))
-        mod_mapping = {mod.id: mod for mod in mods}
-        mod_version_combo = [(mod_mapping[build_modversion.mod_id],
-                              build_modversion) for build_modversion in modpackbuild]
+        if modpackbuild:
+            mods = Mod.get_multi_by_id(
+                tuple(build_modversion.mod_id for build_modversion in modpackbuild))
+            mod_mapping = {mod.id: mod for mod in mods}
+            mod_version_combo = [(mod_mapping[build_modversion.mod_id],
+                                build_modversion) for build_modversion in modpackbuild]
+        if not modpackbuild:
+            mod_version_combo = []
         print(mod_version_combo)
     except connector.ProgrammingError as _:
         raise _
