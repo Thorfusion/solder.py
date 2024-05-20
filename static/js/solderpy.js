@@ -91,6 +91,7 @@ function hashmd5() {
     let files = fileSelect.files
     let file = files[0]
 
+    document.getElementById('filesize').value = file.size;
     var reader = new FileReader();
     reader.onload = function (event) {
         document.getElementById('md5').value = md5(event.target.result)
@@ -204,6 +205,9 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
                 container.items.add(finalfile);
             
                 dataSelect.files = container.files;
+
+                // hashes file again to be sure
+                hashmd5()
                 // https://stackoverflow.com/questions/21892890/is-it-possible-to-replace-a-file-input-with-a-blob
 
                 // submits the file using the invisible submit button, so this script can be run and backend see which form was submitted
@@ -238,6 +242,9 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             container.items.add(finalfile);
         
             dataSelect.files = container.files;
+
+            // hashes file again to be sure
+            hashmd5()
             // https://stackoverflow.com/questions/21892890/is-it-possible-to-replace-a-file-input-with-a-blob
 
             // submits the file using the invisible submit button, so this script can be run and backend see which form was submitted
