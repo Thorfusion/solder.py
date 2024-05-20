@@ -21,7 +21,7 @@ class Client_modpack:
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
-        return cls(id, client_id, modpack_id, now, now)
+        return cls(id, client_id, modpack_id, now, now, "", "")
     
     @classmethod
     def delete_client_modpack(cls, id):
