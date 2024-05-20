@@ -23,6 +23,7 @@ solder.py is even compatible with original solder's database, visit the install 
 + Function that allows mod version being uploaded/added to auto add/replace in selected build
 + Clone builds from other modpacks
 + R2 bucket integration with mod uploading, host your files on the cloud!  
++ MCIL optional mod tag
 
 # Features to be added in the future
 
@@ -31,12 +32,11 @@ solder.py is even compatible with original solder's database, visit the install 
 + MCIL export support
 + Advanced user management
 
-## Features in dev
+## Unfinished Features in dev
 
-+ MCIL optional mod tag
 + Adding mods in modpack builds, you can currently use add to selected build function
 + Hashing mods, partially done
-+ Changing mod version in modpack builds
++ Changing mod version in modpack builds, you can currently use add to selected build function
 + Pin your favorite modpacks to your menu!
 
 # Installation/Updating

@@ -26,6 +26,6 @@ class Build_modversion:
         cur = conn.cursor(dictionary=True)
         cur.execute("""UPDATE build_modversion 
             SET optional = %s 
-            WHERE id = %s;""", (optional, id))
+            WHERE modversion_id = %s;""", (optional, id))
         conn.commit()
         return None
