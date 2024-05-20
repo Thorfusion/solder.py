@@ -1,4 +1,4 @@
-__version__ = "0.1.1-dev"
+__version__ = "0.1.2-dev"
 
 import os
 from dotenv import load_dotenv
