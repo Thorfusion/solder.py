@@ -110,23 +110,23 @@ docker run --name solderpy --restart always -d -p 80:5000 thorfusion/solderpy
 #### Database variables
 
 ```bash
-DB_HOST=127.0.0.1
+-e DB_HOST=127.0.0.1
 ```
 
 ```bash
-DB_PORT=3306
+-e DB_PORT=3306
 ```
 
 ```bash
-DB_USER=user
+-e DB_USER=user
 ```
 
 ```bash
-DB_PASSWORD=password
+-e DB_PASSWORD=password
 ```
 
 ```bash
-DB_DATABASE=solderpy
+-e DB_DATABASE=solderpy
 ```
 
 #### Repo variables
@@ -134,45 +134,57 @@ DB_DATABASE=solderpy
 This is the public facing URL for your repository. If your repository location is already a URL, you can use the same value here. Include a trailing slash!
 
 ```bash
-SOLDER_MIRROR_URL=https://solder.example.com/mods/
+-e OLDER_MIRROR_URL=https://solder.example.com/mods/
 ```
 
 This is the location of your mod reposistory. This can be a URL (remote repo), or an absolute file location (local repo, much faster). When a remote repo is used, Solder will have to download the entire file to calculate the MD5 hash.
 
 ```bash
-SOLDER_REPO_LOCATION=https://solder.example.com/mods/
+-e SOLDER_REPO_LOCATION=https://solder.example.com/mods/
+```
+
+#### Volumes
+
+Solder.py uploads the modfiles to a volume in the container
+
+```bash
+-v /your/path/here:/app/mods
 ```
 
 #### R2 Bucket Variables
 
 ```bash
-R2_ENDPOINT=
+-e R2_ENDPOINT=
 ```
 
 ```bash
-R2_ACCESS_KEY=123
+-e R2_ACCESS_KEY=123
 ```
 
 ```bash
-R2_SECRET_KEY=123
+-e R2_SECRET_KEY=123
 ```
 
+Note that R2 Bucket functionality gets activated when R2_BUCKET is used
+
 ```bash
-R2_BUCKET=
+-e R2_BUCKET=
 ```
 
 #### Adding a new user
 
 Enables the /setup page if the database already exists and you need to add a new user
+
 ```bash
-NEW_USER=True
+-e NEW_USER=True
 ```
 
 #### Upgrading technic solder database to solder.py, keeps compability to technic solder
 
 If new user is enabled, you can enable this migration tool for technic solder database, to migrate it to solder.py, mainly fixes mysql database bugs and adds columns and is reverse compatible with original technic solder
+
 ```bash
-TECHNIC_MIGRATION=True
+-e TECHNIC_MIGRATION=True
 ```
 
 NOTE: The docker image does not and will not support https, therefore it is required to run an reverse proxy
