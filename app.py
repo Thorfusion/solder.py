@@ -281,8 +281,10 @@ def modpack(id):
             if "private" in request.form:
                 private=request.form['private']
             clonebuild=""
-            if "clonebuild" in request.form:
+            if "clonebuild" in request.form and request.form['clonebuild'] != "":
                 clonebuild=request.form['clonebuild']
+            if "clonebuildman" in request.form and request.form['clonebuildman'] != "":
+                clonebuild=request.form['clonebuildman']
             Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild)
             return redirect(id)
         if "recommended_submit" in request.form:
