@@ -4,7 +4,7 @@ import requests
 import hashlib
 
 class Modversion:
-    def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional):
+    def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0):
         self.id = id
         self.mod_id = mod_id
         self.version = version
