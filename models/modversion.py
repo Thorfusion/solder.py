@@ -54,17 +54,11 @@ class Modversion:
         return None
     
     @classmethod
-    def update_modversion_in_build(cls, oldmodver_id, modver_id, mod_id, build_id):
+    def update_modversion_in_build(cls, oldmodver_id, modver_id, build_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("UPDATE build_modversion SET modversion_id = %s WHERE modversion_id = %s AND build_id = %s", (modver_id, oldmodver_id, build_id))
         conn.commit()
-        cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (mod_id,))
-        modversions = cur.fetchall()
-        if modversions:
-            for mv in modversions:
-                if mv["id"] != modver_id:
-                    cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s AND build_id = %s", (mv["id"], build_id))
         return None
 
     @classmethod

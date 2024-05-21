@@ -468,7 +468,7 @@ def modpackbuild(id):
             Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"])
             return redirect(id)
         if "selmodver_submit" in request.form:
-            Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], request.form["selmodver_modid"], id)
+            Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], id)
             return redirect(id)
         if "delete_submit" in request.form:
             if "delete_id" not in request.form:
