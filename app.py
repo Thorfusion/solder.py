@@ -445,7 +445,6 @@ def modpackbuild(id):
                                 build_modversion) for build_modversion in modpackbuild]
         if not modpackbuild:
             mod_version_combo = []
-        print(mod_version_combo)
     except connector.ProgrammingError as _:
         raise _
         Database.create_tables()
@@ -469,7 +468,7 @@ def modpackbuild(id):
             Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"])
             return redirect(id)
         if "selmodver_submit" in request.form:
-            Modversion.add_modversion_to_selected_build(id, request.form["addtoselbuild_id"])
+            Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], request.form["selmodver_modid"], id)
             return redirect(id)
         if "delete_submit" in request.form:
             if "delete_id" not in request.form:

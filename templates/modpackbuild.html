@@ -22,7 +22,7 @@
             <tr>
                 <td class="tablewidth70 tablemaxwidth">{{combo[0].pretty_name}} ({{combo[0].name}})</td>
                 <td class="tablewidth20">
-                    <select class="form-select" name="selmodver_{{combo[0].id}}" id="selmodver_{{combo[0].id}}" onchange="submitoptionpress('selmodver_modid', '{{combo[1].id}}', 'selmodver_ver', 'selmodver_{{combo[0].id}}', 'selmodver_submit');">
+                    <select class="form-select" name="selmodver_{{combo[0].id}}" id="selmodver_{{combo[0].id}}" onchange="submitoptionpress('selmodver_modid', '{{combo[0].id}}', 'selmodver_ver', 'selmodver_{{combo[0].id}}', 'selmodver_oldver', '{{combo[1].id}}', 'selmodver_submit');">
                         {%for modlist in listmodversions%} 
                         {%if combo[0].id == modlist.mod_id %}
                         <option {%if combo[1].version == modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}</option>
@@ -51,6 +51,7 @@
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="selmodver_ver" id="selmodver_ver" readonly>
         <input type="text" class="form-control invisible" name="selmodver_modid" id="selmodver_modid" readonly>
+        <input type="text" class="form-control invisible" name="selmodver_oldver" id="selmodver_oldver" readonly>
         <input class="btn btn-danger invisible" type="submit" name="selmodver_submit" id="selmodver_submit" value="selmodver">
     </form>
     <form method="post" action="">
