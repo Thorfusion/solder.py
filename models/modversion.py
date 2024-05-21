@@ -67,6 +67,16 @@ class Modversion:
         if row:
             return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
         return None
+    
+    @staticmethod
+    def get_all():
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM modversions")
+        rows = cur.fetchall()
+        if rows:
+            return [Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
+        return []
 
     def update_hash(self, md5):
         conn = Database.get_connection()
