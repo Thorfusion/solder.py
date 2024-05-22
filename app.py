@@ -1,4 +1,4 @@
-__version__ = "0.1.3-dev"
+__version__ = "0.1.4-dev"
 
 import os
 from dotenv import load_dotenv
@@ -434,6 +434,7 @@ def modpackbuild(id):
     try:
         packbuild = Build.get_by_id(id)
         modpackbuild = packbuild.get_modversions_minimal()
+        listmodversions = Modversion.get_all()
         
         packbuildname = Build.get_modpackname_by_id(id)
         if modpackbuild:
@@ -444,7 +445,6 @@ def modpackbuild(id):
                                 build_modversion) for build_modversion in modpackbuild]
         if not modpackbuild:
             mod_version_combo = []
-        print(mod_version_combo)
     except connector.ProgrammingError as _:
         raise _
         Database.create_tables()
@@ -467,6 +467,9 @@ def modpackbuild(id):
         if "optional_submit" in request.form:
             Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"])
             return redirect(id)
+        if "selmodver_submit" in request.form:
+            Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], id)
+            return redirect(id)
         if "delete_submit" in request.form:
             if "delete_id" not in request.form:
                 return redirect(id)
@@ -476,7 +479,7 @@ def modpackbuild(id):
             Build.delete_build(id)
             return redirect(url_for("modpacklibrary"))
 
-    return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname)
+    return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions)
 
 
 @app.route("/modlibrary", methods=["GET"])

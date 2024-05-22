@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" /> {%endblock%}{%block main%}
 
 <div class="">
-    <table class="table table-striped table-hover maxheighttable" id="table">
+    <table class="table table-striped table-hover maxheighttable table-sm" id="table">
         <thead class="table-light sticky-md-top">
             <tr>
                 <th scope="col" class="tablewidth70 tablemaxwidth">Name (Slug)</th>
@@ -22,8 +22,12 @@
             <tr>
                 <td class="tablewidth70 tablemaxwidth">{{combo[0].pretty_name}} ({{combo[0].name}})</td>
                 <td class="tablewidth20">
-                    <select class="form-select" name="selmodver" id="selmodver" disabled>
-                        <option>{{combo[1].version}}</option>
+                    <select class="form-select" name="selmodver_{{combo[0].id}}" id="selmodver_{{combo[0].id}}" onchange="submitoptionpress('selmodver_oldver', '{{combo[1].id}}', 'selmodver_ver', 'selmodver_{{combo[0].id}}', 'selmodver_submit');">
+                        {%for modlist in listmodversions%} 
+                        {%if combo[0].id == modlist.mod_id %}
+                        <option {%if combo[1].version == modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}</option>
+                        {%endif%}
+                        {%endfor%}
                     </select>
                 </td>
                 <td>
@@ -43,6 +47,11 @@
         <input type="text" class="form-control invisible" name="optional_check" id="optional_check" readonly>
         <input type="text" class="form-control invisible" name="optional_modid" id="optional_modid" readonly>
         <input class="btn btn-danger invisible" type="submit" name="optional_submit" id="optional_submit" value="optional">
+    </form>
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="selmodver_ver" id="selmodver_ver" readonly>
+        <input type="text" class="form-control invisible" name="selmodver_oldver" id="selmodver_oldver" readonly>
+        <input class="btn btn-danger invisible" type="submit" name="selmodver_submit" id="selmodver_submit" value="selmodver">
     </form>
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>

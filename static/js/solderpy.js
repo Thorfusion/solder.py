@@ -62,6 +62,13 @@ function submitbuttonpress2(version, mcversion, name, url, urlform, submitid) {
 }
 
 
+function submitoptionpress(id, val, id2, val2, submitid) {
+    document.getElementById(id).value = val;
+    document.getElementById(id2).value = document.getElementById(val2).value;
+    submit2 = '[name="' + submitid + '"]';
+    document.querySelector(submit2).click();
+}
+
 // Used for checkboxes in table rows to check and uncheck them and sending formdata for the update
 function submitecheckedpress(id, val, textform, check, submitid) {
     document.getElementById(id).value = val;

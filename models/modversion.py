@@ -44,8 +44,20 @@ class Modversion:
         cur.execute("SELECT id FROM builds WHERE marked = 1")
         marked_build_id = cur.fetchone()["id"]
         # when new modversion is added to build, old modversion gets deleted, quite tricky as both values are unique each time and you need to get all modversion and delete them on said build.
-        cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s AND build_id = %s", (mod_id, marked_build_id))
+        cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (mod_id,))
+        modversions = cur.fetchall()
+        if modversions:
+            for mv in modversions:
+                cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s AND build_id = %s", (mv["id"], marked_build_id))
         cur.execute("INSERT INTO build_modversion (modversion_id, build_id) VALUES (%s, %s)", (modver_id, marked_build_id))
+        conn.commit()
+        return None
+    
+    @classmethod
+    def update_modversion_in_build(cls, oldmodver_id, modver_id, build_id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("UPDATE build_modversion SET modversion_id = %s WHERE modversion_id = %s AND build_id = %s", (modver_id, oldmodver_id, build_id))
         conn.commit()
         return None
 
@@ -67,6 +79,16 @@ class Modversion:
         if row:
             return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
         return None
+    
+    @staticmethod
+    def get_all():
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM modversions")
+        rows = cur.fetchall()
+        if rows:
+            return [Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
+        return []
 
     def update_hash(self, md5):
         conn = Database.get_connection()
