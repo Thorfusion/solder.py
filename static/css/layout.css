@@ -1,6 +1,6 @@
 .wrapper {
     display: grid;
-    grid-template-columns: minmax(min-content, 10vw) 1fr 20vw;
+    grid-template-columns: minmax(min-content, 1fr) 10fr 20vw;
     grid-template-rows: auto;
     gap: 0.5vw;
 }
@@ -31,9 +31,7 @@ main {
 }
 
 .image {
-    width: 12vw;
-    max-width: 24em;
-    min-width: 12em;
+    width: 10vw;
 }
 
 .sidenav {
