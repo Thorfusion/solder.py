@@ -1,0 +1,6 @@
+**/.github
+**/.env
+**/.env.example
+**/.gitignore
+**/readme.md
+**/test.jar
