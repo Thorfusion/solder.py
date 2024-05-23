@@ -217,29 +217,27 @@ def newmodversion(id):
             return redirect(url_for("clientlibrary"))
 
         if request.form["rehash_md5"] != "":
-            # Todo Add filesize rehash, if fails do not update filesize
             version = Modversion.get_by_id(request.form["rehash_id"])
-            version.update_hash(request.form["rehash_md5"])
+            version.update_hash(request.form["rehash_md5"], request.form["rehash_url"])
         else:
-            # Todo Add filesize rehash, if fails do not update filesize
             version = Modversion.get_by_id(request.form["rehash_id"])
             t = threading.Thread(target=version.rehash, args=(request.form["rehash_url"],))
             t.start()
         print(request.form["rehash_id"])
         print(request.form["rehash_md5"])
+        print(request.form["rehash_url"])
     if "newmodvermanual_submit" in request.form:
         print(request.form["newmodvermanual_md5"])
         print(request.form["newmodvermanual_version"])
         print(request.form["newmodvermanual_mcversion"])
         print(request.form["newmodvermanual_url"])
+        filesie2 = Modversion.get_file_size(request.form["newmodvermanual_url"])
+        print(filesie2)
         if request.form["newmodvermanual_md5"] != "":
-            markedbuild="0"
-            # Todo Add filesize rehash, if fails leave 10 bytes
-            Modversion.new(request.form[id], request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], request.form["filesize"], markedbuild)
+            Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0")
         else:
-            markedbuild="0"
             # Todo Add filesize rehash and md5 hash, if fails do not add
-            Modversion.new(request.form[id], request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["hahsh_md5"], request.form["filesize"], markedbuild)
+            Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", request.form["newmodvermanual_url"])
     return redirect(id)
 
 

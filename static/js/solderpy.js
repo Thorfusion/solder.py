@@ -51,10 +51,9 @@ function submitbuttonpress(id, val, submitid) {
     document.querySelector(submit2).click();
 }
 
-function submitbuttonpress2(version, mcversion, name, url, urlform, submitid) {
+function submitbuttonpress2(version, name, url, urlform, submitid) {
     versionname = document.getElementById(version).value;
-    mcversion = document.getElementById(mcversion).value;
-    urllink = url + name + '/' + name + '-' + mcversion + '-' + versionname + '.zip';
+    urllink = url + name + '/' + name + '-' + versionname + '.zip';
     document.getElementById(urlform).value = urllink;
     
     submit2 = '[name="' + submitid + '"]';
