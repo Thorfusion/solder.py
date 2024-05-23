@@ -21,7 +21,7 @@
                     <th scope="col">Download URL</th>
                     <th scope="col">Filesize</th>
                     <th>
-                        <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpress2('version', '{{ mod.name }}', '{{mirror_url}}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
+                        <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpress2('version', '{{ mod.name }}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
                     </th>
             </tr>
         </thead>
@@ -37,7 +37,7 @@
                 <td>{{versions.filesize}} bytes</td>
                 <td> 
                     <div class="maxcont">
-                    <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('rehash_url', '{{mirror_url}}{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip'); copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
+                    <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('rehash_url', '{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip'); copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
                     <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'deleteversion_submit')">Delete</button>
                     <button type="button" class="btn btn-secondary" onclick="submitbuttonpress('addtoselbuild_id', '{{versions.id}}', 'addtoselbuild_submit')">AddToSelBuild</button>   
                 </div>
