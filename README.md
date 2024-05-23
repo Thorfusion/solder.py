@@ -34,7 +34,6 @@ solder.py is even compatible with original solder's database, visit the install 
 
 ## Unfinished Features in dev
 
-+ Hashing mods, partially done
 + Pin your favorite modpacks to your menu!
 
 # Installation/Updating
