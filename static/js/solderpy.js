@@ -140,6 +140,24 @@ function string_to_slug (str) {
     return str;
 }
 
+function hideoptions(optiontoshow){
+    // gets the value of selected option
+    selected = document.getElementById(optiontoshow).value;
+    // gets all that has the name modlist and makes then hidden
+    let modlist = document.querySelectorAll('[name="' + "modlist" + '"]');
+    modlist.forEach(el => {
+        el.setAttribute('hidden','true')
+    })
+    // uses the selected options value to only show matching id's
+    let modversion = document.querySelectorAll('[id="' + "modversion_" + selected + '"]');
+    modversion.forEach(el => {
+        el.removeAttribute("hidden")
+    })
+    // hides select a mod first option as that is an invalid answer
+    document.querySelector('[name="' + "modfirst" + '"]').setAttribute('hidden','true');
+    document.querySelector('[name="' + "modfirst" + '"]').selected = true;
+}
+
 function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     // selects the file
     let dataSelect = document.getElementById(input);

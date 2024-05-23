@@ -64,22 +64,27 @@
 <div class="">
     <form method="post" action="">
         <div class="mb-3">
-            <label for="description" class="form-label">Select Mod</label>
-            <select class="form-select" name="description" id="description">
+            <label for="modnames" class="form-label">Select Mod</label>
+            <select class="form-select" name="modnames" id="modnames" onchange="hideoptions('modnames');">
                 {%for lmod in listmod%}
-                <option>{{lmod.name}}</option>
+                <option value="{{lmod.id}}">{{lmod.pretty_name}}</option>
                 {%endfor%}
             </select>
         </div>
         <div class="mb-3">
             <label for="modversion" class="form-label">Modversion</label>
-            <input type="text" class="form-control" name="modversion" id="modversion"></input>
+            <select class="form-select" name="modversion" id="modversion">
+                <option class="is-invalid" name="modfirst">Select mod first</option>
+                {%for modlist in listmodversions%} 
+                <option value="{{modlist.id}}" id="modversion_{{modlist.mod_id}}" name="modlist" hidden="true">{{modlist.version}}</option>
+                {%endfor%}
+            </select>
         </div>
         <div class="form-check">
-            <input class="form-check-input" type="checkbox" value="1" id="optional" name="optional">
-            <label class="form-check-label" for="optional">optional</label>
+            <input class="form-check-input" type="checkbox" value="1" id="newoptional" name="newoptional">
+            <label class="form-check-label" for="newoptional">Optional</label>
         </div>
-        <input class="btn btn-success" type="submit" value="Add Mod" disabled>
+        <input class="btn btn-success" type="submit" value="Add Mod" name="add_mod_submit">
     </form>
     <div class="divider"></div>
     <form method="post" action="">
