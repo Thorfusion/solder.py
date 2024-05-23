@@ -66,8 +66,14 @@
         <div class="mb-3">
             <label for="modnames" class="form-label">Select Mod</label>
             <select class="form-select" name="modnames" id="modnames" onchange="hideoptions('modnames');">
+                <option class="is-invalid" name="modfirst" hidden="true" selected="selected">Select mod</option>
                 {%for lmod in listmod%}
-                <option value="{{lmod.id}}">{{lmod.pretty_name}}</option>
+                <option value="{{lmod.id}}" 
+                {%for combo in mod_version_combo%}
+                {% if combo[0].id == lmod.id %}
+                hidden="true"
+                {% endif %}
+                {%endfor%}>{{lmod.pretty_name}}</option>
                 {%endfor%}
             </select>
         </div>
