@@ -26,11 +26,11 @@ class Modversion:
         id = cur.fetchone()["id"]
         conn.commit()
         if markedbuild is "1":
-            Modversion.add_modversion_to_selected_build(id, mod_id, "0", "1")
+            Modversion.add_modversion_to_selected_build(id, mod_id, "0", "1", "0")
         return cls(id, mod_id, version, mcversion, md5, now, now, filesize)
     
     @classmethod
-    def add_modversion_to_selected_build(cls, modver_id, mod_id, build_id, marked):
+    def add_modversion_to_selected_build(cls, modver_id, mod_id, build_id, marked, optional):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         if marked == "1":
@@ -42,7 +42,7 @@ class Modversion:
         if modversions:
             for mv in modversions:
                 cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s AND build_id = %s", (mv["id"], build_id))
-        cur.execute("INSERT INTO build_modversion (modversion_id, build_id) VALUES (%s, %s)", (modver_id, build_id))
+        cur.execute("INSERT INTO build_modversion (modversion_id, build_id, optional) VALUES (%s, %s, %s)", (modver_id, build_id, optional))
         conn.commit()
         return None
     

@@ -206,7 +206,7 @@ def newmodversion(id):
     if "addtoselbuild_submit" in request.form:
         if "addtoselbuild_id" not in request.form:
             return redirect(id)
-        Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id, "0", "1")
+        Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id, "0", "1", "0")
         return redirect(id)
     if "deletemod_submit" in request.form:
         if "mod_delete_id" not in request.form:
@@ -479,7 +479,7 @@ def modpackbuild(id):
             Build.delete_build(id)
             return redirect(url_for("modpacklibrary"))
         if "add_mod_submit" in request.form:
-            Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0")
+            Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", request.form["newoptional"])
             return redirect(id)
 
     return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions)
