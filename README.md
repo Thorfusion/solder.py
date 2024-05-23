@@ -34,7 +34,6 @@ solder.py is even compatible with original solder's database, visit the install 
 
 ## Unfinished Features in dev
 
-+ Adding mods in modpack builds, you can currently use add to selected build function and changing modversion works
 + Hashing mods, partially done
 + Pin your favorite modpacks to your menu!
 

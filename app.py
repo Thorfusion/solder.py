@@ -206,7 +206,7 @@ def newmodversion(id):
     if "addtoselbuild_submit" in request.form:
         if "addtoselbuild_id" not in request.form:
             return redirect(id)
-        Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id)
+        Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id, "0", "1", "0")
         return redirect(id)
     if "deletemod_submit" in request.form:
         if "mod_delete_id" not in request.form:
@@ -465,7 +465,7 @@ def modpackbuild(id):
             Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
             return redirect(id)
         if "optional_submit" in request.form:
-            Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"])
+            Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"], id)
             return redirect(id)
         if "selmodver_submit" in request.form:
             Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], id)
@@ -473,11 +473,14 @@ def modpackbuild(id):
         if "delete_submit" in request.form:
             if "delete_id" not in request.form:
                 return redirect(id)
-            Build_modversion.delete_build_modversion(request.form["delete_id"])
+            Build_modversion.delete_build_modversion(request.form["delete_id"], id)
             return redirect(id)
         if "deletebuild_submit" in request.form:
             Build.delete_build(id)
             return redirect(url_for("modpacklibrary"))
+        if "add_mod_submit" in request.form:
+            Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", request.form["newoptional"])
+            return redirect(id)
 
     return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions)
 

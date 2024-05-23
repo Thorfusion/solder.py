@@ -31,6 +31,8 @@ main {
 }
 
 .image {
+    max-width: 18em;
+    min-width: 8em;
     width: 10vw;
 }
 
