@@ -2,6 +2,7 @@ import datetime
 from .database import Database
 import requests
 import hashlib
+import threading
 
 class Modversion:
     def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0):
@@ -16,7 +17,7 @@ class Modversion:
         self.optional = optional
 
     @classmethod
-    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild):
+    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild, url="0"):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -27,6 +28,10 @@ class Modversion:
         conn.commit()
         if markedbuild is "1":
             Modversion.add_modversion_to_selected_build(id, mod_id, "0", "1", "0")
+        if md5 == "0":
+            version = Modversion.get_by_id(id)
+            t = threading.Thread(target=version.rehash, args=(url,))
+            t.start()
         return cls(id, mod_id, version, mcversion, md5, now, now, filesize)
     
     @classmethod
@@ -83,9 +88,19 @@ class Modversion:
             return [Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
         return []
 
-    def update_hash(self, md5):
+    def get_file_size(url):
+        response = requests.head(url)  # Only get headers, not content
+        file_size = int(response.headers.get('content-length', -1))  # Get file size from headers
+
+        return file_size
+        # https://www.classace.io/answers/56cb76718f9932eba6153a625885309b
+
+    def update_hash(self, md5, filesize_url):
         conn = Database.get_connection()
         cur = conn.cursor()
+        file_size= Modversion.get_file_size(filesize_url)
+        if file_size != -1:
+            cur.execute("UPDATE modversions SET filesize = %s WHERE id = %s", (file_size, self.id))
         cur.execute("UPDATE modversions SET md5 = %s WHERE id = %s", (md5, self.id))
         conn.commit()
         self.md5 = md5
@@ -99,7 +114,7 @@ class Modversion:
             resp = s.get(rehash_url, stream=True)
             for chunk in resp.iter_content(chunk_size=8192):
                 h.update(chunk)
-            self.update_hash(h.hexdigest())
+            self.update_hash(h.hexdigest(), rehash_url)
 
     def to_json(self):
         return {
