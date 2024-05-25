@@ -23,9 +23,11 @@
                 <td class="tablewidth70 tablemaxwidth">{{combo[0].pretty_name}} ({{combo[0].name}})</td>
                 <td class="tablewidth20">
                     <select class="form-select" name="selmodver_{{combo[0].id}}" id="selmodver_{{combo[0].id}}" onchange="submitoptionpress('selmodver_oldver', '{{combo[1].id}}', 'selmodver_ver', 'selmodver_{{combo[0].id}}', 'selmodver_submit');">
-                        {%for modlist in listmodversions%} 
+                        {%for modlist in listmodversions%}
+                        {% if modlist.mcversion == None or modlist.mcversion == packbuild.minecraft %}
                         {%if combo[0].id == modlist.mod_id %}
                         <option {%if combo[1].version == modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}</option>
+                        {% endif %}
                         {%endif%}
                         {%endfor%}
                     </select>
@@ -81,8 +83,10 @@
             <label for="modversion" class="form-label">Modversion</label>
             <select class="form-select" name="modversion" id="modversion">
                 <option class="is-invalid" name="modfirst">Select mod first</option>
-                {%for modlist in listmodversions%} 
+                {%for modlist in listmodversions%}
+                {% if modlist.mcversion == None or modlist.mcversion == packbuild.minecraft %}
                 <option value="{{modlist.id}}" id="modversion_{{modlist.mod_id}}" name="modlist" hidden="true">{{modlist.version}}</option>
+                {% endif %}
                 {%endfor%}
             </select>
         </div>
