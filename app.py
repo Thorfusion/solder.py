@@ -477,7 +477,10 @@ def modpackbuild(id):
             Build.delete_build(id)
             return redirect(url_for("modpacklibrary"))
         if "add_mod_submit" in request.form:
-            Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", request.form["newoptional"])
+            newoptional="0"
+            if "newoptional" in request.form:
+                newoptional=request.form['newoptional']
+            Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", newoptional)
             return redirect(id)
 
     return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions)
