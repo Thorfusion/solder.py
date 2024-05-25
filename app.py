@@ -1,4 +1,4 @@
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 import os
 from dotenv import load_dotenv
@@ -212,16 +212,17 @@ def newmodversion(id):
         if "mod_delete_id" not in request.form:
             return redirect(id)
         Mod.delete_mod(request.form["mod_delete_id"])
+        return redirect(url_for("modlibrary"))
     if "rehash_submit" in request.form:
         if "rehash_id" not in request.form:
             return redirect(url_for("clientlibrary"))
 
         if request.form["rehash_md5"] != "":
             version = Modversion.get_by_id(request.form["rehash_id"])
-            version.update_hash(request.form["rehash_md5"], request.form["rehash_url"])
+            version.update_hash(request.form["rehash_md5"], mirror_url + request.form["rehash_url"])
         else:
             version = Modversion.get_by_id(request.form["rehash_id"])
-            t = threading.Thread(target=version.rehash, args=(request.form["rehash_url"],))
+            t = threading.Thread(target=version.rehash, args=(mirror_url + request.form["rehash_url"],))
             t.start()
         print(request.form["rehash_id"])
         print(request.form["rehash_md5"])
@@ -231,13 +232,13 @@ def newmodversion(id):
         print(request.form["newmodvermanual_version"])
         print(request.form["newmodvermanual_mcversion"])
         print(request.form["newmodvermanual_url"])
-        filesie2 = Modversion.get_file_size(request.form["newmodvermanual_url"])
+        filesie2 = Modversion.get_file_size(mirror_url + request.form["newmodvermanual_url"])
         print(filesie2)
         if request.form["newmodvermanual_md5"] != "":
             Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0")
         else:
             # Todo Add filesize rehash and md5 hash, if fails do not add
-            Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", request.form["newmodvermanual_url"])
+            Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", mirror_url + request.form["newmodvermanual_url"])
     return redirect(id)
 
 
@@ -300,6 +301,11 @@ def modpack(id):
         if "marked_submit" in request.form:
             Build.update_checkbox_marked(request.form["marked_modid"], request.form["marked_check"])
             return redirect(id)
+        if "deletemod_submit" in request.form:
+            if "modpack_delete_id" not in request.form:
+                return redirect(id)
+            modpack.delete_modpack(request.form["modpack_delete_id"])
+            return redirect(url_for("modpacklibrary"))
 
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
 
@@ -427,22 +433,15 @@ def modpackbuild(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
-    listmod = Mod.get_all()
+    
 
     try:
+        listmod = Mod.get_all_pretty_names()
         packbuild = Build.get_by_id(id)
-        modpackbuild = packbuild.get_modversions_minimal()
         listmodversions = Modversion.get_all()
+        buildlist = Build_modversion.get_modpack_build(id)
         
         packbuildname = Build.get_modpackname_by_id(id)
-        if modpackbuild:
-            mods = Mod.get_multi_by_id(
-                tuple(build_modversion.mod_id for build_modversion in modpackbuild))
-            mod_mapping = {mod.id: mod for mod in mods}
-            mod_version_combo = [(mod_mapping[build_modversion.mod_id],
-                                build_modversion) for build_modversion in modpackbuild]
-        if not modpackbuild:
-            mod_version_combo = []
     except connector.ProgrammingError as _:
         raise _
         Database.create_tables()
@@ -471,16 +470,19 @@ def modpackbuild(id):
         if "delete_submit" in request.form:
             if "delete_id" not in request.form:
                 return redirect(id)
-            Build_modversion.delete_build_modversion(request.form["delete_id"], id)
+            Build_modversion.delete_build_modversion(request.form["delete_id"])
             return redirect(id)
         if "deletebuild_submit" in request.form:
             Build.delete_build(id)
             return redirect(url_for("modpacklibrary"))
         if "add_mod_submit" in request.form:
-            Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", request.form["newoptional"])
+            newoptional="0"
+            if "newoptional" in request.form:
+                newoptional=request.form['newoptional']
+            Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", newoptional)
             return redirect(id)
 
-    return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions)
+    return render_template("modpackbuild.html", listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions, buildlist=buildlist)
 
 
 @app.route("/modlibrary", methods=["GET"])

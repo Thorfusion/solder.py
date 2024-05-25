@@ -41,8 +41,6 @@ class Mod:
 
     @classmethod
     def delete_mod(cls, id):
-        # deleting mods code has been disabled, the code needs to be checked and deleting mods needs to be better protected against accedental deletion
-        return None
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (id,))
@@ -50,7 +48,7 @@ class Mod:
         if modversions:
             for mv in modversions:
                 cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s", (mv["id"],))
-        cur.execute("DELETE * FROM modversions WHERE mod_id = %s", (id,))
+        cur.execute("DELETE FROM modversions WHERE mod_id = %s", (id,))
         cur.execute("DELETE FROM mods WHERE id=%s", (id,))
         conn.commit()
         return None
@@ -93,6 +91,16 @@ class Mod:
         rows = cur.fetchall()
         if rows:
             return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"]) for row in rows]
+        return []
+    
+    @staticmethod
+    def get_all_pretty_names():
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, pretty_name FROM mods")
+        rows = cur.fetchall()
+        if rows:
+            return rows
         return []
 
     def get_versions(self):

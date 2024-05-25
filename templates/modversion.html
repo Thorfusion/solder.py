@@ -21,7 +21,7 @@
                     <th scope="col">Download URL</th>
                     <th scope="col">Filesize</th>
                     <th>
-                        <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpress2('version', '{{ mod.name }}', '{{mirror_url}}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
+                        <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpress2('version', '{{ mod.name }}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
                     </th>
             </tr>
         </thead>
@@ -37,7 +37,7 @@
                 <td>{{versions.filesize}} bytes</td>
                 <td> 
                     <div class="maxcont">
-                    <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('rehash_url', '{{mirror_url}}{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip'); copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
+                    <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('rehash_url', '{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip'); copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
                     <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'deleteversion_submit')">Delete</button>
                     <button type="button" class="btn btn-secondary" onclick="submitbuttonpress('addtoselbuild_id', '{{versions.id}}', 'addtoselbuild_submit')">AddToSelBuild</button>   
                 </div>
@@ -117,7 +117,7 @@
             <textarea name="internal_note" id="internal_note" class="form-control" rows="5">{{ mod.note }}</textarea>
         </div>
         <input class="btn btn-success" type="submit" value="Save changes" name="form-submit" id="form-submit">
-        <button type="button" class="btn btn-danger" disabled onclick="submitbuttonpress('mod_delete_id', '{{ mod.id }}', 'deletemod_submit')">Delete Mod</button>  
+        <button type="button" id="deletemod" class="btn btn-danger" disabled onclick="submitbuttonpress('mod_delete_id', '{{ mod.id }}', 'deletemod_submit')">Delete Mod</button> <input class="form-check-input" type="checkbox" value="1" id="delete_disable" name="delete_disable" onchange="undisable('deletemod')">
     </form>
     {% if success %}
     <div class="alert alert-success loginfail mx-auto" role="alert">

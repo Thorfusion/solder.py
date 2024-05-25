@@ -13,10 +13,10 @@ class Build_modversion:
         self.optional = optional
     
     @classmethod
-    def delete_build_modversion(cls, modversion_id, build_id):
+    def delete_build_modversion(cls, id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s AND build_id = %s", (modversion_id, build_id))
+        cur.execute("DELETE FROM build_modversion WHERE id = %s", (id,))
         conn.commit()
         return None
     
@@ -29,3 +29,20 @@ class Build_modversion:
             WHERE modversion_id = %s AND build_id = %s;""", (optional, modversion_id, build_id))
         conn.commit()
         return None
+    
+    @staticmethod
+    def get_modpack_build(id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            """SELECT build_modversion.id, build_modversion.optional, modversions.version, modversions.id AS modverid, mods.name, mods.pretty_name, mods.id AS modid
+                FROM build_modversion
+                INNER JOIN modversions ON build_modversion.modversion_id = modversions.id
+                INNER JOIN mods ON modversions.mod_id = mods.id
+                WHERE build_id = %s
+            """
+        , (id,))
+        rows = cur.fetchall()
+        if rows:
+            return rows
+        return []

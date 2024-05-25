@@ -82,10 +82,10 @@ class Modversion:
     def get_all():
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modversions")
+        cur.execute("SELECT id, mod_id, version, mcversion FROM modversions")
         rows = cur.fetchall()
         if rows:
-            return [Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
+            return rows
         return []
 
     def get_file_size(url):

@@ -51,9 +51,9 @@ function submitbuttonpress(id, val, submitid) {
     document.querySelector(submit2).click();
 }
 
-function submitbuttonpress2(version, name, url, urlform, submitid) {
+function submitbuttonpress2(version, name, urlform, submitid) {
     versionname = document.getElementById(version).value;
-    urllink = url + name + '/' + name + '-' + versionname + '.zip';
+    urllink = name + '/' + name + '-' + versionname + '.zip';
     document.getElementById(urlform).value = urllink;
     
     submit2 = '[name="' + submitid + '"]';
@@ -155,6 +155,11 @@ function hideoptions(optiontoshow){
     // hides select a mod first option as that is an invalid answer
     document.querySelector('[name="' + "modfirst" + '"]').setAttribute('hidden','true');
     document.querySelector('[name="' + "modfirst" + '"]').selected = true;
+}
+
+function undisable(id){
+    // gets the value of selected option
+    document.getElementById(id).removeAttribute("disabled")
 }
 
 function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
