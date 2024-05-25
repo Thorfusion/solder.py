@@ -157,6 +157,11 @@ function hideoptions(optiontoshow){
     document.querySelector('[name="' + "modfirst" + '"]').selected = true;
 }
 
+function undisable(id){
+    // gets the value of selected option
+    document.getElementById(id).removeAttribute("disabled")
+}
+
 function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     // selects the file
     let dataSelect = document.getElementById(input);

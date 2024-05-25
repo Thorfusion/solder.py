@@ -212,6 +212,7 @@ def newmodversion(id):
         if "mod_delete_id" not in request.form:
             return redirect(id)
         Mod.delete_mod(request.form["mod_delete_id"])
+        return redirect(url_for("modlibrary"))
     if "rehash_submit" in request.form:
         if "rehash_id" not in request.form:
             return redirect(url_for("clientlibrary"))

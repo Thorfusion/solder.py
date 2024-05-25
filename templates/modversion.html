@@ -117,7 +117,7 @@
             <textarea name="internal_note" id="internal_note" class="form-control" rows="5">{{ mod.note }}</textarea>
         </div>
         <input class="btn btn-success" type="submit" value="Save changes" name="form-submit" id="form-submit">
-        <button type="button" class="btn btn-danger" disabled onclick="submitbuttonpress('mod_delete_id', '{{ mod.id }}', 'deletemod_submit')">Delete Mod</button>  
+        <button type="button" id="deletemod" class="btn btn-danger" disabled onclick="submitbuttonpress('mod_delete_id', '{{ mod.id }}', 'deletemod_submit')">Delete Mod</button> <input class="form-check-input" type="checkbox" value="1" id="delete_disable" name="delete_disable" onchange="undisable('deletemod')">
     </form>
     {% if success %}
     <div class="alert alert-success loginfail mx-auto" role="alert">
