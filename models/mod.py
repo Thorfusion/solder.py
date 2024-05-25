@@ -94,6 +94,16 @@ class Mod:
         if rows:
             return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"]) for row in rows]
         return []
+    
+    @staticmethod
+    def get_all_pretty_names():
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, pretty_name FROM mods")
+        rows = cur.fetchall()
+        if rows:
+            return rows
+        return []
 
     def get_versions(self):
         conn = Database.get_connection()

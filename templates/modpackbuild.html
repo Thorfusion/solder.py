@@ -18,27 +18,27 @@
             </tr>
         </thead>
         <tbody class="">
-            {%for combo in mod_version_combo%}
+            {% for combo in buildlist %}
             <tr>
-                <td class="tablewidth70 tablemaxwidth">{{combo[0].pretty_name}} ({{combo[0].name}})</td>
+                <td class="tablewidth70 tablemaxwidth">{{combo.pretty_name}} ({{combo.name}})</td>
                 <td class="tablewidth20">
-                    <select class="form-select" name="selmodver_{{combo[0].id}}" id="selmodver_{{combo[0].id}}" onchange="submitoptionpress('selmodver_oldver', '{{combo[1].id}}', 'selmodver_ver', 'selmodver_{{combo[0].id}}', 'selmodver_submit');">
+                    <select class="form-select" name="selmodver_{{combo.modid}}" id="selmodver_{{combo.modid}}" onchange="submitoptionpress('selmodver_oldver', '{{combo.modverid}}', 'selmodver_ver', 'selmodver_{{combo.modid}}', 'selmodver_submit');">
                         {%for modlist in listmodversions%}
                         {% if modlist.mcversion == None or modlist.mcversion == packbuild.minecraft %}
-                        {%if combo[0].id == modlist.mod_id %}
-                        <option {%if combo[1].version == modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}</option>
+                        {%if combo.modid == modlist.mod_id %}
+                        <option {%if combo.version == modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}</option>
                         {% endif %}
                         {%endif%}
                         {%endfor%}
                     </select>
                 </td>
                 <td>
-                    <input class="form-check-input" type="checkbox" value="" id="optional_{{combo[1].id}}" onclick="submitecheckedpress('optional_modid', '{{combo[1].id}}', 'optional_check', 'optional_{{combo[1].id}}', 'optional_submit')" {% if combo[1].optional
+                    <input class="form-check-input" type="checkbox" value="" id="optional_{{combo.modverid}}" onclick="submitecheckedpress('optional_modid', '{{combo.modverid}}', 'optional_check', 'optional_{{combo.modverid}}', 'optional_submit')" {% if combo.optional
                         %}checked{% endif %}>
                 </td>
                 <td>
                     <div class="maxcont">
-                        <button type="button" class="btn btn-danger buttonwidth" onclick="submitbuttonpress('delete_id', '{{combo[1].id}}', 'delete_submit')">Remove</button>
+                        <button type="button" class="btn btn-danger buttonwidth" onclick="submitbuttonpress('delete_id', '{{combo.id}}', 'delete_submit')">Remove</button>
                     </div>
                 </td>
             </tr>

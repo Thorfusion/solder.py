@@ -427,22 +427,15 @@ def modpackbuild(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
-    listmod = Mod.get_all()
+    
 
     try:
+        listmod = Mod.get_all_pretty_names()
         packbuild = Build.get_by_id(id)
-        modpackbuild = packbuild.get_modversions_minimal()
         listmodversions = Modversion.get_all()
+        buildlist = Build_modversion.get_modpack_build(id)
         
         packbuildname = Build.get_modpackname_by_id(id)
-        if modpackbuild:
-            mods = Mod.get_multi_by_id(
-                tuple(build_modversion.mod_id for build_modversion in modpackbuild))
-            mod_mapping = {mod.id: mod for mod in mods}
-            mod_version_combo = [(mod_mapping[build_modversion.mod_id],
-                                build_modversion) for build_modversion in modpackbuild]
-        if not modpackbuild:
-            mod_version_combo = []
     except connector.ProgrammingError as _:
         raise _
         Database.create_tables()
@@ -471,7 +464,7 @@ def modpackbuild(id):
         if "delete_submit" in request.form:
             if "delete_id" not in request.form:
                 return redirect(id)
-            Build_modversion.delete_build_modversion(request.form["delete_id"], id)
+            Build_modversion.delete_build_modversion(request.form["delete_id"])
             return redirect(id)
         if "deletebuild_submit" in request.form:
             Build.delete_build(id)
@@ -483,7 +476,7 @@ def modpackbuild(id):
             Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", newoptional)
             return redirect(id)
 
-    return render_template("modpackbuild.html", mod_version_combo=mod_version_combo, listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions)
+    return render_template("modpackbuild.html", listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions, buildlist=buildlist)
 
 
 @app.route("/modlibrary", methods=["GET"])
