@@ -71,8 +71,8 @@
                 <option class="is-invalid" name="modfirst2" hidden="true" selected="selected">Select mod</option>
                 {%for lmod in listmod%}
                 <option value="{{lmod.id}}" 
-                {%for combo in mod_version_combo%}
-                {% if combo[0].id == lmod.id %}
+                {%for combo in buildlist%}
+                {% if combo.modid == lmod.id %}
                 hidden="true"
                 {% endif %}
                 {%endfor%}>{{lmod.pretty_name}}</option>
