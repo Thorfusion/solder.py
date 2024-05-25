@@ -301,6 +301,11 @@ def modpack(id):
         if "marked_submit" in request.form:
             Build.update_checkbox_marked(request.form["marked_modid"], request.form["marked_check"])
             return redirect(id)
+        if "deletemod_submit" in request.form:
+            if "modpack_delete_id" not in request.form:
+                return redirect(id)
+            modpack.delete_modpack(request.form["modpack_delete_id"])
+            return redirect(url_for("modpacklibrary"))
 
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
 

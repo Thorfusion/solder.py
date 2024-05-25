@@ -29,6 +29,20 @@ class Modpack:
         return cls(id, name, slug, now, now, hidden, private)
     
     @classmethod
+    def delete_modpack(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM builds WHERE modpack_id = %s", (id,))
+        modversions = cur.fetchall()
+        if modversions:
+            for mv in modversions:
+                cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (mv["id"],))
+        cur.execute("DELETE FROM builds WHERE modpack_id = %s", (id,))
+        cur.execute("DELETE FROM modpacks WHERE id=%s", (id,))
+        conn.commit()
+        return None
+    
+    @classmethod
     def update_checkbox(cls, id, value, column, table):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
