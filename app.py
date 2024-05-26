@@ -158,28 +158,6 @@ def modversion(id):
         return redirect(url_for("login"))
 
     mod = Mod.get_by_id(id)
-    name = ""
-    size = ""
-    # if request.method == "POST":
-    #     # make check later (check if modid  exists in database)
-    #     modver = request.form["modver"]
-    #     jarfile = request.files["jarfile"]
-
-    #     if modver != "" and jarfile != "":
-    #         jarfile.save(secure_filename(jarfile.filename))
-    #         size = len(jarfile.read())
-    #         name = jarfile.filename.strip(".jar")
-    #         # createFolder("/mods")
-    #         createFolder("mods/" + modSlug)
-    #         # zipObj = ZipFile(mod.slug+"-"+modver, 'w')
-
-    #         # zipObj.write(jarfile.read())
-    #         # zipObj.close()
-
-    #         # add_modversion_db(id,modver,hash,size)
-
-    #     else:
-    #         print("error")
 
     try:
         modversions = mod.get_versions()
@@ -187,7 +165,7 @@ def modversion(id):
         Database.create_tables()
         modversions = []
 
-    return render_template("modversion.html", modSlug=mod.name, name=name, size=size, modversions=modversions, mod=mod, mirror_url=mirror_url)
+    return render_template("modversion.html", modSlug=mod.name, modversions=modversions, mod=mod, mirror_url=mirror_url)
 
 @app.route("/modversion/<id>", methods=["POST"])
 def newmodversion(id):
