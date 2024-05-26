@@ -1,9 +1,9 @@
 FROM python:3.10-alpine
 
 WORKDIR /app
-COPY /models/ /app/
-COPY /static/ /app/
-COPY /templates/ /app/
+COPY /models/ /app/models/
+COPY /static/ /app/static/
+COPY /templates/ /app/templates/
 COPY /api.py /app/
 COPY /app.py /app/
 COPY /LICENSE.md /app/
