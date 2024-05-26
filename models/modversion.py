@@ -41,7 +41,23 @@ class Modversion:
         if marked == "1":
             cur.execute("SELECT id FROM builds WHERE marked = 1")
             build_id = cur.fetchone()["id"]
+            conn.commit()
         # when new modversion is added to build, old modversion gets deleted, quite tricky as both values are unique each time and you need to get all modversion and delete them on said build.
+        cur.execute(
+            """SELECT build_modversion.id, modversions.id AS modverid, modversions.mod_id AS modid 
+                FROM build_modversion 
+                INNER JOIN modversions ON build_modversion.modversion_id = modversions.id 
+                WHERE build_id = %s AND modversions.mod_id = %s
+            """
+        , (build_id, mod_id))
+        try:
+            build_modid = cur.fetchone()["id"]
+        except:
+            build_modid = None
+        if build_modid is not None:
+            cur.execute("UPDATE build_modversion SET modversion_id = %s WHERE id = %s AND build_id = %s", (modver_id, build_modid, build_id))
+            conn.commit()
+            return None
         cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (mod_id,))
         modversions = cur.fetchall()
         if modversions:
