@@ -127,7 +127,7 @@ class Mod:
         cur.execute("SELECT * FROM modversions WHERE mod_id = %s AND version = %s", (self.id, version))
         row = cur.fetchone()
         if row:
-            return Modversion(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
+            return Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
         return None
 
     def to_json(self):
