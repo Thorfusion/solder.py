@@ -52,7 +52,7 @@
       <input class="form-control" type="file" id="file" name="file" required onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '1')">
     </div>
     <div class="mb-3">
-      <label for="md5" class="form-label">md5; note that hashing also changes for timestamp</label>
+      <label for="md5" class="form-label">md5</label>
       <input type="text" class="form-control" name="md5" id="md5" readonly>
     </div>
     <div class="mb-3">
@@ -94,7 +94,7 @@
       <input class="form-check-input" type="checkbox" value="1" id="downloadzip" name="downloadzip" checked>
       <label class="form-check-label" for="downloadzip">Download finished zip file?</label>
     </div>
-    <button type="button" class="btn btn-success" onclick="zipfile_mods('mod', 'mcversion', 'version', 'file', '3')">Submit</button>
+    <button type="button" class="btn btn-success" onclick="submit_zipfile_mods()">Submit</button>
     <input class="btn btn-success invisible" type="submit" value="Add Version" name="form-submit" name="form-submit" id="form-submit">
     <div class="mb-3">
       <input type="text" class="form-control invisible" name="modid" id="modid" readonly>
