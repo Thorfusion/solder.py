@@ -52,6 +52,9 @@ ALLOWED_EXTENSIONS = {'zip'}
 
 app.secret_key = secrets.token_hex()
 
+if migratetechnic:
+    Database.create_session_table()
+
 Session.start_session_loop()
 
 R2_ENDPOINT = os.getenv("R2_ENDPOINT")
