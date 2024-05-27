@@ -75,7 +75,7 @@
         <div class="mb-3">
             <label for="pretty_name" class="form-label">Mod Name</label>
             <input type="text" class="form-control" name="pretty_name" value="{{ mod.pretty_name }}" id="pretty_name"
-                onkeyup="toslug('mod_slug', 'mod_name')">
+                onkeyup="toslug('mod_slug', 'mod_name')" required>
         </div>
         <div class="mb-3">
             <label for="name" class="form-label">Mod Slug</label>
@@ -83,38 +83,38 @@
         </div>
         <div class="mb-3">
             <label for="author" class="form-label">Author</label>
-            <input type="text" class="form-control" name="author" value="{{ mod.author }}" id="author">
+            <input type="text" class="form-control" name="author" value="{{ mod.author }}" id="author" required>
         </div>
         <div class="mb-3">
             <label for="description" class="form-label">Description</label>
-            <textarea name="description" id="description" class="form-control" rows="5">{{ mod.description }}</textarea>
+            <textarea name="description" id="description" class="form-control" rows="5" required>{{ mod.description }}</textarea>
         </div>
         <div class="mb-3">
             <label for="link" class="form-label">Mod Website</label>
-            <input type="text" class="form-control" name="link" value="{{ mod.link }}" id="link">
+            <input type="text" class="form-control" name="link" value="{{ mod.link }}" id="link" required>
         </div>
         <label>Select side</label>
         <div class="form-check">
-          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="CLIENT" {% if mod.side=="CLIENT" %}checked{% endif %}>
+          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="CLIENT" required {% if mod.side=="CLIENT" %}checked{% endif %}>
           <label class="form-check-label" for="flexRadioDefault1">
             Client
           </label>
         </div>
         <div class="form-check">
-          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="SERVER" {% if mod.side=="SERVER" %}checked{% endif %}>
+          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="SERVER" required {% if mod.side=="SERVER" %}checked{% endif %}>
           <label class="form-check-label" for="flexRadioDefault2">
             Server
           </label>
         </div>
         <div class="form-check">
-          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" value="BOTH" {% if mod.side=="BOTH" %}checked{% endif %}>
+          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" value="BOTH" required {% if mod.side=="BOTH" %}checked{% endif %}>
           <label class="form-check-label" for="flexRadioDefault3">
             Both
           </label>
         </div>
         <div class="mb-3">
             <label for="internal_note" class="form-label">Internal note</label>
-            <textarea name="internal_note" id="internal_note" class="form-control" rows="5">{{ mod.note }}</textarea>
+            <textarea name="internal_note" id="internal_note" class="form-control" rows="5" required>{{ mod.note }}</textarea>
         </div>
         <input class="btn btn-success" type="submit" value="Save changes" name="form-submit" id="form-submit">
         <button type="button" id="deletemod" class="btn btn-danger" disabled onclick="submitbuttonpress('mod_delete_id', '{{ mod.id }}', 'deletemod_submit')">Delete Mod</button> <input class="form-check-input" type="checkbox" value="1" id="delete_disable" name="delete_disable" onchange="undisable('deletemod')">

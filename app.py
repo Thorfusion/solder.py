@@ -1,4 +1,4 @@
-__version__ = "1.1.5"
+__version__ = "1.2.0"
 
 import os
 from dotenv import load_dotenv
@@ -51,6 +51,9 @@ app.config["UPLOAD_FOLDER"] = "./mods/"
 ALLOWED_EXTENSIONS = {'zip'}
 
 app.secret_key = secrets.token_hex()
+
+if migratetechnic:
+    Database.create_session_table()
 
 Session.start_session_loop()
 
@@ -402,6 +405,13 @@ def userlibrary_post():
             if "delete_id" not in request.form:
                 return redirect(url_for("userlibrary"))
             User.delete(request.form["delete_id"])
+            return redirect(url_for("userlibrary"))
+        if "changeuser_submit" in request.form:
+            if "changeuser_id" not in request.form:
+                return redirect(url_for("userlibrary"))
+            if "changeuser_password" not in request.form:
+                return redirect(url_for("userlibrary"))
+            User.change(request.form["changeuser_id"], request.form["changeuser_password"], request.remote_addr, '1')
             return redirect(url_for("userlibrary"))
 
     return redirect(url_for("userlibrary"))

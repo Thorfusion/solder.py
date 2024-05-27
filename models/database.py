@@ -41,7 +41,7 @@ class Database:
                     return False
                 return True
         except Exception as e:
-            errorPrinter.message("An error occurred whilst trying to check database setup", e)
+            ErrorPrinter.message("An error occurred whilst trying to check database setup", e)
         conn.close()
 
     @staticmethod
@@ -100,7 +100,7 @@ class Database:
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         mod_id INT NOT NULL,
                         version VARCHAR(255) NOT NULL,
-                        mcversion VARCHAR(255) NOT NULL,
+                        mcversion VARCHAR(255),
                         md5 VARCHAR(255) NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -199,61 +199,61 @@ class Database:
             cur.execute(
                 """ALTER TABLE modpacks
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 """
             )
             cur.execute(
                 """ALTER TABLE mods
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 """
             )
             cur.execute(
                 """ALTER TABLE modversions
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 """
             )
             cur.execute(
                 """ALTER TABLE build_modversion
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 """
             )
             cur.execute(
                 """ALTER TABLE builds
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 """
             )
             cur.execute(
                 """ALTER TABLE clients
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 """
             )
             cur.execute(
                 """ALTER TABLE `keys`
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 """
             )
             cur.execute(
                 """ALTER TABLE builds
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 """
             )
             cur.execute(
                 """ALTER TABLE user_permissions
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 """
             )
             cur.execute(
                 """ALTER TABLE users
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 """
             )
             con.commit()
@@ -262,28 +262,28 @@ class Database:
                     ADD COLUMN user_id INT NOT NULL AFTER slug,
                     ADD COLUMN minecraft VARCHAR(255) NOT NULL DEFAULT(''),
                     ADD COLUMN forge VARCHAR(255),
-                    ADD COLUMN pinned TINYINT(1) NOT NULL DEFAULT(0);
+                    ADD COLUMN pinned TINYINT(1) NOT NULL DEFAULT(0)
                 """
             )
             cur.execute(
                 """ALTER TABLE mods
                     ADD COLUMN side enum('CLIENT', 'SERVER', 'BOTH') AFTER link,
-                    ADD COLUMN note VARCHAR(255),
+                    ADD COLUMN note VARCHAR(255)
                 """
             )
             cur.execute(
                 """ALTER TABLE builds
-                    ADD COLUMN marked TINYINT(1) NOT NULL DEFAULT(0);
+                    ADD COLUMN marked TINYINT(1) NOT NULL DEFAULT(0)
                 """
             )
             cur.execute(
                 """ALTER TABLE build_modversion
-                    ADD COLUMN optional TINYINT(1) NOT NULL DEFAULT(0);
+                    ADD COLUMN optional TINYINT(1) NOT NULL DEFAULT(0)
                 """
             )
             cur.execute(
                 """ALTER TABLE modversions
-                    ADD COLUMN mcversion VARCHAR(255) NOT NULL DEFAULT(0) AFTER version;
+                    ADD COLUMN mcversion VARCHAR(255) AFTER version
                 """
             )
             cur.execute(
@@ -295,5 +295,22 @@ class Database:
             )
             con.commit()
             con.close()
+            print("technic database migrated!")
         except Exception:
-            print.message("Error migration technic tables", Exception)
+            ErrorPrinter.message("Error migration technic tables", Exception)
+    @staticmethod
+    def create_session_table() -> bool:
+        try:
+            con = Database.get_connection()
+            cur = con.cursor()
+            cur.execute(
+                """CREATE TABLE IF NOT EXISTS sessions (
+                    token VARCHAR(80) NOT NULL PRIMARY KEY,
+                    ip INT NOT NULL,
+                    expiry TIMESTAMP NOT NULL
+                )"""
+            )
+            con.commit()
+            con.close()
+        except Exception:
+            print.message("Error making session table", Exception)
