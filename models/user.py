@@ -29,6 +29,18 @@ class User:
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
+    
+    @classmethod
+    def change(cls, userid, hash1, ip, creator_id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        cur.execute("SELECT username FROM users WHERE id = %s", (userid,))
+        username = cur.fetchone()["username"]
+        password = Passhasher.hasher(hash1, username)
+        cur.execute("UPDATE users SET password = %s, updated_by_ip = %s, updated_by_user_id = %s, updated_at = %s WHERE id = %s", (password, ip, creator_id, now, userid))
+        conn.commit()
+        return None
 
     @classmethod
     def delete(cls, id):

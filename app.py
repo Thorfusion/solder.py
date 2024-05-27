@@ -406,6 +406,13 @@ def userlibrary_post():
                 return redirect(url_for("userlibrary"))
             User.delete(request.form["delete_id"])
             return redirect(url_for("userlibrary"))
+        if "changeuser_submit" in request.form:
+            if "changeuser_id" not in request.form:
+                return redirect(url_for("userlibrary"))
+            if "changeuser_password" not in request.form:
+                return redirect(url_for("userlibrary"))
+            User.change(request.form["changeuser_id"], request.form["changeuser_password"], request.remote_addr, '1')
+            return redirect(url_for("userlibrary"))
 
     return redirect(url_for("userlibrary"))
 
