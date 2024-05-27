@@ -100,7 +100,7 @@ class Database:
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         mod_id INT NOT NULL,
                         version VARCHAR(255) NOT NULL,
-                        mcversion VARCHAR(255) NOT NULL,
+                        mcversion VARCHAR(255),
                         md5 VARCHAR(255) NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -283,7 +283,7 @@ class Database:
             )
             cur.execute(
                 """ALTER TABLE modversions
-                    ADD COLUMN mcversion VARCHAR(255) NOT NULL DEFAULT(0) AFTER version
+                    ADD COLUMN mcversion VARCHAR(255) AFTER version
                 """
             )
             cur.execute(
