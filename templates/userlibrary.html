@@ -42,15 +42,15 @@
     <form method="post" action="">
         <div class="mb-3">
             <label for="newemail" class="form-label">EMAIL</label>
-            <input type="email" class="form-control" name="newemail" id="newemail">
+            <input type="email" class="form-control" name="newemail" id="newemail" required>
         </div>
         <div class="mb-3">
             <label for="newuser" class="form-label">Username</label>
-            <input type="text" class="form-control" name="newuser" id="newusernewusername">
+            <input type="text" class="form-control" name="newuser" id="newusernewusername" required>
         </div>
         <div class="mb-3">
             <label for="newpassword" class="form-label">Password</label>
-            <input type="password" name="newpassword" class="pass form-control">
+            <input type="password" name="newpassword" class="pass form-control" required>
         </div>
         <input class="btn btn-success" type="submit" name="form-submit" id="form-submit" value="Add User">
     </form>
@@ -59,11 +59,11 @@
     <form method="post" action="">
         <div class="mb-3">
             <label for="changeuser_user" class="form-label">Selected User</label>
-            <input type="text" class="form-control" name="changeuser_user" id="changeuser_user">
+            <input type="text" class="form-control" name="changeuser_user" id="changeuser_user" required readonly>
         </div>
         <div class="mb-3">
             <label for="changeuser_password" class="form-label">New Password</label>
-            <input type="password" name="changeuser_password" class="pass form-control">
+            <input type="password" name="changeuser_password" class="pass form-control" required>
         </div>
         <input class="btn btn-success" type="submit" name="changeuser_submit" id="changeuser_submit" value="Change password" disabled>
         <div class="mb-3">
