@@ -168,6 +168,10 @@ Note that R2 Bucket functionality gets activated when R2_BUCKET is used
 -e R2_BUCKET=
 ```
 
+```bash
+-e R2_REGION=
+```
+
 #### Adding a new user
 
 Enables the /setup page if the database already exists and you need to add a new user
