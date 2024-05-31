@@ -131,7 +131,7 @@ docker run --name solderpy --restart always -d -p 80:5000 thorfusion/solderpy
 This is the public facing URL for your repository. If your repository location is already a URL, you can use the same value here. Include a trailing slash!
 
 ```bash
--e OLDER_MIRROR_URL=https://solder.example.com/mods/
+-e SOLDER_MIRROR_URL=https://solder.example.com/mods/
 ```
 
 This is the location of your mod reposistory. This can be a URL (remote repo), or an absolute file location (local repo, much faster). When a remote repo is used, Solder will have to download the entire file to calculate the MD5 hash.
