@@ -1,4 +1,4 @@
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 
 import os
 from dotenv import load_dotenv
@@ -507,7 +507,7 @@ def modlibrary_post():
             filew.save(os.path.join(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/", filename))
             if R2_BUCKET != None:
                 keyname = "mods/" + request.form["mod"] + "/" + filename
-                R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + filename, R2_BUCKET, keyname)
+                R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + filename, R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
             return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))
