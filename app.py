@@ -1,4 +1,4 @@
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 import os
 from dotenv import load_dotenv
@@ -209,10 +209,6 @@ def newmodversion(id):
         print(request.form["rehash_md5"])
         print(request.form["rehash_url"])
     if "newmodvermanual_submit" in request.form:
-        print(request.form["newmodvermanual_md5"])
-        print(request.form["newmodvermanual_version"])
-        print(request.form["newmodvermanual_mcversion"])
-        print(request.form["newmodvermanual_url"])
         filesie2 = Modversion.get_file_size(mirror_url + request.form["newmodvermanual_url"])
         print(filesie2)
         if request.form["newmodvermanual_md5"] != "":
@@ -421,7 +417,6 @@ def modpackbuild(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
-    
 
     try:
         listmod = Mod.get_all_pretty_names()
@@ -508,8 +503,8 @@ def modlibrary_post():
         if filew and allowed_file(filew.filename):
             filename = secure_filename(filew.filename)
             print("saving")
-            createFolder(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/")
-            filew.save(os.path.join(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/", filename))
+            createFolder(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/")
+            filew.save(os.path.join(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/", filename))
             if R2_BUCKET != None:
                 keyname = "mods/" + request.form["mod"] + "/" + filename
                 R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + filename, R2_BUCKET, keyname)
@@ -537,6 +532,7 @@ def modpacklibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
+    
     if request.method == "POST":
         if "form-submit" in request.form:
             hidden="0"
