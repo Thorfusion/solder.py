@@ -172,6 +172,9 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
         // Adds the version number in the file provided to minecraft version and mod version boxes
         filename = data.name
         filenamenumb = filename.replace(/^\D+/g, '')
+        filenamenumb = filenamenumb.replace('.jar', '')
+        filenamenumb = filenamenumb.replace('.zip', '')
+        filenamenumb = filenamenumb.replace(' ', '')
         document.getElementById(mcversion).value = filenamenumb;
         document.getElementById(modversion).value = filenamenumb;
     }
