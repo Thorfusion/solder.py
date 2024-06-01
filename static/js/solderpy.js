@@ -192,6 +192,14 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             var mods = zip.folder("mods");
             // adds the file uploaded inside mods folder with correct naming scheme
             mods.file(modslugname + "-" + mcversionname + "-" + modversionname + ".jar", data);
+            jardataSelect = document.getElementById("jarfile")
+            let jarfinalfile = new File([data], modslugname + "-" + mcversionname + "-" + modversionname + ".jar",{type:"application/zip", lastModified:new Date().getTime()});
+
+            let jarcontainer = new DataTransfer();
+            jarcontainer.items.add(jarfinalfile);
+    
+            jardataSelect.files = jarcontainer.files;
+            
             document.getElementById("filetypejar").checked = true;
         }
         if (data.name == "modpack.jar") { // if the filename is detected to be modpack.jar

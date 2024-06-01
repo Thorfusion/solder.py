@@ -48,7 +48,7 @@ app: Flask = Flask(__name__)
 app.register_blueprint(api)
 
 app.config["UPLOAD_FOLDER"] = "./mods/"
-ALLOWED_EXTENSIONS = {'zip'}
+ALLOWED_EXTENSIONS = {'zip', 'jar'}
 
 app.secret_key = secrets.token_hex()
 
@@ -509,6 +509,15 @@ def modlibrary_post():
             if R2_BUCKET != None:
                 keyname = "mods/" + request.form["mod"] + "/" + filename
                 R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + filename, R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
+            jarfilew = request.files['jarfile']
+            if jarfilew and allowed_file(jarfilew.filename):
+                jarfilename = secure_filename(jarfilew.filename)
+                print("saving jar")
+                createFolder(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/")
+                jarfilew.save(os.path.join(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/", jarfilename))
+                if R2_BUCKET != None:
+                    jarkeyname = "mods/" + request.form["mod"] + "/" + jarfilename
+                    R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/zip'})
             return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))
