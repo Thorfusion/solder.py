@@ -17,7 +17,7 @@ class Modversion:
         self.optional = optional
 
     @classmethod
-    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild, url="0"):
+    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild, url="0", sha512="0"):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -32,6 +32,8 @@ class Modversion:
             version = Modversion.get_by_id(id)
             t = threading.Thread(target=version.rehash, args=(url,))
             t.start()
+        if sha512 != "0":
+            Modversion.update_modversion_sha512(id, sha512)
         return cls(id, mod_id, version, mcversion, md5, now, now, filesize)
     
     @classmethod
@@ -72,6 +74,14 @@ class Modversion:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("UPDATE build_modversion SET modversion_id = %s WHERE modversion_id = %s AND build_id = %s", (modver_id, oldmodver_id, build_id))
+        conn.commit()
+        return None
+    
+    @classmethod
+    def update_modversion_sha512(cls, id, sha512):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("UPDATE modversions SET SHA512 = %s WHERE id = %s", (sha512, id))
         conn.commit()
         return None
 

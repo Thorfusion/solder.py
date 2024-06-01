@@ -493,7 +493,7 @@ def modlibrary_post():
         markedbuild="0"
         if "markedbuild" in request.form:
             markedbuild=request.form['markedbuild']
-        Modversion.new(request.form["modid"], request.form["mcversion"] + "-" + request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
+        Modversion.new(request.form["modid"], request.form["mcversion"] + "-" + request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild, "0", request.form["sha512"])
         if 'file' not in request.files:
             print('No file part')
             return redirect(url_for("modlibrary"))

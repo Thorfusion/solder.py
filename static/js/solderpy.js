@@ -221,6 +221,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             var bin = zip.folder("bin");
             // adds the file uploaded inside bin folder with correct naming scheme
             bin.file("modpack.jar", data);
+            document.getElementById('sha512').value = "0";
             document.getElementById("filetypelauncher").checked = true;
         }
         if (data.type == "application/json") { // if the filetype is detected to be json
@@ -228,6 +229,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             var bin = zip.folder("bin");
             // adds the file uploaded inside bin folder with correct naming scheme
             bin.file("version.json", data);
+            document.getElementById('sha512').value = "0";
             document.getElementById("filetypelauncher").checked = true;
             
         }
@@ -240,6 +242,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     }
     if (data.type == "application/x-zip-compressed") { // if the filetype is detected to be zip
         zipfile_md5(data)
+        document.getElementById('sha512').value = "0";
         document.getElementById("filetypezip").checked = true;
     }
 }
