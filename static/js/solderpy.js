@@ -105,14 +105,14 @@ function hashmd5() {
     reader.readAsArrayBuffer(file);
 }
 
-function hashsha512(id) {
+function hashjarmd5(id) {
     let fileSelect = document.getElementById(id)
     let files = fileSelect.files
     let file = files[0]
 
     var reader = new FileReader();
     reader.onload = function (event) {
-        document.getElementById('sha512').value = sha512(event.target.result)
+        document.getElementById('jarmd5').value = md5(event.target.result)
     };
     reader.readAsArrayBuffer(file);
 }
@@ -212,7 +212,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     
             jardataSelect.files = jarcontainer.files;
 
-            hashsha512("jarfile")
+            hashjarmd5("jarfile")
             
             document.getElementById("filetypejar").checked = true;
         }
@@ -221,7 +221,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             var bin = zip.folder("bin");
             // adds the file uploaded inside bin folder with correct naming scheme
             bin.file("modpack.jar", data);
-            document.getElementById('sha512').value = "0";
+            document.getElementById('jarmd5').value = "0";
             document.getElementById("filetypelauncher").checked = true;
         }
         if (data.type == "application/json") { // if the filetype is detected to be json
@@ -229,7 +229,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             var bin = zip.folder("bin");
             // adds the file uploaded inside bin folder with correct naming scheme
             bin.file("version.json", data);
-            document.getElementById('sha512').value = "0";
+            document.getElementById('jarmd5').value = "0";
             document.getElementById("filetypelauncher").checked = true;
             
         }
@@ -242,7 +242,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     }
     if (data.type == "application/x-zip-compressed") { // if the filetype is detected to be zip
         zipfile_md5(data)
-        document.getElementById('sha512').value = "0";
+        document.getElementById('jarmd5').value = "0";
         document.getElementById("filetypezip").checked = true;
     }
 }

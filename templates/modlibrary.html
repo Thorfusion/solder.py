@@ -105,8 +105,8 @@
     </div>
     <div class="mb-3">
       <input class="form-control" type="file" id="jarfile" name="jarfile" hidden>
-      <label for="sha512" class="form-label">SHA512</label>
-      <textarea type="text" class="form-control" name="sha512" id="sha512" value="" rows="4" readonly>0</textarea>
+      <label for="jarmd5" class="form-label">MD5 for jarfile</label>
+      <input type="text" class="form-control" name="jarmd5" id="jarmd5" value="" readonly>
     </div>
   </form>
   
@@ -131,6 +131,5 @@
 <script src="{{ url_for('static',filename='js/md5.min.js') }}"></script>
 <script src="{{ url_for('static',filename='js/jszip.min.js') }}"></script>
 <script src="{{ url_for('static',filename='js/FileSaver.min.js') }}"></script>
-<script src="{{ url_for('static',filename='js/sha512.min.js') }}"></script>
 
 {% endblock %}
