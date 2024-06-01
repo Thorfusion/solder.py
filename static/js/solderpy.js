@@ -105,6 +105,18 @@ function hashmd5() {
     reader.readAsArrayBuffer(file);
 }
 
+function hashsha512(id) {
+    let fileSelect = document.getElementById(id)
+    let files = fileSelect.files
+    let file = files[0]
+
+    var reader = new FileReader();
+    reader.onload = function (event) {
+        document.getElementById('sha512').value = sha512(event.target.result)
+    };
+    reader.readAsArrayBuffer(file);
+}
+
 
 // Calculates the filesize
 function filesizecalc(input) {
@@ -199,6 +211,8 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             jarcontainer.items.add(jarfinalfile);
     
             jardataSelect.files = jarcontainer.files;
+
+            hashsha512("jarfile")
             
             document.getElementById("filetypejar").checked = true;
         }

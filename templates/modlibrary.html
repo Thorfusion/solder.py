@@ -100,7 +100,13 @@
       <input type="text" class="form-control invisible" name="modid" id="modid" readonly>
     </div>
     <div class="mb-3">
+      <a href="{{ url_for('newmod') }}"><button type="button" class="btn btn-success tablewidth2">New
+          mod</button></a>
+    </div>
+    <div class="mb-3">
       <input class="form-control" type="file" id="jarfile" name="jarfile" hidden>
+      <label for="sha512" class="form-label">SHA512</label>
+      <textarea type="text" class="form-control" name="sha512" id="sha512" value="" rows="4" readonly></textarea>
     </div>
   </form>
   
@@ -117,10 +123,7 @@
   {% endif %}
   <div class="divider">
   </div>
-  <div class="">
-    <a href="{{ url_for('newmod') }}"><button type="button" class="btn btn-success tablewidth2">New
-        mod</button></a>
-  </div>
+
 </div>
 
 

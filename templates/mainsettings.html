@@ -83,7 +83,7 @@
   <form method="post" action="" enctype="multipart/form-data">
     <div class="mb-3">
       <label for="formFile" class="form-label">MD5 Hashing, included for verifying hashes manually for ZIP files</label>
-      <input class="form-control" type="file" id="file" onchange="hashmd5()">
+      <input class="form-control" type="file" id="file" onchange="hashmd5(); hashsha512('file');">
     </div>
     <div class="mb-3">
       <label for="md5" class="form-label">md5</label>
@@ -93,11 +93,16 @@
       <label for="filesize" class="form-label">filesize</label>
       <input type="text" class="form-control" name="filesize" id="filesize" readonly>
     </div>
+    <div class="mb-3">
+        <label for="sha512" class="form-label">SHA512</label>
+        <textarea type="text" class="form-control" name="sha512" id="sha512" value="" rows="4" readonly></textarea>
+    </div>
   </form>
 </div>
 
 
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 <script src="{{ url_for('static',filename='js/md5.min.js') }}"></script>
+<script src="{{ url_for('static',filename='js/sha512.min.js') }}"></script>
 
 {% endblock %}
