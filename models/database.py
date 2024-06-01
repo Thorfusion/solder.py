@@ -90,7 +90,7 @@ class Database:
                         author VARCHAR(255),
                         link VARCHAR(255),
                         side enum('CLIENT', 'SERVER', 'BOTH'),
-                        type enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE'),
+                        type enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'NONE',
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         note TEXT
@@ -270,7 +270,7 @@ class Database:
             cur.execute(
                 """ALTER TABLE mods
                     ADD COLUMN side enum('CLIENT', 'SERVER', 'BOTH') AFTER link,
-                    ADD COLUMN type enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE'),
+                    ADD COLUMN type enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'NONE',
                     ADD COLUMN note VARCHAR(255)
                 """
             )
