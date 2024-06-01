@@ -176,8 +176,9 @@ def newmodversion(id):
         # New or invalid session, send to login
         return redirect(url_for("login"))
     if "form-submit" in request.form:
-        radio = request.form['flexRadioDefault']
-        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
+        mod_side = request.form['flexRadioDefault']
+        mod_type = request.form['type']
+        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
         return redirect(id)
     if "deleteversion_submit" in request.form:
         if "delete_id" not in request.form:
@@ -225,8 +226,9 @@ def newmod():
         # New or invalid session, send to login
         return redirect(url_for("login"))
     if request.method == "POST":
-        radio = request.form['flexRadioDefault']
-        Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
+        mod_side = request.form['flexRadioDefault']
+        mod_type = request.form['type']
+        Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
         return redirect(url_for("modlibrary"))
 
     return render_template("newmod.html")
