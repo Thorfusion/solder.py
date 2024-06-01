@@ -227,6 +227,7 @@ def newmod():
     if request.method == "POST":
         radio = request.form['flexRadioDefault']
         Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
+        return redirect(url_for("modlibrary"))
 
     return render_template("newmod.html")
 
