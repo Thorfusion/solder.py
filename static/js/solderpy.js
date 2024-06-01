@@ -105,6 +105,18 @@ function hashmd5() {
     reader.readAsArrayBuffer(file);
 }
 
+function hashjarmd5(id) {
+    let fileSelect = document.getElementById(id)
+    let files = fileSelect.files
+    let file = files[0]
+
+    var reader = new FileReader();
+    reader.onload = function (event) {
+        document.getElementById('jarmd5').value = md5(event.target.result)
+    };
+    reader.readAsArrayBuffer(file);
+}
+
 
 // Calculates the filesize
 function filesizecalc(input) {
@@ -192,6 +204,16 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             var mods = zip.folder("mods");
             // adds the file uploaded inside mods folder with correct naming scheme
             mods.file(modslugname + "-" + mcversionname + "-" + modversionname + ".jar", data);
+            jardataSelect = document.getElementById("jarfile")
+            let jarfinalfile = new File([data], modslugname + "-" + mcversionname + "-" + modversionname + ".jar",{type:"application/zip", lastModified:new Date().getTime()});
+
+            let jarcontainer = new DataTransfer();
+            jarcontainer.items.add(jarfinalfile);
+    
+            jardataSelect.files = jarcontainer.files;
+
+            hashjarmd5("jarfile")
+            
             document.getElementById("filetypejar").checked = true;
         }
         if (data.name == "modpack.jar") { // if the filename is detected to be modpack.jar
@@ -199,6 +221,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             var bin = zip.folder("bin");
             // adds the file uploaded inside bin folder with correct naming scheme
             bin.file("modpack.jar", data);
+            document.getElementById('jarmd5').value = "0";
             document.getElementById("filetypelauncher").checked = true;
         }
         if (data.type == "application/json") { // if the filetype is detected to be json
@@ -206,6 +229,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             var bin = zip.folder("bin");
             // adds the file uploaded inside bin folder with correct naming scheme
             bin.file("version.json", data);
+            document.getElementById('jarmd5').value = "0";
             document.getElementById("filetypelauncher").checked = true;
             
         }
@@ -218,6 +242,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     }
     if (data.type == "application/x-zip-compressed") { // if the filetype is detected to be zip
         zipfile_md5(data)
+        document.getElementById('jarmd5').value = "0";
         document.getElementById("filetypezip").checked = true;
     }
 }

@@ -3,7 +3,7 @@ from .database import Database
 from .modversion import Modversion
 
 class Mod:
-    def __init__(self, id, name, description, author, link, created_at, updated_at, pretty_name, side, note):
+    def __init__(self, id, name, description, author, link, created_at, updated_at, pretty_name, side, modtype, note):
         self.id = id
         self.name = name
         self.description = description
@@ -13,27 +13,28 @@ class Mod:
         self.updated_at = updated_at
         self.pretty_name = pretty_name
         self.side = side
+        self.modtype = modtype
         self.note = note
 
     @classmethod
-    def new(cls, name, description, author, link, pretty_name, side, note):
+    def new(cls, name, description, author, link, pretty_name, side, modtype, note):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, note))
+        cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, modtype, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, modtype, note))
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
-        return cls(id, name, description, author, link, now, now, pretty_name, side, note)
+        return cls(id, name, description, author, link, now, now, pretty_name, side, modtype, note)
     
     @classmethod
-    def update(cls, id, name, description, author, link, pretty_name, side, note):
+    def update(cls, id, name, description, author, link, pretty_name, side, modtype, note):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
         cur.execute("""UPDATE mods 
-            SET name = %s, description = %s, author = %s, link = %s, updated_at = %s, pretty_name = %s, side = %s, note = %s 
-            WHERE id = %s;""", (name, description, author, link, now, pretty_name, side, note, id))
+            SET name = %s, description = %s, author = %s, link = %s, updated_at = %s, pretty_name = %s, side = %s, modtype = %s, note = %s 
+            WHERE id = %s;""", (name, description, author, link, now, pretty_name, side, modtype, note, id))
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
@@ -60,7 +61,7 @@ class Mod:
         cur.execute("SELECT * FROM mods WHERE id = %s", (id,))
         row = cur.fetchone()
         if row:
-            return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"])
+            return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"])
         return None
 
     @staticmethod
@@ -70,7 +71,7 @@ class Mod:
         cur.execute(f"SELECT * FROM mods WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
         rows = cur.fetchall()
         if rows:
-            return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"]) for row in rows]
+            return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"]) for row in rows]
         return None
 
     @classmethod
@@ -80,7 +81,7 @@ class Mod:
         cur.execute("SELECT * FROM mods WHERE name = %s", (name,))
         row = cur.fetchone()
         if row:
-            return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"])
+            return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"])
         return None
 
     @staticmethod
@@ -90,7 +91,7 @@ class Mod:
         cur.execute("SELECT * FROM mods")
         rows = cur.fetchall()
         if rows:
-            return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["note"]) for row in rows]
+            return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"]) for row in rows]
         return []
     
     @staticmethod
@@ -141,5 +142,6 @@ class Mod:
             "updated_at": self.updated_at,
             "pretty_name": self.pretty_name,
             "side": self.side,
+            "type": self.modtype,
             "note": self.note
         }

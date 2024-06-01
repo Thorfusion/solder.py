@@ -1,4 +1,4 @@
-__version__ = "1.2.3"
+__version__ = "1.3.0"
 
 import os
 from dotenv import load_dotenv
@@ -48,7 +48,7 @@ app: Flask = Flask(__name__)
 app.register_blueprint(api)
 
 app.config["UPLOAD_FOLDER"] = "./mods/"
-ALLOWED_EXTENSIONS = {'zip'}
+ALLOWED_EXTENSIONS = {'zip', 'jar'}
 
 app.secret_key = secrets.token_hex()
 
@@ -176,8 +176,9 @@ def newmodversion(id):
         # New or invalid session, send to login
         return redirect(url_for("login"))
     if "form-submit" in request.form:
-        radio = request.form['flexRadioDefault']
-        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
+        mod_side = request.form['flexRadioDefault']
+        mod_type = request.form['type']
+        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
         return redirect(id)
     if "deleteversion_submit" in request.form:
         if "delete_id" not in request.form:
@@ -225,8 +226,9 @@ def newmod():
         # New or invalid session, send to login
         return redirect(url_for("login"))
     if request.method == "POST":
-        radio = request.form['flexRadioDefault']
-        Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], radio, request.form["internal_note"])
+        mod_side = request.form['flexRadioDefault']
+        mod_type = request.form['type']
+        Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
         return redirect(url_for("modlibrary"))
 
     return render_template("newmod.html")
@@ -493,7 +495,7 @@ def modlibrary_post():
         markedbuild="0"
         if "markedbuild" in request.form:
             markedbuild=request.form['markedbuild']
-        Modversion.new(request.form["modid"], request.form["mcversion"] + "-" + request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild)
+        Modversion.new(request.form["modid"], request.form["mcversion"] + "-" + request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild, "0", request.form["jarmd5"])
         if 'file' not in request.files:
             print('No file part')
             return redirect(url_for("modlibrary"))
@@ -509,6 +511,15 @@ def modlibrary_post():
             if R2_BUCKET != None:
                 keyname = "mods/" + request.form["mod"] + "/" + filename
                 R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + filename, R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
+            jarfilew = request.files['jarfile']
+            if jarfilew and allowed_file(jarfilew.filename):
+                jarfilename = secure_filename(jarfilew.filename)
+                print("saving jar")
+                createFolder(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/")
+                jarfilew.save(os.path.join(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/", jarfilename))
+                if R2_BUCKET != None:
+                    jarkeyname = "mods/" + request.form["mod"] + "/" + jarfilename
+                    R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/zip'})
             return redirect(url_for("modlibrary"))
 
     return redirect(url_for("modlibrary"))

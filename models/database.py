@@ -90,6 +90,7 @@ class Database:
                         author VARCHAR(255),
                         link VARCHAR(255),
                         side enum('CLIENT', 'SERVER', 'BOTH'),
+                        modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'NONE',
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         note TEXT
@@ -102,6 +103,7 @@ class Database:
                         version VARCHAR(255) NOT NULL,
                         mcversion VARCHAR(255),
                         md5 VARCHAR(255) NOT NULL,
+                        jarmd5 VARCHAR(255),
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         filesize INT
@@ -268,6 +270,7 @@ class Database:
             cur.execute(
                 """ALTER TABLE mods
                     ADD COLUMN side enum('CLIENT', 'SERVER', 'BOTH') AFTER link,
+                    ADD COLUMN modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'NONE',
                     ADD COLUMN note VARCHAR(255)
                 """
             )
@@ -283,6 +286,7 @@ class Database:
             )
             cur.execute(
                 """ALTER TABLE modversions
+                    ADD COLUMN jarmd5 VARCHAR(255) AFTER md5,
                     ADD COLUMN mcversion VARCHAR(255) AFTER version
                 """
             )

@@ -99,6 +99,15 @@
     <div class="mb-3">
       <input type="text" class="form-control invisible" name="modid" id="modid" readonly>
     </div>
+    <div class="mb-3">
+      <a href="{{ url_for('newmod') }}"><button type="button" class="btn btn-success tablewidth2">New
+          mod</button></a>
+    </div>
+    <div class="mb-3">
+      <input class="form-control" type="file" id="jarfile" name="jarfile" hidden>
+      <label for="jarmd5" class="form-label">MD5 for jarfile</label>
+      <input type="text" class="form-control" name="jarmd5" id="jarmd5" value="" readonly>
+    </div>
   </form>
   
   {% if success %}
@@ -114,10 +123,7 @@
   {% endif %}
   <div class="divider">
   </div>
-  <div class="">
-    <a href="{{ url_for('newmod') }}"><button type="button" class="btn btn-success tablewidth2">New
-        mod</button></a>
-  </div>
+
 </div>
 
 

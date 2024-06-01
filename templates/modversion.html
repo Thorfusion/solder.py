@@ -8,11 +8,11 @@
             <tr>
                     <th scope="col">
                         <label for="version" class="form-label">MC_Version-MOD_Version</label>
-                        <input type="text" class="form-control" name="version" id="version">
+                        <input type="text" class="form-control" name="version" id="version" required>
                     </th>
                     <th scope="col">
                         <label for="version" class="form-label">MC Version in Database</label>
-                        <input type="text" class="form-control" name="mcversion" id="mcversion">
+                        <input type="text" class="form-control" name="mcversion" id="mcversion" required>
                     </th>
                     <th scope="col">
                         <label for="md5" class="form-label">md5</label>
@@ -93,24 +93,67 @@
             <label for="link" class="form-label">Mod Website</label>
             <input type="text" class="form-control" name="link" value="{{ mod.link }}" id="link" required>
         </div>
-        <label>Select side</label>
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="CLIENT" required {% if mod.side=="CLIENT" %}checked{% endif %}>
-          <label class="form-check-label" for="flexRadioDefault1">
-            Client
-          </label>
-        </div>
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="SERVER" required {% if mod.side=="SERVER" %}checked{% endif %}>
-          <label class="form-check-label" for="flexRadioDefault2">
-            Server
-          </label>
-        </div>
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" value="BOTH" required {% if mod.side=="BOTH" %}checked{% endif %}>
-          <label class="form-check-label" for="flexRadioDefault3">
-            Both
-          </label>
+        <div class="mb-3 gridswrapper">
+            <div class="mb-3 grid1">
+                <label>Select side</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="CLIENT" required {% if mod.side=="CLIENT" %}checked{% endif %}>
+                    <label class="form-check-label" for="flexRadioDefault1">
+                        Client
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="SERVER" required {% if mod.side=="SERVER" %}checked{% endif %}>
+                    <label class="form-check-label" for="flexRadioDefault2">
+                        Server
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" value="BOTH" required {% if mod.side=="BOTH" %}checked{% endif %}>
+                    <label class="form-check-label" for="flexRadioDefault3">
+                        Both
+                    </label>
+                </div>
+            </div>
+            <div class="mb-3 grid2">
+                <label>Select Type</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="type" id="type_MOD" value="MOD" required {% if mod.modtype=="MOD" %}checked{% endif %}>
+                    <label class="form-check-label" for="type_MOD">
+                        MOD
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="type" id="type_LAUNCHER" value="LAUNCHER" required {% if mod.modtype=="LAUNCHER" %}checked{% endif %}>
+                    <label class="form-check-label" for="type_LAUNCHER">
+                        LAUNCHER
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="type" id="type_RES" value="RES" required {% if mod.modtype=="RES" %}checked{% endif %}>
+                    <label class="form-check-label" for="type_RES">
+                        RESOURCE PACK
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="type" id="type_CONFIG" value="CONFIG" required {% if mod.modtype=="CONFIG" %}checked{% endif %}>
+                    <label class="form-check-label" for="type_CONFIG">
+                        CONFIG
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="type" id="type_MCIL" value="MCIL" required {% if mod.modtype=="MCIL" %}checked{% endif %}>
+                    <label class="form-check-label" for="type_MCIL">
+                        MCIL
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="type" id="type_NONE" value="NONE" required {% if mod.modtype=="NONE" %}checked{% endif %}>
+                    <label class="form-check-label" for="type_NONE">
+                        NONE
+                    </label>
+                </div>
+            </div>
         </div>
         <div class="mb-3">
             <label for="internal_note" class="form-label">Internal note</label>
