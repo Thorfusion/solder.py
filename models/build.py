@@ -4,7 +4,7 @@ from .mod import Mod
 from .modversion import Modversion
 
 class Build:
-    def __init__(self, id, modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory, marked):
+    def __init__(self, id, modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory, marked, count=None):
         self.id = id
         self.modpack_id = modpack_id
         self.version = version
@@ -17,6 +17,7 @@ class Build:
         self.min_java = min_java
         self.min_memory = min_memory
         self.marked = marked
+        self.count = count
 
     @classmethod
     def new(cls, modpack_id, version, minecraft, is_published, private, min_java, min_memory, clone_id):
@@ -99,7 +100,13 @@ class Build:
     def get_by_modpack(modpack):
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM builds WHERE modpack_id = %s", (modpack.id,))
+        cursor.execute(
+            """SELECT builds.*, modcount.count
+                FROM builds
+                LEFT JOIN (SELECT build_id, COUNT(*) AS count FROM build_modversion GROUP BY build_id) modcount ON builds.id = modcount.build_id
+                WHERE modpack_id = %s
+            """
+        , (modpack.id,))
         builds = cursor.fetchall()
         if builds:
             return [Build(**build) for build in builds]
