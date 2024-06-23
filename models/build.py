@@ -105,6 +105,7 @@ class Build:
                 FROM builds
                 LEFT JOIN (SELECT build_id, COUNT(*) AS count FROM build_modversion GROUP BY build_id) modcount ON builds.id = modcount.build_id
                 WHERE modpack_id = %s
+                ORDER BY builds.id DESC
             """
         , (modpack.id,))
         builds = cursor.fetchall()

@@ -88,7 +88,7 @@ class Mod:
     def get_all():
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM mods")
+        cur.execute("SELECT * FROM mods ORDER BY id DESC")
         rows = cur.fetchall()
         if rows:
             return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"]) for row in rows]
@@ -107,7 +107,7 @@ class Mod:
     def get_versions(self):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (self.id,))
+        cur.execute("SELECT * FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
         rows = cur.fetchall()
         if rows:
             return [Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
