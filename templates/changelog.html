@@ -1,0 +1,35 @@
+{%extends "layout.html"%} {% set active_page = "modpacklibrary" %} {%block head%}
+<title>solder.py</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" /> {%endblock%}{%block main%}
+
+<div class="">
+    <table class="table table-striped table-hover maxheighttable">
+        <thead class="table-light sticky-md-top">
+            <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Oldversion</th>
+                <th scope="col">Status</th>
+                <th scope="col">Newversion</th>
+            </tr>
+        </thead>
+        <tbody class="">
+            {%for mod in changelog%}
+            <tr>
+                <td>{{mod.name}}</td>
+                <td>{% if mod.oldversion != None %}{{mod.oldversion}}{% endif %}</td>
+                <td>{{mod.status}}</td>
+                <td>{% if mod.newversion != None %}{{mod.newversion}}{% endif %}</td>
+            </tr>
+            {%endfor%}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+{%block aside%}
+
+<div class="">
+
+</div>
+
+<script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
+{% endblock %}

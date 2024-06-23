@@ -289,6 +289,20 @@ def modpack(id):
 
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
 
+@app.route("/changelog/<id>-<id2>", methods=["GET", "POST"])
+def changelog(id, id2):
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        changelog = Build_modversion.get_changelog(id, id2)
+    except connector.ProgrammingError as e:
+        Database.create_tables()
+        builds = []
+
+    return render_template("changelog.html", changelog=changelog)
+
 
 @app.route("/mainsettings")
 def mainsettings():
