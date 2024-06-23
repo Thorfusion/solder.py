@@ -98,7 +98,7 @@ class Mod:
     def get_all_pretty_names():
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, pretty_name FROM mods")
+        cur.execute("SELECT id, pretty_name FROM mods ORDER BY name")
         rows = cur.fetchall()
         if rows:
             return rows

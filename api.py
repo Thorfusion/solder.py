@@ -13,7 +13,7 @@ mirror_url = os.getenv("SOLDER_MIRROR_URL")
 
 @api.route("/api/")
 def api_info():
-    return jsonify({"api": "solder.py", "version": "v1.3.2", "stream": "DEV"})
+    return jsonify({"api": "solder.py", "version": "v1.3.3", "stream": "DEV"})
 
 
 @api.route("/api/verify")

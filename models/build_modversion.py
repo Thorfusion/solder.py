@@ -40,6 +40,7 @@ class Build_modversion:
                 INNER JOIN modversions ON build_modversion.modversion_id = modversions.id
                 INNER JOIN mods ON modversions.mod_id = mods.id
                 WHERE build_id = %s
+                ORDER BY mods.name
             """
         , (id,))
         rows = cur.fetchall()
