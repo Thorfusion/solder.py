@@ -24,6 +24,7 @@ solder.py is even compatible with original solder's database, visit the install 
 + Clone builds from other modpacks
 + R2 bucket integration with mod uploading, host your files on the cloud!  
 + MCIL optional mod tag
++ Generate changelog
 
 # Features to be added in the future
 
@@ -61,13 +62,13 @@ mysql
 
 Create a new user
 
-```mysql
+```sql
 CREATE USER 'solderpy'@'localhost' IDENTIFIED BY 'passwordsecret';
 ```
 
 Create a database and give the user access to it
 
-```mysql
+```sql
 CREATE DATABASE solderpy;
 GRANT ALL ON solder.* TO 'solderpy'@'localhost';
 FLUSH PRIVILEGES;
