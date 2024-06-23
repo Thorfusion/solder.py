@@ -146,6 +146,20 @@
         <input type="text" class="form-control invisible" name="modpack_delete_id" id="modpack_delete_id" readonly>
         <input class="btn btn-danger invisible" type="submit" name="deletemod_submit" id="deletemod_submit" value="Delete">
     </form>
+    <form method="post" action="">
+        <h4>Changelog</h4>
+        <div class="mb-3">
+            <label class="form-check-label" for="changelog_oldver">Old Version Build ID</label>
+            <input type="number" class="form-control" name="changelog_oldver" id="changelog_oldver" required>
+        </div>
+        <div class="mb-3">
+            <label class="form-check-label" for="changelog_newver">New Version Build ID</label>
+            <input type="number" class="form-control" name="changelog_newver" id="changelog_newver" required>
+        </div>
+        <div class="mb-3">
+            <input class="btn btn-dark" type="submit" name="changelog_submit" id="changelog_submit" value="Generate Changelog">
+        </div>
+    </form>
 </div>
 
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
