@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime
+import secrets
 import threading
 import time
-import secrets
+from datetime import datetime
 
 from .database import Database
+
 
 class Session:
     running: bool = False
     thread: threading.Thread = None
+
     def __init__(self, token: str, ip: int, expiry: datetime):
         self.token = token
         self.ip = ip

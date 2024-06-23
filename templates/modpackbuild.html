@@ -11,8 +11,7 @@
                 <th scope="col">Optional</th>
                 <th>
                     <div class="maxcont">
-                        <input type="text" class="form-control tablewidthsearch" id="search"
-                            placeholder="Type to search" onkeyup="tablesearches(0);">
+                        <input type="text" class="form-control tablewidthsearch" id="search" placeholder="Type to search" onkeyup="tablesearches(0);">
                     </div>
                 </th>
             </tr>
@@ -26,15 +25,14 @@
                         {%for modlist in listmodversions%}
                         {% if modlist.mcversion == None or modlist.mcversion == packbuild.minecraft %}
                         {%if combo.modid == modlist.mod_id %}
-                        <option {%if combo.version == modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}</option>
+                        <option {%if combo.version==modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}</option>
                         {% endif %}
                         {%endif%}
                         {%endfor%}
                     </select>
                 </td>
                 <td>
-                    <input class="form-check-input" type="checkbox" value="" id="optional_{{combo.modverid}}" onclick="submitecheckedpress('optional_modid', '{{combo.modverid}}', 'optional_check', 'optional_{{combo.modverid}}', 'optional_submit')" {% if combo.optional
-                        %}checked{% endif %}>
+                    <input class="form-check-input" type="checkbox" value="" id="optional_{{combo.modverid}}" onclick="submitecheckedpress('optional_modid', '{{combo.modverid}}', 'optional_check', 'optional_{{combo.modverid}}', 'optional_submit')" {% if combo.optional %}checked{% endif %}>
                 </td>
                 <td>
                     <div class="maxcont">
@@ -70,12 +68,7 @@
             <select class="form-select" name="modnames" id="modnames" onchange="hideoptions('modnames');" required>
                 <option class="is-invalid" name="modfirst2" hidden="true" selected="selected" value="">Select mod</option>
                 {%for lmod in listmod%}
-                <option value="{{lmod.id}}" 
-                {%for combo in buildlist%}
-                {% if combo.modid == lmod.id %}
-                hidden="true"
-                {% endif %}
-                {%endfor%} required>{{lmod.pretty_name}}</option>
+                <option value="{{lmod.id}}" {%for combo in buildlist%} {% if combo.modid==lmod.id %} hidden="true" {% endif %} {%endfor%} required>{{lmod.pretty_name}}</option>
                 {%endfor%}
             </select>
         </div>
@@ -100,18 +93,15 @@
     <form method="post" action="">
         <div class="mb-3">
             <label for="build_name" class="form-label">Selected modpack</label>
-            <input type="text" class="form-control" name="build_name" id="build_name" value="{{ packbuildname }}"
-                disabled readonly></input>
+            <input type="text" class="form-control" name="build_name" id="build_name" value="{{ packbuildname }}" disabled readonly></input>
         </div>
         <div class="mb-3">
             <label for="version" class="form-label">Build number</label>
-            <input type="text" class="form-control" name="version" id="version"
-                value="{{ packbuild.version }}" required></input>
+            <input type="text" class="form-control" name="version" id="version" value="{{ packbuild.version }}" required></input>
         </div>
         <div class="mb-3">
             <label for="mcversion" class="form-label">Minecraft version</label>
-            <input type="text" class="form-control" name="mcversion" id="mcversion"
-                value="{{ packbuild.minecraft }}" required></input>
+            <input type="text" class="form-control" name="mcversion" id="mcversion" value="{{ packbuild.minecraft }}" required></input>
         </div>
         <div class="mb-3">
             <label for="min_java" class="form-label">Minimum Java Version</label>
@@ -139,8 +129,7 @@
         </div>
         <div class="mb-3">
             <label for="memory" class="form-label">Minimum Memory requirement in MB, 0 for disable</label>
-            <input type="text" class="form-control" name="memory" id="memory"
-                value="{{ packbuild.min_memory }}" required></input>
+            <input type="text" class="form-control" name="memory" id="memory" value="{{ packbuild.min_memory }}" required></input>
         </div>
         <div class="form-check">
             <input class="form-check-input" type="checkbox" value="1" id="publish" name="publish" {% if packbuild.is_published %}checked{% endif %}>

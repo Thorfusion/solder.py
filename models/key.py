@@ -1,6 +1,9 @@
+import datetime
+
 from .database import Database
 from .errorPrinter import ErrorPrinter
-import datetime
+
+
 class Key:
     def __init__(self, id, name, key, created_at, updated_at):
         self.id = id
@@ -89,7 +92,7 @@ class Key:
         cur.execute("DELETE FROM `keys` WHERE id=%s", (id,))
         conn.commit()
         return None
-    
+
     @classmethod
     def new_key(cls, name, key):
         conn = Database.get_connection()

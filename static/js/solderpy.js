@@ -26,11 +26,11 @@ function tablesearches(column) {
 function sleep(milliseconds) {
     var start = new Date().getTime();
     for (var i = 0; i < 1e7; i++) {
-      if ((new Date().getTime() - start) > milliseconds){
-        break;
-      }
+        if ((new Date().getTime() - start) > milliseconds) {
+            break;
+        }
     }
-  }
+}
 
 
 // Used to set the value inputed to a selected id box, ie text input form gets data from a selected row
@@ -55,7 +55,7 @@ function submitbuttonpress2(version, name, urlform, submitid) {
     versionname = document.getElementById(version).value;
     urllink = name + '/' + name + '-' + versionname + '.zip';
     document.getElementById(urlform).value = urllink;
-    
+
     submit2 = '[name="' + submitid + '"]';
     document.querySelector(submit2).click();
 }
@@ -75,7 +75,7 @@ function submitecheckedpress(id, val, textform, check, submitid) {
         document.getElementById(textform).value = "1";
     } else {
         document.getElementById(textform).value = "0";
-    } 
+    }
     submit1 = '[name="' + submitid + '"]';
     sleep(25)
     document.querySelector(submit1).click();
@@ -125,22 +125,22 @@ function filesizecalc(input) {
 
 
 // takes an input string and converts it into a slug
-function toslug(slug, string){
+function toslug(slug, string) {
     document.getElementById(slug).value = string_to_slug(document.getElementById(string).value);
 }
 
 
 // Function block used in toslug to convert string to slug
 // Thanks https://gist.github.com/codeguy/6684588?permalink_comment_id=3777802
-function string_to_slug (str) {
+function string_to_slug(str) {
     str = str.replace(/^\s+|\s+$/g, ''); // trim
     str = str.toLowerCase();
-  
+
     // remove accents, swap ñ for n, etc
     var from = "àáãäâèéëêìíïîòóöôùúüûñç·/_,:;";
-    var to   = "aaaaaeeeeiiiioooouuuunc------";
+    var to = "aaaaaeeeeiiiioooouuuunc------";
 
-    for (var i=0, l=from.length ; i<l ; i++) {
+    for (var i = 0, l = from.length; i < l; i++) {
         str = str.replace(new RegExp(from.charAt(i), 'g'), to.charAt(i));
     }
 
@@ -151,13 +151,13 @@ function string_to_slug (str) {
     return str;
 }
 
-function hideoptions(optiontoshow){
+function hideoptions(optiontoshow) {
     // gets the value of selected option
     selected = document.getElementById(optiontoshow).value;
     // gets all that has the name modlist and makes then hidden
     let modlist = document.querySelectorAll('[name="' + "modlist" + '"]');
     modlist.forEach(el => {
-        el.setAttribute('hidden','true')
+        el.setAttribute('hidden', 'true')
     })
     // uses the selected options value to only show matching id's
     let modversion = document.querySelectorAll('[id="' + "modversion_" + selected + '"]');
@@ -165,11 +165,11 @@ function hideoptions(optiontoshow){
         el.removeAttribute("hidden")
     })
     // hides select a mod first option as that is an invalid answer
-    document.querySelector('[name="' + "modfirst" + '"]').setAttribute('hidden','true');
+    document.querySelector('[name="' + "modfirst" + '"]').setAttribute('hidden', 'true');
     document.querySelector('[name="' + "modfirst" + '"]').selected = true;
 }
 
-function undisable(id){
+function undisable(id) {
     // gets the value of selected option
     document.getElementById(id).removeAttribute("disabled")
 }
@@ -205,15 +205,15 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             // adds the file uploaded inside mods folder with correct naming scheme
             mods.file(modslugname + "-" + mcversionname + "-" + modversionname + ".jar", data);
             jardataSelect = document.getElementById("jarfile")
-            let jarfinalfile = new File([data], modslugname + "-" + mcversionname + "-" + modversionname + ".jar",{type:"application/zip", lastModified:new Date().getTime()});
+            let jarfinalfile = new File([data], modslugname + "-" + mcversionname + "-" + modversionname + ".jar", { type: "application/zip", lastModified: new Date().getTime() });
 
             let jarcontainer = new DataTransfer();
             jarcontainer.items.add(jarfinalfile);
-    
+
             jardataSelect.files = jarcontainer.files;
 
             hashjarmd5("jarfile")
-            
+
             document.getElementById("filetypejar").checked = true;
         }
         if (data.name == "modpack.jar") { // if the filename is detected to be modpack.jar
@@ -231,14 +231,14 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             bin.file("version.json", data);
             document.getElementById('jarmd5').value = "0";
             document.getElementById("filetypelauncher").checked = true;
-            
+
         }
         // generates the zipfile
-        zip.generateAsync({type:"blob"})
-        .then(function(blob) {
-            zipfile_md5(blob)
-        });
-        
+        zip.generateAsync({ type: "blob" })
+            .then(function (blob) {
+                zipfile_md5(blob)
+            });
+
     }
     if (data.type == "application/x-zip-compressed") { // if the filetype is detected to be zip
         zipfile_md5(data)
@@ -253,24 +253,24 @@ function zipfile_md5(file) {
     var reader = new FileReader();
     reader.onload = function (event) {
         document.getElementById('md5').value = md5(event.target.result)
-        
+
     };
     reader.readAsArrayBuffer(file);
     // finds the filesize of file
     document.getElementById('filesize').value = file.size;
     file2 = file;
 }
-    
 
-    // if download is checked, sends the output to user
+
+// if download is checked, sends the output to user
 function submit_zipfile_mods() {
     if (modslugname != "") {
-        
+
         if (document.getElementById("downloadzip").checked) {
             saveAs(file2, modslugname + "-" + mcversionname + "-" + modversionname + ".zip");
         }
         // replaces the submitted file with the new zip file generated by previous code from the original file
-        let finalfile = new File([file2], modslugname + "-" + mcversionname + "-" + modversionname + ".zip",{type:"application/zip", lastModified:new Date().getTime()});
+        let finalfile = new File([file2], modslugname + "-" + mcversionname + "-" + modversionname + ".zip", { type: "application/zip", lastModified: new Date().getTime() });
 
         let container = new DataTransfer();
         container.items.add(finalfile);

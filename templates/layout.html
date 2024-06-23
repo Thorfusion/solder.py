@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static',filename='css/layout.css') }}" />
     <link rel="shortcut icon" href="{{ url_for('static', filename='images/sp.png') }}" type="image/x-icon" />
 
-    
+
     {% block head %}{% endblock %}
 </head>
 
@@ -30,43 +30,29 @@
             <nav class="flex-column flex-shrink-0 p-3 text-white navcontainer">
                 <ul class="nav nav-pills flex-column mb-auto">
                     <li class="nav-item">
-                        <a href="{{ url_for('index') }}"
-                            class="nav-link text-white {{ 'active' if active_page == 'index' else '' }}">Dashboard</a>
+                        <a href="{{ url_for('index') }}" class="nav-link text-white {{ 'active' if active_page == 'index' else '' }}">Dashboard</a>
                     </li>
                     <li>
-                        <a href="{{ url_for('modpacklibrary') }}"
-                            class="nav-link text-white {{ 'active' if active_page == 'modpacklibrary' else '' }}">Modpacks</a>
+                        <a href="{{ url_for('modpacklibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'modpacklibrary' else '' }}">Modpacks</a>
                     </li>
                     {%for mod in listpinnedpacks%}
                     <li>
-                        <a href="/modpack/{{mod.id}}"
-                            class="nav-link text-white {{ 'active' if active_page == 'modpack_{{mod.id}}' else '' }}">{{mod.name}}</a>
+                        <a href="/modpack/{{mod.id}}" class="nav-link text-white {{ 'active' if active_page == 'modpack_{{mod.id}}' else '' }}">{{mod.name}}</a>
                     </li>
                     {%endfor%}
                     <li>
-                        <a href="{{ url_for('modlibrary') }}"
-                            class="nav-link text-white {{ 'active' if active_page == 'modlibrary' else '' }}">Mod
+                        <a href="{{ url_for('modlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'modlibrary' else '' }}">Mod
                             library</a>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link text-white dropdown-toggle" data-bs-toggle="collapse" data-bs-target="#settings-collapse"
-                            href="#" role="button" aria-expanded="false">Settings</a>
+                        <a class="nav-link text-white dropdown-toggle" data-bs-toggle="collapse" data-bs-target="#settings-collapse" href="#" role="button" aria-expanded="false">Settings</a>
                         <div class="collapse" id="settings-collapse">
                             <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
-                                <li><a href="{{ url_for('clientlibrary') }}"
-                                        class="nav-link text-white {{ 'active' if active_page == 'clientlibrary' else '' }}">Clients</a>
-                                </li>
-                                <li><a href="{{ url_for('apikeylibrary') }}"
-                                        class="nav-link text-white {{ 'active' if active_page == 'apikeylibrary' else '' }}">API
-                                        Keys</a></li>
-                                <li><a href="{{ url_for('userlibrary') }}"
-                                        class="nav-link text-white {{ 'active' if active_page == 'userlibrary' else '' }}">Users</a>
-                                </li>
-                                <li><a href="{{ url_for('mainsettings') }}"
-                                        class="nav-link text-white {{ 'active' if active_page == 'mainsettings' else '' }}">Env
-                                        Settings</a></li>
-                                <li><a href="{{ url_for('logout') }}"
-                                    class="nav-link text-white {{ 'active' if active_page == 'logout' else '' }}">Logout</a></li>
+                                <li><a href="{{ url_for('clientlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'clientlibrary' else '' }}">Clients</a></li>
+                                <li><a href="{{ url_for('apikeylibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'apikeylibrary' else '' }}">API Keys</a></li>
+                                <li><a href="{{ url_for('userlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'userlibrary' else '' }}">Users</a></li>
+                                <li><a href="{{ url_for('mainsettings') }}" class="nav-link text-white {{ 'active' if active_page == 'mainsettings' else '' }}">Env Settings</a></li>
+                                <li><a href="{{ url_for('logout') }}" class="nav-link text-white {{ 'active' if active_page == 'logout' else '' }}">Logout</a></li>
                             </ul>
                         </div>
                     </li>

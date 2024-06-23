@@ -1,5 +1,6 @@
 import hashlib
 
+
 class Passhasher:
     def __init__(self, hash, salt):
         self.hash = hash

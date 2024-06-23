@@ -27,7 +27,7 @@
                 <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" onclick="submitecheckedpress('private_modid', '{{mod.id}}', 'private_check', 'private_{{mod.id}}', 'private_submit')" {% if mod.private %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="pinned_{{mod.id}}" onclick="submitecheckedpress('pinned_modid', '{{mod.id}}', 'pinned_check', 'pinned_{{mod.id}}', 'pinned_submit')"" {% if mod.pinned %}checked{% endif %} disabled></td>
                 <td>
-                    <a href="./modpack/{{mod.id}}"><button type="button" class="btn btn-primary buttonwidth">Manage</button></a>
+                    <a href=" ./modpack/{{mod.id}}"><button type="button" class="btn btn-primary buttonwidth">Manage</button></a>
                 </td>
             </tr>
             {%endfor%}
@@ -51,37 +51,37 @@
 </div>
 {% endblock %}
 {%block aside%}
-    <div class="">
-        <form method="post" action="">
-            <div class="mb-3">
-                <label for="pretty_name" class="form-label">Modpack Name</label>
-                <input type="text" class="form-control" name="pretty_name" id="pretty_name" required onkeyup="toslug('name', 'pretty_name')">
-            </div>
-            <div class="mb-3 "">
+<div class="">
+    <form method="post" action="">
+        <div class="mb-3">
+            <label for="pretty_name" class="form-label">Modpack Name</label>
+            <input type="text" class="form-control" name="pretty_name" id="pretty_name" required onkeyup="toslug('name', 'pretty_name')">
+        </div>
+        <div class="mb-3 "">
                         <label for=" name" class="form-label">Modpack Slug</label>
-                <input type="text" class="form-control" name="name" id="name" readonly>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="1" id="hidden" name="hidden">
-                <label class="form-check-label" for="hidden">Hidden</label>
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" value="1" id="private" name="private">
-                <label class="form-check-label" for="private">Private</label>
-            </div>
-            <input class="btn btn-success" type="submit" value="Add modpack" name="form-submit">
-        </form>
-        {% if success %}
-        <div class="alert alert-success loginfail mx-auto " role="alert ">
-            <p>{{mod.vmd5}}</p>
-            <p>{{mod.vurl}}</p>
+            <input type="text" class="form-control" name="name" id="name" readonly>
         </div>
-        {% endif %} {% if failed %}
-        <div class="alert alert-danger loginfail mx-auto " role="alert ">
-            <p>Failed!</p>
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="1" id="hidden" name="hidden">
+            <label class="form-check-label" for="hidden">Hidden</label>
         </div>
-        {% endif %}
+        <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="1" id="private" name="private">
+            <label class="form-check-label" for="private">Private</label>
+        </div>
+        <input class="btn btn-success" type="submit" value="Add modpack" name="form-submit">
+    </form>
+    {% if success %}
+    <div class="alert alert-success loginfail mx-auto " role="alert ">
+        <p>{{mod.vmd5}}</p>
+        <p>{{mod.vurl}}</p>
     </div>
+    {% endif %} {% if failed %}
+    <div class="alert alert-danger loginfail mx-auto " role="alert ">
+        <p>Failed!</p>
+    </div>
+    {% endif %}
+</div>
 
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 {% endblock %}

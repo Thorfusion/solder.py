@@ -1,7 +1,8 @@
 import datetime
+
 from .database import Database
-from .mod import Mod
 from .modversion import Modversion
+
 
 class Build:
     def __init__(self, id, modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory, marked, count=None):
@@ -53,7 +54,7 @@ class Build:
         now = datetime.datetime.now()
         cur.execute("""UPDATE builds 
             SET version = %s, minecraft = %s, is_published = %s, private = %s, min_java = %s, min_memory = %s
-            WHERE id = %s;""", ( version, minecraft, is_published, private, min_java, min_memory, id))
+            WHERE id = %s;""", (version, minecraft, is_published, private, min_java, min_memory, id))
         conn.commit()
         return None
 
@@ -64,7 +65,7 @@ class Build:
         cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, id))
         conn.commit()
         return None
-    
+
     @classmethod
     def update_checkbox_marked(cls, id, value):
         conn = Database.get_connection()
@@ -106,8 +107,7 @@ class Build:
                 LEFT JOIN (SELECT build_id, COUNT(*) AS count FROM build_modversion GROUP BY build_id) modcount ON builds.id = modcount.build_id
                 WHERE modpack_id = %s
                 ORDER BY builds.id DESC
-            """
-        , (modpack.id,))
+            """, (modpack.id,))
         builds = cursor.fetchall()
         if builds:
             return [Build(**build) for build in builds]

@@ -1,6 +1,8 @@
 import datetime
+
 from .database import Database
 from .modversion import Modversion
+
 
 class Mod:
     def __init__(self, id, name, description, author, link, created_at, updated_at, pretty_name, side, modtype, note):
@@ -26,7 +28,7 @@ class Mod:
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, name, description, author, link, now, now, pretty_name, side, modtype, note)
-    
+
     @classmethod
     def update(cls, id, name, description, author, link, pretty_name, side, modtype, note):
         conn = Database.get_connection()
@@ -93,7 +95,7 @@ class Mod:
         if rows:
             return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"]) for row in rows]
         return []
-    
+
     @staticmethod
     def get_all_pretty_names():
         conn = Database.get_connection()

@@ -1,4 +1,5 @@
 from os import getenv
+
 from dotenv import load_dotenv
 from mysql import connector
 
@@ -12,6 +13,7 @@ db_pass = getenv("DB_PASSWORD")
 db_name = getenv("DB_DATABASE")
 
 tables = ("modpacks", "builds", "mods", "modversions", "build_modversions", "users", "user_permissions", "clients", "client_modpacks", "keys")
+
 
 class Database:
     @staticmethod
@@ -302,6 +304,7 @@ class Database:
             print("technic database migrated!")
         except Exception:
             ErrorPrinter.message("Error migration technic tables", Exception)
+
     @staticmethod
     def create_session_table() -> bool:
         try:

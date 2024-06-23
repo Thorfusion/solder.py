@@ -1,15 +1,16 @@
 import os
+
 from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
-
 from models.key import Key
-from models.modpack import Modpack
 from models.mod import Mod
+from models.modpack import Modpack
 
 api = Blueprint("api", __name__)
 
 load_dotenv(".env")
 mirror_url = os.getenv("SOLDER_MIRROR_URL")
+
 
 @api.route("/api/")
 def api_info():
@@ -34,6 +35,7 @@ def verify_key(key: str = None):
         )
     else:
         return jsonify({"error": "Invalid key provided."})
+
 
 @api.route("/api/modpack")
 def modpack():
@@ -72,6 +74,7 @@ def modpack_slug_build(slug: str, build: str):
         )
     return {"minecraft": build.minecraft, "java": build.min_java, "memory": build.min_memory, "forge": None, "mods": moddata}
 
+
 @api.route("/api/mod")
 def mod():
     return jsonify(
@@ -103,4 +106,3 @@ def mod_name_version(name: str, version: str):
         res = version.to_json()
         res["url"] = f"{mirror_url}{name}/{version.version}.zip"
         return jsonify(res)
-
