@@ -1,4 +1,4 @@
-__version__ = "1.3.0"
+__version__ = "1.3.1"
 
 import os
 from dotenv import load_dotenv
@@ -281,6 +281,10 @@ def modpack(id):
         if "marked_submit" in request.form:
             Build.update_checkbox_marked(request.form["marked_modid"], request.form["marked_check"])
             return redirect(id)
+        if "changelog_submit" in request.form:
+            oldversion = request.form["changelog_oldver"]
+            newversion = request.form["changelog_newver"]
+            return redirect(url_for("changelog", oldver=oldversion, newver=newversion))
         if "deletemod_submit" in request.form:
             if "modpack_delete_id" not in request.form:
                 return redirect(id)
@@ -288,6 +292,20 @@ def modpack(id):
             return redirect(url_for("modpacklibrary"))
 
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
+
+@app.route("/changelog/<oldver>-<newver>", methods=["GET", "POST"])
+def changelog(oldver, newver):
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for("login"))
+
+    try:
+        changelog = Build_modversion.get_changelog(oldver, newver)
+    except connector.ProgrammingError as e:
+        Database.create_tables()
+        builds = []
+
+    return render_template("changelog.html", changelog=changelog)
 
 
 @app.route("/mainsettings")

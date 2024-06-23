@@ -46,3 +46,61 @@ class Build_modversion:
         if rows:
             return rows
         return []
+    
+    @staticmethod
+    def get_changelog(previd, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            """SELECT coalesce(build.name1, build.name2) name, build.oldversion, 
+                    case
+                            when build.name1 is null then 'added'
+                            when build.name2 is null then 'removed'
+                        when build.name1 is not null AND build.name2 IS NOT NULL THEN 'changed to'
+                    end status, build.newversion
+                FROM 
+                (
+                SELECT *
+                FROM
+                (
+                SELECT modversions.version AS oldversion, mods.name AS name1, modversions.id AS modverid
+                        FROM build_modversion
+                                INNER JOIN modversions ON build_modversion.modversion_id = modversions.id
+                                INNER JOIN mods ON modversions.mod_id = mods.id
+                                WHERE build_id = %s
+                ) AS build1
+                LEFT OUTER JOIN 
+                (
+                SELECT modversions.version AS newversion, mods.name AS name2, modversions.id AS modverid2
+                                FROM build_modversion
+                                INNER JOIN modversions ON build_modversion.modversion_id = modversions.id
+                                INNER JOIN mods ON modversions.mod_id = mods.id
+                                WHERE build_id = %s
+                ) AS build2 ON build1.name1 = build2.name2 WHERE NOT build1.modverid <=> build2.modverid2
+
+                UNION
+
+                SELECT *
+                FROM
+                (
+                SELECT modversions.version AS oldversion, mods.name AS name1, modversions.id AS modverid
+                        FROM build_modversion
+                                INNER JOIN modversions ON build_modversion.modversion_id = modversions.id
+                                INNER JOIN mods ON modversions.mod_id = mods.id
+                                WHERE build_id = %s
+                ) AS build1
+                RIGHT OUTER JOIN
+                (
+                SELECT modversions.version AS newversion, mods.name as name2, modversions.id AS modverid2
+                                FROM build_modversion
+                                INNER JOIN modversions ON build_modversion.modversion_id = modversions.id
+                                INNER JOIN mods ON modversions.mod_id = mods.id
+                                WHERE build_id = %s
+                ) AS build2 ON build1.name1 = build2.name2 WHERE NOT build1.modverid <=> build2.modverid2
+                ) AS build ORDER BY status, name
+            """
+        , (previd, id, previd, id,))
+        rows = cur.fetchall()
+        if rows:
+            return rows
+        return []
