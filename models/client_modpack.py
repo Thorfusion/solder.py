@@ -1,6 +1,7 @@
 import datetime
+
 from .database import Database
-from .modpack import Modpack
+
 
 class Client_modpack:
     def __init__(self, id, client_id, modpack_id, created_at, updated_at, client_name, modpack_name):
@@ -22,7 +23,7 @@ class Client_modpack:
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, client_id, modpack_id, now, now, "", "")
-    
+
     @classmethod
     def delete_client_modpack(cls, id):
         conn = Database.get_connection()
@@ -41,6 +42,5 @@ class Client_modpack:
                 INNER JOIN clients ON client_modpack.client_id = clients.id
                 INNER JOIN modpacks ON client_modpack.modpack_id = modpacks.id
                 WHERE client_id = %s
-            """
-        , (id,))
+            """, (id,))
         return [Client_modpack(**row) for row in cur.fetchall()]

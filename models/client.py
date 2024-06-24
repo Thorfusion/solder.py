@@ -1,6 +1,8 @@
 import datetime
+
 from .database import Database
 from .modpack import Modpack
+
 
 class Client:
     def __init__(self, id, name, uuid, created_at, updated_at):
@@ -20,7 +22,7 @@ class Client:
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, name, uuid, now, now)
-    
+
     @classmethod
     def delete_client(cls, id):
         conn = Database.get_connection()

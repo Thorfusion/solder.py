@@ -1,8 +1,11 @@
 import datetime
-from .database import Database
-import requests
 import hashlib
 import threading
+
+import requests
+
+from .database import Database
+
 
 class Modversion:
     def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0):
@@ -35,7 +38,7 @@ class Modversion:
         if jarmd5 != "0":
             Modversion.update_modversion_jarmd5(id, jarmd5)
         return cls(id, mod_id, version, mcversion, md5, now, now, filesize)
-    
+
     @classmethod
     def add_modversion_to_selected_build(cls, modver_id, mod_id, build_id, marked, optional):
         conn = Database.get_connection()
@@ -50,8 +53,7 @@ class Modversion:
                 FROM build_modversion 
                 INNER JOIN modversions ON build_modversion.modversion_id = modversions.id 
                 WHERE build_id = %s AND modversions.mod_id = %s
-            """
-        , (build_id, mod_id))
+            """, (build_id, mod_id))
         try:
             build_modid = cur.fetchone()["id"]
         except:
@@ -68,7 +70,7 @@ class Modversion:
         cur.execute("INSERT INTO build_modversion (modversion_id, build_id, optional) VALUES (%s, %s, %s)", (modver_id, build_id, optional))
         conn.commit()
         return None
-    
+
     @classmethod
     def update_modversion_in_build(cls, oldmodver_id, modver_id, build_id):
         conn = Database.get_connection()
@@ -76,7 +78,7 @@ class Modversion:
         cur.execute("UPDATE build_modversion SET modversion_id = %s WHERE modversion_id = %s AND build_id = %s", (modver_id, oldmodver_id, build_id))
         conn.commit()
         return None
-    
+
     @classmethod
     def update_modversion_jarmd5(cls, id, jarmd5):
         conn = Database.get_connection()
@@ -103,7 +105,7 @@ class Modversion:
         if row:
             return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
         return None
-    
+
     @staticmethod
     def get_all():
         conn = Database.get_connection()
@@ -124,7 +126,7 @@ class Modversion:
     def update_hash(self, md5, filesize_url):
         conn = Database.get_connection()
         cur = conn.cursor()
-        file_size= Modversion.get_file_size(filesize_url)
+        file_size = Modversion.get_file_size(filesize_url)
         if file_size != -1:
             cur.execute("UPDATE modversions SET filesize = %s WHERE id = %s", (file_size, self.id))
         cur.execute("UPDATE modversions SET md5 = %s WHERE id = %s", (md5, self.id))

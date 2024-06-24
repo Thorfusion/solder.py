@@ -21,24 +21,18 @@
         <tbody class="">
             {%for mod in modpack%}
             <tr>
-                <td  class="tablewidthid">{{mod.id}}</td>
+                <td class="tablewidthid">{{mod.id}}</td>
                 <td>{{mod.version}}</td>
                 <td>{{mod.minecraft}}</td>
                 <td>{{mod.count}}</td>
-                <td><input class="form-check-input" type="radio" name="flexRadioDefault" value="" id="rec_{{mod.id}}" onclick="submitecheckedpress('recommended_modid', '{{mod.version}}', 'recommended_check', 'rec_{{mod.id}}', 'recommended_submit')" {%
-                        if modpackname.recommended == mod.version %}checked{% endif %} ></td>
-                <td><input class="form-check-input" type="radio" name="flexRadioDefault1" value=""
-                        id="latest_{{mod.id}}" onclick="submitecheckedpress('latest_modid', '{{mod.version}}', 'latest_check', 'latest_{{mod.id}}', 'latest_submit')" {% if modpackname.latest == mod.version %}checked{% endif %} ></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="published_{{mod.id}}" onclick="submitecheckedpress('is_published_modid', '{{mod.id}}', 'is_published_check', 'published_{{mod.id}}', 'is_published_submit')" {% if
-                        mod.is_published %}checked{% endif %} ></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" onclick="submitecheckedpress('private_modid', '{{mod.id}}', 'private_check', 'private_{{mod.id}}', 'private_submit')" {% if mod.private
-                        %}checked{% endif %} ></td>
-                <td><input class="form-check-input" type="radio" name="markedbuild" id="marked_{{mod.id}}" onclick="submitecheckedpress('marked_modid', '{{mod.id}}', 'marked_check', 'marked_{{mod.id}}', 'marked_submit')" {% if mod.marked
-                        %}checked{% endif %} ></td>
+                <td><input class="form-check-input" type="radio" name="flexRadioDefault" value="" id="rec_{{mod.id}}" onclick="submitecheckedpress('recommended_modid', '{{mod.version}}', 'recommended_check', 'rec_{{mod.id}}', 'recommended_submit')" {% if modpackname.recommended==mod.version %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="radio" name="flexRadioDefault1" value="" id="latest_{{mod.id}}" onclick="submitecheckedpress('latest_modid', '{{mod.version}}', 'latest_check', 'latest_{{mod.id}}', 'latest_submit')" {% if modpackname.latest==mod.version %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="published_{{mod.id}}" onclick="submitecheckedpress('is_published_modid', '{{mod.id}}', 'is_published_check', 'published_{{mod.id}}', 'is_published_submit')" {% if mod.is_published %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" onclick="submitecheckedpress('private_modid', '{{mod.id}}', 'private_check', 'private_{{mod.id}}', 'private_submit')" {% if mod.private %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="radio" name="markedbuild" id="marked_{{mod.id}}" onclick="submitecheckedpress('marked_modid', '{{mod.id}}', 'marked_check', 'marked_{{mod.id}}', 'marked_submit')" {% if mod.marked %}checked{% endif %}></td>
                 <td>
                     <div class="maxcont">
-                        <a href="../modpackbuild/{{mod.id}}"><button type="button"
-                                class="btn btn-primary buttonwidth">Manage</button></a>
+                        <a href="../modpackbuild/{{mod.id}}"><button type="button" class="btn btn-primary buttonwidth">Manage</button></a>
                         <a href="../modpackbuild/{{mod.id}}"><button type="button" class="btn btn-secondary buttonwidthmcil" disabled>Export
                                 MCIL</button></a>
                     </div>
@@ -123,7 +117,7 @@
         <div class="form-check">
             <input class="form-check-input" type="checkbox" value="1" id="publish" name="publish">
             <label class="form-check-label" for="publish">Publish</label>
-          </div>
+        </div>
         <div class="form-check">
             <input class="form-check-input" type="checkbox" value="1" id="private" name="private" checked>
             <label class="form-check-label" for="private">Private</label>

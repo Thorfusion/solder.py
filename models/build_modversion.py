@@ -1,7 +1,5 @@
-import datetime
 from .database import Database
-from .mod import Mod
-from .modversion import Modversion
+
 
 class Build_modversion:
     def __init__(self, id, modversion_id, build_id, created_at, updated_at, optional):
@@ -11,7 +9,7 @@ class Build_modversion:
         self.created_at = created_at
         self.updated_at = updated_at
         self.optional = optional
-    
+
     @classmethod
     def delete_build_modversion(cls, id):
         conn = Database.get_connection()
@@ -19,7 +17,7 @@ class Build_modversion:
         cur.execute("DELETE FROM build_modversion WHERE id = %s", (id,))
         conn.commit()
         return None
-    
+
     @classmethod
     def update_optional(cls, modversion_id, optional, build_id):
         conn = Database.get_connection()
@@ -29,7 +27,7 @@ class Build_modversion:
             WHERE modversion_id = %s AND build_id = %s;""", (optional, modversion_id, build_id))
         conn.commit()
         return None
-    
+
     @staticmethod
     def get_modpack_build(id):
         conn = Database.get_connection()
@@ -40,13 +38,13 @@ class Build_modversion:
                 INNER JOIN modversions ON build_modversion.modversion_id = modversions.id
                 INNER JOIN mods ON modversions.mod_id = mods.id
                 WHERE build_id = %s
-            """
-        , (id,))
+                ORDER BY mods.name
+            """, (id,))
         rows = cur.fetchall()
         if rows:
             return rows
         return []
-    
+
     @staticmethod
     def get_changelog(previd, id):
         conn = Database.get_connection()
@@ -98,8 +96,7 @@ class Build_modversion:
                                 WHERE build_id = %s
                 ) AS build2 ON build1.name1 = build2.name2 WHERE NOT build1.modverid <=> build2.modverid2
                 ) AS build ORDER BY status, name
-            """
-        , (previd, id, previd, id,))
+            """, (previd, id, previd, id,))
         rows = cur.fetchall()
         if rows:
             return rows

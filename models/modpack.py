@@ -1,6 +1,8 @@
 import datetime
-from .database import Database
+
 from .build import Build
+from .database import Database
+
 
 class Modpack:
     def __init__(self, id, name, slug, recommended, latest, created_at, updated_at, order, hidden, private, pinned):
@@ -27,7 +29,7 @@ class Modpack:
         id = cur.fetchone()["id"]
         return None
         return cls(id, name, slug, now, now, hidden, private)
-    
+
     @classmethod
     def delete_modpack(cls, id):
         conn = Database.get_connection()
@@ -41,7 +43,7 @@ class Modpack:
         cur.execute("DELETE FROM modpacks WHERE id=%s", (id,))
         conn.commit()
         return None
-    
+
     @classmethod
     def update_checkbox(cls, id, value, column, table):
         conn = Database.get_connection()
@@ -49,7 +51,7 @@ class Modpack:
         cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, id))
         conn.commit()
         return None
-    
+
     @classmethod
     def get_by_id(cls, id):
         conn = Database.get_connection()
@@ -59,7 +61,7 @@ class Modpack:
         if row:
             return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"])
         return None
-    
+
     @classmethod
     def get_by_pinned(cls):
         conn = Database.get_connection()
@@ -107,7 +109,7 @@ class Modpack:
         return Build.get_by_modpack_version(self, version)
 
     def to_json(self):
-        data ={
+        data = {
             "name": self.slug,
             "display_name": self.name,
             "recommended": self.recommended,

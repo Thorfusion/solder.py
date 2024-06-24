@@ -14,8 +14,7 @@
         <th scope="col" class="tablemaxwidth tablewidth30">Author</th>
         <th>
           <div class="tablewidthsearch">
-            <input type="text" class="form-control" id="search" placeholder="Type to search"
-              onkeyup="tablesearches(1);">
+            <input type="text" class="form-control" id="search" placeholder="Type to search" onkeyup="tablesearches(1);">
           </div>
         </th>
       </tr>
@@ -28,10 +27,8 @@
         <td class="tablemaxwidth tablewidth30">{{mod.author}}</td>
         <td>
           <div class="maxcont">
-            <button type="button" class="btn btn-primary buttonwidth"
-              onclick="buttonpress('modid', '{{mod.id}}'); buttonpress('mod', '{{mod.name}}'); zipfile_mods('mod', 'mcversion', 'version', 'file', '0');">Select</button>
-            <a href="./modversion/{{mod.id}}"><button type="button"
-                class="btn btn-secondary buttonwidth">Manage</button></a>
+            <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('modid', '{{mod.id}}'); buttonpress('mod', '{{mod.name}}'); zipfile_mods('mod', 'mcversion', 'version', 'file', '0');">Select</button>
+            <a href="./modversion/{{mod.id}}"><button type="button" class="btn btn-secondary buttonwidth">Manage</button></a>
           </div>
         </td>
       </tr>
@@ -109,7 +106,7 @@
       <input type="text" class="form-control" name="jarmd5" id="jarmd5" value="" readonly>
     </div>
   </form>
-  
+
   {% if success %}
   <div class="alert alert-success loginfail mx-auto" role="alert">
     <p>{{mod.vmd5}}</p>

@@ -1,31 +1,26 @@
-__version__ = "1.3.2"
+__version__ = "1.3.3"
 
 import os
-from dotenv import load_dotenv
-
+import secrets
 import threading
 
-from flask import Flask, redirect, render_template, request, url_for, session, request, Response
-from werkzeug.utils import secure_filename
-
-import secrets
 import boto3
-
-from models.database import Database
-from models.user import User
-from models.mod import Mod
-from models.build import Build
-from models.key import Key
-from models.client import Client
-from models.modpack import Modpack
-from models.session import Session
-from models.client_modpack import Client_modpack
-from models.modversion import Modversion
-from models.build_modversion import Build_modversion
-
-from mysql import connector
-
 from api import api
+from dotenv import load_dotenv
+from flask import Flask, redirect, render_template, request, session, url_for
+from models.build import Build
+from models.build_modversion import Build_modversion
+from models.client import Client
+from models.client_modpack import Client_modpack
+from models.database import Database
+from models.key import Key
+from models.mod import Mod
+from models.modpack import Modpack
+from models.modversion import Modversion
+from models.session import Session
+from models.user import User
+from mysql import connector
+from werkzeug.utils import secure_filename
 
 new_user = False
 migratetechnic = False
@@ -66,17 +61,20 @@ R2_BUCKET = os.getenv("R2_BUCKET")
 
 
 R2 = boto3.client('s3',
-                    region_name=R2_REGION,
-                    endpoint_url=R2_ENDPOINT,
-                    aws_access_key_id=R2_ACCESS_KEY,
-                    aws_secret_access_key=R2_SECRET_KEY)
+                  region_name=R2_REGION,
+                  endpoint_url=R2_ENDPOINT,
+                  aws_access_key_id=R2_ACCESS_KEY,
+                  aws_secret_access_key=R2_SECRET_KEY)
+
 
 def createFolder(dirName):
     os.makedirs(dirName, exist_ok=True)
 
+
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 @app.route("/")
 def index():
@@ -99,6 +97,7 @@ def setup():
     else:
         return redirect(url_for("index"))
 
+
 @app.route("/setup", methods=["POST"])
 def setup_creation():
     if new_user or not User.any_user_exists():
@@ -109,7 +108,7 @@ def setup_creation():
             print("setup failed")
             return render_template("setup.html", failed=True)
         User.new(request.form["setupemail"], request.form["setupemail"],
-            request.form["setuppassword"], request.remote_addr, '1')
+                 request.form["setuppassword"], request.remote_addr, '1')
         return redirect(url_for("index"))
 
 
@@ -169,6 +168,7 @@ def modversion(id):
         modversions = []
 
     return render_template("modversion.html", modSlug=mod.name, modversions=modversions, mod=mod, mirror_url=mirror_url)
+
 
 @app.route("/modversion/<id>", methods=["POST"])
 def newmodversion(id):
@@ -249,21 +249,21 @@ def modpack(id):
 
     if request.method == "POST":
         if "form-submit" in request.form:
-            publish="0"
-            private="0"
+            publish = "0"
+            private = "0"
             if "min_java" in request.form:
-                min_java=request.form['min_java']
+                min_java = request.form['min_java']
                 if "NONE" in min_java:
-                    min_java=None
+                    min_java = None
             if "publish" in request.form:
-                publish=request.form['publish']
+                publish = request.form['publish']
             if "private" in request.form:
-                private=request.form['private']
-            clonebuild=""
+                private = request.form['private']
+            clonebuild = ""
             if "clonebuild" in request.form and request.form['clonebuild'] != "":
-                clonebuild=request.form['clonebuild']
+                clonebuild = request.form['clonebuild']
             if "clonebuildman" in request.form and request.form['clonebuildman'] != "":
-                clonebuild=request.form['clonebuildman']
+                clonebuild = request.form['clonebuildman']
             Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild)
             return redirect(id)
         if "recommended_submit" in request.form:
@@ -292,6 +292,7 @@ def modpack(id):
             return redirect(url_for("modpacklibrary"))
 
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
+
 
 @app.route("/changelog/<oldver>-<newver>", methods=["GET", "POST"])
 def changelog(oldver, newver):
@@ -331,6 +332,7 @@ def apikeylibrary():
 
     return render_template("apikeylibrary.html", keys=keys)
 
+
 @app.route("/apikeylibrary", methods=["POST"])
 def apikeylibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
@@ -366,6 +368,7 @@ def clientlibrary():
         clients = []
 
     return render_template("clientlibrary.html", clients=clients)
+
 
 @app.route("/clientlibrary", methods=["POST"])
 def clientlibrary_post():
@@ -403,6 +406,7 @@ def userlibrary():
 
     return render_template("userlibrary.html", users=users)
 
+
 @app.route("/userlibrary", methods=["POST"])
 def userlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
@@ -433,6 +437,7 @@ def userlibrary_post():
 
     return redirect(url_for("userlibrary"))
 
+
 @app.route("/modpackbuild/<id>", methods=["GET", "POST"])
 def modpackbuild(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
@@ -444,7 +449,7 @@ def modpackbuild(id):
         packbuild = Build.get_by_id(id)
         listmodversions = Modversion.get_all()
         buildlist = Build_modversion.get_modpack_build(id)
-        
+
         packbuildname = Build.get_modpackname_by_id(id)
     except connector.ProgrammingError as _:
         raise _
@@ -453,16 +458,16 @@ def modpackbuild(id):
 
     if request.method == "POST":
         if "form-submit" in request.form:
-            publish="0"
-            private="0"
+            publish = "0"
+            private = "0"
             if "min_java" in request.form:
-                min_java=request.form['min_java']
+                min_java = request.form['min_java']
                 if "NONE" in min_java:
-                    min_java=None
+                    min_java = None
             if "publish" in request.form:
-                publish=request.form['publish']
+                publish = request.form['publish']
             if "private" in request.form:
-                private=request.form['private']
+                private = request.form['private']
             Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
             return redirect(id)
         if "optional_submit" in request.form:
@@ -480,9 +485,9 @@ def modpackbuild(id):
             Build.delete_build(id)
             return redirect(url_for("modpacklibrary"))
         if "add_mod_submit" in request.form:
-            newoptional="0"
+            newoptional = "0"
             if "newoptional" in request.form:
-                newoptional=request.form['newoptional']
+                newoptional = request.form['newoptional']
             Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", newoptional)
             return redirect(id)
 
@@ -503,6 +508,7 @@ def modlibrary():
 
     return render_template("modlibrary.html", mods=mods)
 
+
 @app.route("/modlibrary", methods=["POST", "PUT"])
 def modlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
@@ -510,9 +516,9 @@ def modlibrary_post():
         return redirect(url_for("login"))
 
     if "form-submit" in request.form:
-        markedbuild="0"
+        markedbuild = "0"
         if "markedbuild" in request.form:
-            markedbuild=request.form['markedbuild']
+            markedbuild = request.form['markedbuild']
         Modversion.new(request.form["modid"], request.form["mcversion"] + "-" + request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild, "0", request.form["jarmd5"])
         if 'file' not in request.files:
             print('No file part')
@@ -557,20 +563,21 @@ def modpacklibrary():
 
     return render_template("modpacklibrary.html", modpacklibrary=modpacklibrary)
 
+
 @app.route("/modpacklibrary", methods=["POST"])
 def modpacklibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for("login"))
-    
+
     if request.method == "POST":
         if "form-submit" in request.form:
-            hidden="0"
-            private="0"
+            hidden = "0"
+            private = "0"
             if "hidden" in request.form:
-                hidden=request.form['hidden']
+                hidden = request.form['hidden']
             if "private" in request.form:
-                private=request.form['private']
+                private = request.form['private']
             Modpack.new(request.form["pretty_name"], request.form["name"], hidden, private, "0")
             return redirect(url_for("modpacklibrary"))
         if "hidden_submit" in request.form:
@@ -617,7 +624,7 @@ def clients(id):
     except connector.ProgrammingError as e:
         Database.create_tables()
         modpacklibrary = []
-    
+
     return render_template("clients.html", clients=packs, modpacklibrary=modpacklibrary)
 
 

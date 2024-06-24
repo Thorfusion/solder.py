@@ -1,7 +1,10 @@
 import datetime
+
 from .database import Database
 from .modpack import Modpack
 from .passhasher import Passhasher
+
+
 class User:
     def __init__(self, id, username, email, hash, created_ip, last_ip, created_at, updated_at, updated_by_ip, created_by_user_id, updated_by_user_id):
         self.id = id
@@ -29,7 +32,7 @@ class User:
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         return cls(id, username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
-    
+
     @classmethod
     def change(cls, userid, hash1, ip, creator_id):
         conn = Database.get_connection()
