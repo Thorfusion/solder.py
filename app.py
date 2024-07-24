@@ -77,11 +77,16 @@ def allowed_file(filename):
 
 @app.context_processor
 def inject_menu():
-    markedbuildid2 = Build.get_marked_build()
-    if markedbuildid2 == None:
+    if new_user == False:
+        markedbuildid2 = Build.get_marked_build()
+        if markedbuildid2 == None:
+            markedbuildid2 = 0
+        pinnedmodpacks = Modpack.get_by_pinned()
+    else:
         markedbuildid2 = 0
+        pinnedmodpacks = []
     global __version__
-    pinnedmodpacks = Modpack.get_by_pinned()
+    
     
     return dict(markedbuildid2=markedbuildid2, solderversion=__version__, pinnedmodpacks=pinnedmodpacks)
 
