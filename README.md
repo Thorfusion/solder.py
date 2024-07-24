@@ -25,6 +25,7 @@ solder.py is even compatible with original solder's database, visit the install 
 + R2 bucket integration with mod uploading, host your files on the cloud!  
 + MCIL optional mod tag
 + Generate changelog
++ Pin your favorite modpacks to your menu!
 
 # Features to be added in the future
 
@@ -35,7 +36,7 @@ solder.py is even compatible with original solder's database, visit the install 
 
 ## Unfinished Features in dev
 
-+ Pin your favorite modpacks to your menu!
+
 
 # Installation/Updating
 
