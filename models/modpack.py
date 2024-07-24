@@ -62,15 +62,15 @@ class Modpack:
             return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"])
         return None
 
-    @classmethod
-    def get_by_pinned(cls):
+    @staticmethod
+    def get_by_pinned():
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modpacks WHERE pinned = 1")
+        cur.execute("SELECT name, id FROM modpacks WHERE pinned = 1")
         rows = cur.fetchall()
         if rows:
-            return [Modpack(row["id"], row["name"]) for row in rows]
-        return None
+            return rows
+        return []
 
     @staticmethod
     def get_by_cid(cid):
