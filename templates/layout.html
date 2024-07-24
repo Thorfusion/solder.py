@@ -35,11 +35,16 @@
                     <li>
                         <a href="{{ url_for('modpacklibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'modpacklibrary' else '' }}">Modpacks</a>
                     </li>
-                    {%for mod in listpinnedpacks%}
+                        {%for mod in pinnedmodpacks%}
+                        <ul>
+                            <a href="{{ url_for("modpack", id=mod.id) }}" class="nav-link text-white {{ 'active' if active_page == mod.id and active_page_modpack == 'modpack' else '' }}">{{mod.name}}</a>
+                        </ul>
+                        {%endfor%}
+                    {% if markedbuildid2 != 0 %}
                     <li>
-                        <a href="/modpack/{{mod.id}}" class="nav-link text-white {{ 'active' if active_page == 'modpack_{{mod.id}}' else '' }}">{{mod.name}}</a>
+                        <a href="{{ url_for("modpackbuild", id=markedbuildid2) }}" class="nav-link text-white {{ 'active' if active_page == markedbuildid2 and active_page_build == 'build' else '' }}">Marked build</a>
                     </li>
-                    {%endfor%}
+                    {%endif%}
                     <li>
                         <a href="{{ url_for('modlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'modlibrary' else '' }}">Mod
                             library</a>
@@ -60,7 +65,7 @@
                 </ul>
             </nav>
             <div class="flex-column flex-shrink-0 p-3 text-white navcontainer2">
-                <p class="">Version 1.3.3</p>
+                <p class="">Version {{ solderversion }}</p>
             </div>
 
         </div>

@@ -122,6 +122,16 @@ class Build:
         if build is None:
             return None
         return cls(**build)
+    
+    @staticmethod
+    def get_marked_build():
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id FROM builds WHERE marked = 1")
+        build_id = cur.fetchone()["id"]
+        if build_id:
+            return (build_id)
+        return None
 
     def get_modversions_minimal(self):
         conn = Database.get_connection()

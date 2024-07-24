@@ -1,4 +1,4 @@
-__version__ = "1.3.3"
+__version__ = "1.3.4"
 
 import os
 import secrets
@@ -75,6 +75,15 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+@app.context_processor
+def inject_menu():
+    markedbuildid2 = Build.get_marked_build()
+    if markedbuildid2 == None:
+        markedbuildid2 = 0
+    global __version__
+    pinnedmodpacks = Modpack.get_by_pinned()
+    
+    return dict(markedbuildid2=markedbuildid2, solderversion=__version__, pinnedmodpacks=pinnedmodpacks)
 
 @app.route("/")
 def index():

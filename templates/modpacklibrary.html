@@ -25,7 +25,7 @@
                 <td>{{mod.latest}}</td>
                 <td><input class="form-check-input" type="checkbox" value="" id="hidden_{{mod.id}}" onclick="submitecheckedpress('hidden_modid', '{{mod.id}}', 'hidden_check', 'hidden_{{mod.id}}', 'hidden_submit')" {% if mod.hidden %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" onclick="submitecheckedpress('private_modid', '{{mod.id}}', 'private_check', 'private_{{mod.id}}', 'private_submit')" {% if mod.private %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="pinned_{{mod.id}}" onclick="submitecheckedpress('pinned_modid', '{{mod.id}}', 'pinned_check', 'pinned_{{mod.id}}', 'pinned_submit')"" {% if mod.pinned %}checked{% endif %} disabled></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="pinned_{{mod.id}}" onclick="submitecheckedpress('pinned_modid', '{{mod.id}}', 'pinned_check', 'pinned_{{mod.id}}', 'pinned_submit')"" {% if mod.pinned %}checked{% endif %}></td>
                 <td>
                     <a href=" ./modpack/{{mod.id}}"><button type="button" class="btn btn-primary buttonwidth">Manage</button></a>
                 </td>

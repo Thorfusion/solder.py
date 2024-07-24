@@ -1,4 +1,4 @@
-{%extends "layout.html"%} {% set active_page = "modpacks" %} {%block head%}
+{%extends "layout.html"%} {% set active_page = packbuild.id %} {% set active_page_build = 'build' %} {%block head%}
 <title>solder.py</title>
 <link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" /> {%endblock%}{%block main%}
 
