@@ -30,34 +30,34 @@
             <nav class="flex-column flex-shrink-0 p-3 text-white navcontainer">
                 <ul class="nav nav-pills flex-column mb-auto">
                     <li class="nav-item">
-                        <a href="{{ url_for('index') }}" class="nav-link text-white {{ 'active' if active_page == 'index' else '' }}">Dashboard</a>
+                        <a href="{{ url_for('asite.index') }}" class="nav-link text-white {{ 'active' if active_page == 'index' else '' }}">Dashboard</a>
                     </li>
                     <li>
-                        <a href="{{ url_for('modpacklibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'modpacklibrary' else '' }}">Modpacks</a>
+                        <a href="{{ url_for('asite.modpacklibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'modpacklibrary' else '' }}">Modpacks</a>
                     </li>
                         {%for mod in pinnedmodpacks%}
                         <ul>
-                            <a href="{{ url_for("modpack", id=mod.id) }}" class="nav-link text-white {{ 'active' if active_page == mod.id and active_page_modpack == 'modpack' else '' }}">{{mod.name}}</a>
+                            <a href="{{ url_for("asite.modpack", id=mod.id) }}" class="nav-link text-white {{ 'active' if active_page == mod.id and active_page_modpack == 'modpack' else '' }}">{{mod.name}}</a>
                         </ul>
                         {%endfor%}
                     {% if markedbuildid2 != 0 %}
                     <li>
-                        <a href="{{ url_for("modpackbuild", id=markedbuildid2) }}" class="nav-link text-white {{ 'active' if active_page == markedbuildid2 and active_page_build == 'build' else '' }}">Marked build</a>
+                        <a href="{{ url_for("asite.modpackbuild", id=markedbuildid2) }}" class="nav-link text-white {{ 'active' if active_page == markedbuildid2 and active_page_build == 'build' else '' }}">Marked build</a>
                     </li>
                     {%endif%}
                     <li>
-                        <a href="{{ url_for('modlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'modlibrary' else '' }}">Mod
+                        <a href="{{ url_for('asite.modlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'modlibrary' else '' }}">Mod
                             library</a>
                     </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link text-white dropdown-toggle" data-bs-toggle="collapse" data-bs-target="#settings-collapse" href="#" role="button" aria-expanded="false">Settings</a>
                         <div class="collapse" id="settings-collapse">
                             <ul class="btn-toggle-nav list-unstyled fw-normal pb-1 small">
-                                <li><a href="{{ url_for('clientlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'clientlibrary' else '' }}">Clients</a></li>
-                                <li><a href="{{ url_for('apikeylibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'apikeylibrary' else '' }}">API Keys</a></li>
-                                <li><a href="{{ url_for('userlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'userlibrary' else '' }}">Users</a></li>
-                                <li><a href="{{ url_for('mainsettings') }}" class="nav-link text-white {{ 'active' if active_page == 'mainsettings' else '' }}">Env Settings</a></li>
-                                <li><a href="{{ url_for('logout') }}" class="nav-link text-white {{ 'active' if active_page == 'logout' else '' }}">Logout</a></li>
+                                <li><a href="{{ url_for('asite.clientlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'clientlibrary' else '' }}">Clients</a></li>
+                                <li><a href="{{ url_for('asite.apikeylibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'apikeylibrary' else '' }}">API Keys</a></li>
+                                <li><a href="{{ url_for('asite.userlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'userlibrary' else '' }}">Users</a></li>
+                                <li><a href="{{ url_for('asite.mainsettings') }}" class="nav-link text-white {{ 'active' if active_page == 'mainsettings' else '' }}">Env Settings</a></li>
+                                <li><a href="{{ url_for('asite.logout') }}" class="nav-link text-white {{ 'active' if active_page == 'logout' else '' }}">Logout</a></li>
                             </ul>
                         </div>
                     </li>

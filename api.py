@@ -1,20 +1,15 @@
-import os
-
-from dotenv import load_dotenv
 from flask import Blueprint, jsonify, request
 from models.key import Key
 from models.mod import Mod
 from models.modpack import Modpack
+from models.globals import solderpy_version, mirror_url
 
 api = Blueprint("api", __name__)
-
-load_dotenv(".env")
-mirror_url = os.getenv("SOLDER_MIRROR_URL")
 
 
 @api.route("/api/")
 def api_info():
-    return jsonify({"api": "solder.py", "version": "v1.3.4", "stream": "DEV"})
+    return jsonify({"api": "solder.py", "version": "v" + solderpy_version, "stream": "DEV"})
 
 
 @api.route("/api/verify")
