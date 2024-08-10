@@ -25,6 +25,8 @@ repo_url = os.getenv("SOLDER_REPO_LOCATION")
 r2_url = os.getenv("R2_URL")
 db_name = os.getenv("DB_DATABASE")
 
+UPLOAD_FOLDER = "./mods/"
+
 ## S3 bucket variables
 R2_ENDPOINT = os.getenv("R2_ENDPOINT")
 R2_URL = os.getenv("R2_URL")

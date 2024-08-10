@@ -17,7 +17,7 @@ from models.session import Session
 from models.user import User
 from mysql import connector
 from werkzeug.utils import secure_filename
-from models.globals import mirror_url, debug, host, port, repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY
+from models.globals import mirror_url, debug, host, port, repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER
 
 __version__ = solderpy_version
 
@@ -445,20 +445,20 @@ def modlibrary_post():
         if filew and allowed_file(filew.filename):
             filename = secure_filename(filew.filename)
             print("saving")
-            createFolder(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/")
-            filew.save(os.path.join(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/", filename))
+            createFolder(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/")
+            filew.save(os.path.join(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/", filename))
             if R2_BUCKET != None:
                 keyname = "mods/" + request.form["mod"] + "/" + filename
-                R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + filename, R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
+                R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + filename, R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
             jarfilew = request.files['jarfile']
             if jarfilew and allowed_file(jarfilew.filename):
                 jarfilename = secure_filename(jarfilew.filename)
                 print("saving jar")
-                createFolder(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/")
-                jarfilew.save(os.path.join(app.config["UPLOAD_FOLDER"] + secure_filename(request.form["mod"]) + "/", jarfilename))
+                createFolder(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/")
+                jarfilew.save(os.path.join(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/", jarfilename))
                 if R2_BUCKET != None:
                     jarkeyname = "mods/" + request.form["mod"] + "/" + jarfilename
-                    R2.upload_file(app.config["UPLOAD_FOLDER"] + request.form["mod"] + "/" + jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/zip'})
+                    R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/zip'})
             return redirect(url_for('asite.modlibrary'))
 
     return redirect(url_for('asite.modlibrary'))

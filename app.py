@@ -15,8 +15,6 @@ app.register_blueprint(alogin)
 app.register_blueprint(asetup)
 app.register_blueprint(asite)
 
-app.config["UPLOAD_FOLDER"] = "./mods/"
-
 app.secret_key = secrets.token_hex()
 
 @app.errorhandler(404)
