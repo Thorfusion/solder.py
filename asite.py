@@ -120,18 +120,18 @@ def newmodversion(id):
 
         if request.form["rehash_md5"] != "":
             version = Modversion.get_by_id(request.form["rehash_id"])
-            version.update_hash(request.form["rehash_md5"], mirror_url + request.form["rehash_url"])
+            version.update_hash(request.form["rehash_md5"], repo_url + request.form["rehash_url"])
         else:
             version = Modversion.get_by_id(request.form["rehash_id"])
-            t = threading.Thread(target=version.rehash, args=(mirror_url + request.form["rehash_url"],))
+            t = threading.Thread(target=version.rehash, args=(repo_url + request.form["rehash_url"],))
             t.start()
     if "newmodvermanual_submit" in request.form:
-        filesie2 = Modversion.get_file_size(mirror_url + request.form["newmodvermanual_url"])
+        filesie2 = Modversion.get_file_size(repo_url + request.form["newmodvermanual_url"])
         if request.form["newmodvermanual_md5"] != "":
             Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0")
         else:
             # Todo Add filesize rehash and md5 hash, if fails do not add
-            Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", mirror_url + request.form["newmodvermanual_url"])
+            Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", repo_url + request.form["newmodvermanual_url"])
     return redirect(id)
 
 

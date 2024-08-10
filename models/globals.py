@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 
 ## Solderpy version
-solderpy_version = "1.4.0"
+solderpy_version = "1.4.1"
 
 load_dotenv(".env")
 

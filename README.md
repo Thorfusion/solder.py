@@ -36,8 +36,6 @@ solder.py is even compatible with original solder's database, visit the install 
 
 ## Unfinished Features in dev
 
-
-
 # Installation/Updating
 
 solder.py is compatible with the original database and only adds columns to tables for the extra features we have, you can even dual run with both solder.py and original solder.
@@ -130,13 +128,13 @@ docker run --name solderpy --restart always -d -p 80:5000 thorfusion/solderpy
 
 #### Repo variables
 
-This is the public facing URL for your repository. If your repository location is already a URL, you can use the same value here. Include a trailing slash!
+This is the public facing URL for your repository. This is prefix url that technic launcher uses to download the mods. Include a trailing slash!
 
 ```bash
 -e SOLDER_MIRROR_URL=https://solder.example.com/mods/
 ```
 
-This is the location of your mod reposistory. This can be a URL (remote repo), or an absolute file location (local repo, much faster). When a remote repo is used, Solder will have to download the entire file to calculate the MD5 hash.
+This is the url solder.py uses to calculate md5 and filesize when rehashing or adding a mod manually. This is currently only url, so use localhost or local ip address if on the same network, else use same url as mirror url.
 
 ```bash
 -e SOLDER_REPO_LOCATION=https://solder.example.com/mods/
