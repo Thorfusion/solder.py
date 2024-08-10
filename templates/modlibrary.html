@@ -58,19 +58,19 @@
     </div>
     <label>Type detected (buttons do nothing)</label>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="filetype" id="filetypejar" readonly>
+      <input class="form-check-input" type="radio" name="filetype" id="filetypejar" readonly onclick="return false">
       <label class="form-check-label" for="filetypejar">
         mod.jar
       </label>
     </div>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="filetype" id="filetypelauncher" readonly>
+      <input class="form-check-input" type="radio" name="filetype" id="filetypelauncher" readonly onclick="return false">
       <label class="form-check-label" for="filetypelauncher">
         Launcher
       </label>
     </div>
     <div class="form-check">
-      <input class="form-check-input" type="radio" name="filetype" id="filetypezip" readonly>
+      <input class="form-check-input" type="radio" name="filetype" id="filetypezip" readonly onclick="return false">
       <label class="form-check-label" for="filetypezip">
         any.zip
       </label>
@@ -97,7 +97,7 @@
       <input type="text" class="form-control invisible" name="modid" id="modid" readonly>
     </div>
     <div class="mb-3">
-      <a href="{{ url_for('newmod') }}"><button type="button" class="btn btn-success tablewidth2">New
+      <a href="{{ url_for('asite.newmod') }}"><button type="button" class="btn btn-success tablewidth2">New
           mod</button></a>
     </div>
     <div class="mb-3">
