@@ -6,9 +6,6 @@ from models.globals import migratetechnic, new_user
 
 asetup = Blueprint("asetup", __name__)
 
-if migratetechnic:
-    Database.create_session_table()
-
 @asetup.route("/setup", methods=["GET"])
 def setup():
     if not Database.is_setup():
