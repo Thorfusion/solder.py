@@ -188,6 +188,22 @@ If new user is enabled, you can enable this migration tool for technic solder da
 -e TECHNIC_MIGRATION=True
 ```
 
+#### API only mode
+
+solder.py will only run the api part of solder, allows it to run on read only permissions on a database, no login. good fit for public facing api only mode and another solder.py instance for local access only or similar for login and management
+
+```bash
+-e API_ONLY=True
+```
+
+#### Management only mode
+
+solder.py will run everything except api part of solder, quite rare usecase.
+
+```bash
+-e MANAGEMENT_ONLY=True
+```
+
 NOTE: The docker image does not and will not support https, therefore it is required to run an reverse proxy
 
 ## Dev Enviroment
