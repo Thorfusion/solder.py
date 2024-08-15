@@ -500,7 +500,7 @@ def modpacklibrary_post():
         if "pinned_submit" in request.form:
             Modpack.update_checkbox(request.form["pinned_modid"], request.form["pinned_check"], "pinned", "modpacks")
 
-    return redirect(url_for('alogin.modpacklibrary'))
+    return redirect(url_for('asite.modpacklibrary'))
 
 
 @asite.route("/clients/<id>", methods=["GET", "POST"])
