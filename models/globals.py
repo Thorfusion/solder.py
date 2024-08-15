@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 
 ## Solderpy version
-solderpy_version = "1.4.0"
+solderpy_version = "1.4.1"
 
 load_dotenv(".env")
 
@@ -16,6 +16,9 @@ port = os.getenv("APP_PORT")
 
 new_user = os.getenv("NEW_USER")
 migratetechnic = os.getenv("TECHNIC_MIGRATION")
+
+api_only = os.getenv("API_ONLY")
+management_only = os.getenv("MANAGEMENT_ONLY")
 
 debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
 

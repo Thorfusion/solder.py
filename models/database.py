@@ -88,11 +88,11 @@ class Database:
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         name VARCHAR(255) NOT NULL UNIQUE,
                         pretty_name VARCHAR(255) DEFAULT(''),
-                        description VARCHAR(255),
+                        description VARCHAR(255) DEFAULT(''),
                         author VARCHAR(255),
                         link VARCHAR(255),
-                        side enum('CLIENT', 'SERVER', 'BOTH'),
-                        modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'NONE',
+                        side enum('CLIENT', 'SERVER', 'BOTH') DEFAULT 'BOTH',
+                        modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'MOD',
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         note TEXT
@@ -271,9 +271,9 @@ class Database:
             )
             cur.execute(
                 """ALTER TABLE mods
-                    ADD COLUMN side enum('CLIENT', 'SERVER', 'BOTH') AFTER link,
-                    ADD COLUMN modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'NONE',
-                    ADD COLUMN note VARCHAR(255)
+                    ADD COLUMN side enum('CLIENT', 'SERVER', 'BOTH') DEFAULT 'BOTH',
+                    ADD COLUMN modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'MOD',
+                    ADD COLUMN note VARCHAR(255) DEFAULT('')
                 """
             )
             cur.execute(
