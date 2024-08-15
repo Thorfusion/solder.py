@@ -46,8 +46,6 @@ def allowed_file(filename):
 def inject_menu():
     
     markedbuildid2 = Build.get_marked_build()
-    if markedbuildid2 == None:
-        markedbuildid2 = 0
     pinnedmodpacks = Modpack.get_by_pinned()
     
     return dict(markedbuildid2=markedbuildid2, solderversion=solderpy_version, pinnedmodpacks=pinnedmodpacks)
