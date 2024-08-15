@@ -23,8 +23,7 @@ __version__ = solderpy_version
 
 asite = Blueprint("asite", __name__)
 
-if migratetechnic:
-    Database.create_session_table()
+Session.start_session_loop()
 
 ## Allowed extensions to be uploaded
 ALLOWED_EXTENSIONS = {'zip', 'jar'}
