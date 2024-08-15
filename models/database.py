@@ -57,8 +57,6 @@ class Database:
                         name VARCHAR(255) NOT NULL UNIQUE,
                         slug VARCHAR(255) NOT NULL UNIQUE,
                         user_id INT NOT NULL,
-                        minecraft VARCHAR(255) NOT NULL DEFAULT(''),
-                        forge VARCHAR(255),
                         recommended VARCHAR(255),
                         latest VARCHAR(255),
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -76,6 +74,8 @@ class Database:
                         version VARCHAR(255) NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        minecraft VARCHAR(255) NOT NULL DEFAULT(''),
+                        forge VARCHAR(255),
                         is_published TINYINT(1) DEFAULT(0),
                         private TINYINT(1) DEFAULT(0),
                         min_java VARCHAR(255),
@@ -264,8 +264,6 @@ class Database:
             cur.execute(
                 """ALTER TABLE modpacks
                     ADD COLUMN user_id INT NOT NULL AFTER slug,
-                    ADD COLUMN minecraft VARCHAR(255) NOT NULL DEFAULT(''),
-                    ADD COLUMN forge VARCHAR(255),
                     ADD COLUMN pinned TINYINT(1) NOT NULL DEFAULT(0)
                 """
             )
@@ -278,6 +276,8 @@ class Database:
             )
             cur.execute(
                 """ALTER TABLE builds
+                    ADD COLUMN minecraft VARCHAR(255) NOT NULL DEFAULT(''),
+                    ADD COLUMN forge VARCHAR(255),
                     ADD COLUMN marked TINYINT(1) NOT NULL DEFAULT(0)
                 """
             )
