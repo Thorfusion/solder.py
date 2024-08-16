@@ -9,18 +9,25 @@ load_dotenv(".env")
 ## Enviroment variables
 new_user = False
 migratetechnic = False
+api_only = False
+management_only = False
 debug = False
 
 host = os.getenv("APP_URL")
 port = os.getenv("APP_PORT")
 
-new_user = os.getenv("NEW_USER")
-migratetechnic = os.getenv("TECHNIC_MIGRATION")
+if os.getenv("NEW_USER"):
+    new_user = os.getenv("NEW_USER").lower() in ["true", "t", "1", "yes", "y"]
+if os.getenv("TECHNIC_MIGRATION"):
+    migratetechnic = os.getenv("TECHNIC_MIGRATION").lower() in ["true", "t", "1", "yes", "y"]
 
-api_only = os.getenv("API_ONLY")
-management_only = os.getenv("MANAGEMENT_ONLY")
+if os.getenv("API_ONLY"):
+    api_only = os.getenv("API_ONLY").lower() in ["true", "t", "1", "yes", "y"]
+if os.getenv("MANAGEMENT_ONLY"):
+    management_only = os.getenv("MANAGEMENT_ONLY").lower() in ["true", "t", "1", "yes", "y"]
 
-debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
+if os.getenv("APP_DEBUG"):
+    debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
 
 mirror_url = os.getenv("SOLDER_MIRROR_URL")
 repo_url = os.getenv("SOLDER_REPO_LOCATION")
