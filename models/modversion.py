@@ -29,7 +29,7 @@ class Modversion:
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
         conn.commit()
-        if markedbuild is "1":
+        if markedbuild == "1":
             Modversion.add_modversion_to_selected_build(id, mod_id, "0", "1", "0")
         if md5 == "0":
             version = Modversion.get_by_id(id)
