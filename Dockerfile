@@ -6,6 +6,9 @@ COPY /static/ /app/static/
 COPY /templates/ /app/templates/
 COPY /api.py /app/
 COPY /app.py /app/
+COPY /alogin.py /app/
+COPY /asetup.py /app/
+COPY /asite.py /app/
 COPY /LICENSE.md /app/
 COPY /Pipfile /app/
 COPY /Pipfile.lock /app/

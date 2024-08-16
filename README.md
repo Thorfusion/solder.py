@@ -206,6 +206,22 @@ solder.py will run everything except api part of solder, quite rare usecase.
 
 NOTE: The docker image does not and will not support https, therefore it is required to run an reverse proxy
 
+### docker container installed, setup on website
+
+Remember to set NEW_USER and TECHNIC_MIGRATION if using existing technic database, if clean install leave both.
+
+#### Step 1 Login screen
+
+When you have installed the container with the required envirables and created an mysql database and user that has access to said database, next step is to go to solder.py (http://example.com) where you will be redirected to login screen. by seeing this login screen, an successful connection to the database has been achieved. where you can find a table named sessions. go to (http://example.com/setup)
+
+#### Step 2 Setup screen
+
+Setup screen will take some time as when requesting this page, solder.py is creating the other tables in the database. when done the user will be presented with a email and password box with a setup button in the bottom, this is the administrator account you are creating. when setup is done, you will be redirected to login screen
+
+#### Step 3 Login screen again
+
+You will be redicted to log in screen, you can now login and be redirected to the index page, solder.py install is now complete. remember to disable NEW_USER and TECHNIC_MIGRATION as this allows the setup page to be up and random users to create accounts.
+
 ## Dev Enviroment
 
 ```bash

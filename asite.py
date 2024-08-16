@@ -46,8 +46,6 @@ def allowed_file(filename):
 def inject_menu():
     
     markedbuildid2 = Build.get_marked_build()
-    if markedbuildid2 == None:
-        markedbuildid2 = 0
     pinnedmodpacks = Modpack.get_by_pinned()
     
     return dict(markedbuildid2=markedbuildid2, solderversion=solderpy_version, pinnedmodpacks=pinnedmodpacks)
@@ -502,7 +500,7 @@ def modpacklibrary_post():
         if "pinned_submit" in request.form:
             Modpack.update_checkbox(request.form["pinned_modid"], request.form["pinned_check"], "pinned", "modpacks")
 
-    return redirect(url_for('alogin.modpacklibrary'))
+    return redirect(url_for('asite.modpacklibrary'))
 
 
 @asite.route("/clients/<id>", methods=["GET", "POST"])

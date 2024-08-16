@@ -128,10 +128,11 @@ class Build:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT id FROM builds WHERE marked = 1")
-        build_id = cur.fetchone()["id"]
-        if build_id:
+        try: 
+            build_id = cur.fetchone()["id"]
             return (build_id)
-        return None
+        except:
+            return 0
 
     def get_modversions_minimal(self):
         conn = Database.get_connection()
