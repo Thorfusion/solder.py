@@ -204,6 +204,24 @@ solder.py will run everything except api part of solder, quite rare usecase.
 -e MANAGEMENT_ONLY=True
 ```
 
+#### Example
+
+```bash
+docker run -d \
+  --name solderpy \
+  -e DB_HOST=192.168.1.1 \
+  -e DB_PORT=3306 \
+  -e DB_USER=solderpy \
+  -e DB_PASSWORD=solderpy \
+  -e DB_DATABASE=solderpy \
+  -e SOLDER_MIRROR_URL=https://example.com/mods/ \
+  -e SOLDER_REPO_LOCATION=http://localhost/mods/ \
+  -p 80:5000 \
+  -v /solderpy/mods:/app/mods \
+  --restart unless-stopped \
+  thorfusion/solderpy:latest
+```
+
 NOTE: The docker image does not and will not support https, therefore it is required to run an reverse proxy
 
 ### docker container installed, setup on website
