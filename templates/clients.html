@@ -37,8 +37,9 @@
         <div class="mb-3">
             <label for="modpack" class="form-label">Modpack</label>
             <select class="form-select" name="modpack" id="modpack">
+                <option class="is-invalid" name="modfirst2" hidden="true" selected="selected" value="">Select modpack</option>
                 {%for mod in modpacklibrary%}
-                <option value="{{mod.id}}">{{mod.name}}</option>
+                <option value="{{mod.id}}" {%for combo in clients%} {% if combo.modpack_id==mod.id %} hidden="true" {% endif %} {%endfor%}>{{mod.name}}</option>
                 {%endfor%}
             </select>
         </div>
