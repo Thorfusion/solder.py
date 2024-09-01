@@ -45,10 +45,10 @@ class Modpack:
         return None
 
     @classmethod
-    def update_checkbox(cls, id, value, column, table):
+    def update_checkbox(cls, where_id, value, column, table):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, id))
+        cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, where_id))
         conn.commit()
         return None
 
@@ -99,7 +99,7 @@ class Modpack:
         cur.execute("SELECT * FROM modpacks")
         rows = cur.fetchall()
         if rows:
-            return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"]) for row in rows]
+            return rows
         return []
 
     def get_builds(self):
