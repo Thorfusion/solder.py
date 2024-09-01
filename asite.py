@@ -18,6 +18,7 @@ from models.user import User
 from mysql import connector
 from werkzeug.utils import secure_filename
 from models.globals import mirror_url, debug, host, port, repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER
+from models.user_modpack import User_modpack
 
 __version__ = solderpy_version
 
@@ -624,8 +625,84 @@ def clients(id):
     try:
         modpacklibrary = Modpack.get_all()
     except connector.ProgrammingError as e:
+        flash("error when getting modpack list", "error")
         Database.create_tables()
         modpacklibrary = []
 
     return render_template("clients.html", clients=packs, modpacklibrary=modpacklibrary)
+
+@asite.route("/user/<id>", methods=["GET", "POST"])
+def user(id):
+    if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
+        # New or invalid session, send to login
+        return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "solder_users") == 0:
+        return redirect(request.referrer)
+    
+    try:
+        packs = User_modpack.get_all_user_modpacks(id)
+    except connector.ProgrammingError as e:
+        Database.create_tables()
+        packs = []
+        flash("error when getting user modpack list", "error")
+        
+    user_perms = User_modpack.get_user_permission(id)
+        
+    if request.method == "POST":
+        if "form-submit" in request.form:
+            if "modpack" not in request.form:
+                return redirect(id)
+            User_modpack.new(id, request.form["modpack"])
+            return redirect(id)
+        if "form2-submit" in request.form:
+            if "delete_id" not in request.form:
+                return redirect(id)
+            User_modpack.delete_user_modpack(request.form["delete_id"])
+            return redirect(id)
+        if "perm-submit" in request.form:
+            solder_full = "0"
+            solder_users = "0"
+            solder_keys = "0"
+            solder_clients = "0"
+            solder_env = "0"
+            mods_create = "0"
+            mods_manage = "0"
+            mods_delete = "0"
+            modpacks_create = "0"
+            modpacks_manage = "0"
+            modpacks_delete = "0"
+            if "solder_full" in request.form:
+                solder_full = request.form['solder_full']
+            if "solder_users" in request.form:
+                solder_users = request.form['solder_users']
+            if "solder_keys" in request.form:
+                solder_keys = request.form['solder_keys']
+            if "solder_clients" in request.form:
+                solder_clients = request.form['solder_clients']
+            if "solder_env" in request.form:
+                solder_env = request.form['solder_env']
+            if "mods_create" in request.form:
+                mods_create = request.form['mods_create']
+            if "mods_manage" in request.form:
+                mods_manage = request.form['mods_manage']
+            if "mods_delete" in request.form:
+                mods_delete = request.form['mods_delete']
+            if "modpacks_create" in request.form:
+                modpacks_create = request.form['modpacks_create']
+            if "modpacks_manage" in request.form:
+                modpacks_manage = request.form['modpacks_manage']
+            if "modpacks_delete" in request.form:
+                modpacks_delete = request.form['modpacks_delete']
+            User_modpack.update_userpermissions(id, solder_full, solder_users, solder_keys, solder_clients, solder_env, mods_create, mods_manage, mods_delete, modpacks_create, modpacks_manage, modpacks_delete)
+            return redirect(id)
+    
+    try:
+        modpacklibrary = Modpack.get_all()
+    except connector.ProgrammingError as e:
+        flash("error when getting modpack list", "error")
+        Database.create_tables()
+        modpacklibrary = []
+
+    return render_template("user.html", userpacks=packs, modpacklibrary=modpacklibrary, user_perms=user_perms)
 

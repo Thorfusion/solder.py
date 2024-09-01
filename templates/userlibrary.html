@@ -22,8 +22,8 @@
                 <td class="tablemaxwidth">{{mod.username}}</td>
                 <td>
                     <div class="maxcont">
-                        <a href="#"><button type="button" class="btn btn-primary" disabled readonly>Manage</button></a>
                         <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('changeuser_user', '{{mod.username}}');buttonpress('changeuser_id', '{{mod.id}}');buttonpress('changeuser_email', '{{mod.email}}');">Select</button>
+                        <a href="{{ url_for("asite.user", id=mod.id) }}"><button type="button" class="btn btn-secondary">Manage</button></a>
                         <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{mod.id}}', 'form2-submit')">Delete</button>
                     </div>
                 </td>
