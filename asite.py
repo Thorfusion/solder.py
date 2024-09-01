@@ -75,6 +75,9 @@ def modversion(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "mods_manage") == 0:
+        return redirect(request.referrer)
 
     mod = Mod.get_by_id(id)
 
@@ -93,12 +96,18 @@ def newmodversion(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "mods_manage") == 0:
+                return redirect(request.referrer)
+    
     if "form-submit" in request.form:
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
         Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
         return redirect(id)
     if "deleteversion_submit" in request.form:
+        if User.get_permission_token(session["token"], "mods_delete") == 0:
+                return redirect(request.referrer)
         if "delete_id" not in request.form:
             return redirect(id)
         Modversion.delete_modversion(request.form["delete_id"])
@@ -109,6 +118,8 @@ def newmodversion(id):
         Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id, "0", "1", "0")
         return redirect(id)
     if "deletemod_submit" in request.form:
+        if User.get_permission_token(session["token"], "mods_delete") == 0:
+                return redirect(request.referrer)
         if "mod_delete_id" not in request.form:
             return redirect(id)
         Mod.delete_mod(request.form["mod_delete_id"])
@@ -139,6 +150,10 @@ def newmod():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "mods_create") == 0:
+        return redirect(request.referrer)
+    
     if request.method == "POST":
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
@@ -153,6 +168,9 @@ def modpack(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+        return redirect(request.referrer)
 
     try:
         modpack = Modpack.get_by_id(id)
@@ -164,6 +182,10 @@ def modpack(id):
 
     if request.method == "POST":
         if "form-submit" in request.form:
+            
+            if User.get_permission_token(session["token"], "modpacks_create") == 0:
+                return redirect(request.referrer)
+            
             publish = "0"
             private = "0"
             if "min_java" in request.form:
@@ -201,6 +223,10 @@ def modpack(id):
             newversion = request.form["changelog_newver"]
             return redirect(url_for('asite.changelog', oldver=oldversion, newver=newversion))
         if "deletemod_submit" in request.form:
+            
+            if User.get_permission_token(session["token"], "modpacks_delete") == 0:
+                return redirect(request.referrer)
+            
             if "modpack_delete_id" not in request.form:
                 return redirect(id)
             modpack.delete_modpack(request.form["modpack_delete_id"])
@@ -384,6 +410,9 @@ def modpackbuild(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+                return redirect(request.referrer)
 
     try:
         listmod = Mod.get_all_pretty_names()
@@ -419,11 +448,15 @@ def modpackbuild(id):
             Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], id)
             return redirect(id)
         if "delete_submit" in request.form:
+            if User.get_permission_token(session["token"], "modpacks_delete") == 0:
+                return redirect(request.referrer)
             if "delete_id" not in request.form:
                 return redirect(id)
             Build_modversion.delete_build_modversion(request.form["delete_id"])
             return redirect(id)
         if "deletebuild_submit" in request.form:
+            if User.get_permission_token(session["token"], "modpacks_delete") == 0:
+                return redirect(request.referrer)
             Build.delete_build(id)
             return redirect(url_for('asite.modpacklibrary'))
         if "add_mod_submit" in request.form:
@@ -441,6 +474,9 @@ def modlibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "mods_manage") == 0:
+                return redirect(request.referrer)
 
     try:
         mods = Mod.get_all()
@@ -457,6 +493,9 @@ def modlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "mods_manage") == 0:
+                return redirect(request.referrer)
 
     if "form-submit" in request.form:
         markedbuild = "0"
@@ -497,6 +536,9 @@ def modpacklibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+                return redirect(request.referrer)
 
     try:
         modpacklibrary = Modpack.get_all()
@@ -513,9 +555,14 @@ def modpacklibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+                return redirect(request.referrer)
 
     if request.method == "POST":
         if "form-submit" in request.form:
+            if User.get_permission_token(session["token"], "modpacks_create") == 0:
+                return redirect(request.referrer)
             hidden = "0"
             private = "0"
             if "hidden" in request.form:
