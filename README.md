@@ -32,7 +32,6 @@ solder.py is even compatible with original solder's database, visit the install 
 + Maven integration
 + Modrinth integration
 + MCIL export support
-+ Advanced user management
 
 ## Unfinished Features in dev
 
