@@ -45,6 +45,17 @@ class Session:
             return None
         
     @staticmethod
+    def get_user_id(token: str):
+        conn = Database.get_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT user_id FROM sessions WHERE token = %s", (token,))
+        try: 
+            user_id = cur.fetchone()["user_id"]
+            return (user_id)
+        except:
+            return None
+
+    @staticmethod
     def new_session(ip: str, user) -> str:
         token = secrets.token_hex(40)
         conn = Database.get_connection()
