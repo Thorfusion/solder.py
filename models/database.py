@@ -64,7 +64,9 @@ class Database:
                         `order` INT DEFAULT(0),
                         hidden TINYINT(1) DEFAULT(1),
                         private TINYINT(1) DEFAULT(0),
-                        pinned TINYINT(1) NOT NULL DEFAULT(0)
+                        pinned TINYINT(1) NOT NULL DEFAULT(0),
+                        enable_optionals BOOLEAN DEFAULT(0),
+                        enable_server BOOLEAN DEFAULT(0)
                         )"""
             )
             cur.execute(
@@ -275,7 +277,9 @@ class Database:
             cur.execute(
                 """ALTER TABLE modpacks
                     ADD COLUMN user_id INT NOT NULL AFTER slug,
-                    ADD COLUMN pinned TINYINT(1) NOT NULL DEFAULT(0)
+                    ADD COLUMN pinned TINYINT(1) NOT NULL DEFAULT(0),
+                    ADD COLUMN enable_optionals BOOLEAN DEFAULT(0),
+                    ADD COLUMN enable_server BOOLEAN DEFAULT(0)
                 """
             )
             cur.execute(
