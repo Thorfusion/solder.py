@@ -323,7 +323,7 @@ class Database:
                         modpack_id INT NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                        )"""
+                )"""
             )
             con.commit()
             con.close()

@@ -107,7 +107,10 @@ class User:
             return 0
         cur.execute("SELECT * FROM user_permissions WHERE user_id = %s", (user_id,))
         try: 
-            allowed = cur.fetchone()[db_column]
+            row = cur.fetchone()
+            allowed = row[db_column]
+            if row["solder_full"] == 1:
+                allowed = 1
             conn.commit()
             if allowed == 0:
                 flash("Permission Denied", "error")
