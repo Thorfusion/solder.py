@@ -89,6 +89,19 @@ class Build:
             flash("unable to get modpackname by id", "error")
             return None
         return (name)
+    
+    @classmethod
+    def get_modpackid_by_id(cls, id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT modpack_id FROM builds WHERE id = %s", (id,))
+        try: 
+            row = cur.fetchone()["modpack_id"]
+            conn.commit()
+            return (row)
+        except:
+            flash("unable to get modpackid by id", "error")
+            return 0
 
     @classmethod
     def get_by_id(cls, id):

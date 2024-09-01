@@ -49,6 +49,35 @@ class User_modpack:
         return []
     
     @staticmethod
+    def get_user_modpackpermission(token: str, modpack_id) -> list:
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT user_id FROM sessions WHERE token = %s", (token,))
+        try: 
+            user_id = cur.fetchone()["user_id"]
+            conn.commit()
+        except:
+            flash("unable to fetch user_id for permission check", "error")
+            return False
+        cur.execute("SELECT solder_full FROM user_permissions WHERE user_id = %s", (user_id,))
+        try: 
+            row = cur.fetchone()["solder_full"]
+            conn.commit()
+            if row == 1:
+                return True
+        except:
+            flash("unable to check your admin permission", "error")
+        cur.execute("SELECT modpack_id FROM user_modpack WHERE user_id = %s AND modpack_id = %s", (user_id, modpack_id))
+        try: 
+            rows = cur.fetchone()["modpack_id"]
+            conn.commit()
+            if rows == modpack_id:
+                return True
+        except:
+            flash("Permission denied to this modpack", "error")
+            return False
+    
+    @staticmethod
     def get_user_permission(id) -> list:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)

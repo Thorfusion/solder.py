@@ -172,6 +172,9 @@ def modpack(id):
     
     if User.get_permission_token(session["token"], "modpacks_manage") == 0:
         return redirect(request.referrer)
+    
+    if User_modpack.get_user_modpackpermission(session["token"], id) == False:
+        return redirect(request.referrer)
 
     try:
         modpack = Modpack.get_by_id(id)
@@ -420,6 +423,9 @@ def modpackbuild(id):
     
     if User.get_permission_token(session["token"], "modpacks_manage") == 0:
                 return redirect(request.referrer)
+    
+    if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(id)) == False:
+        return redirect(request.referrer)
 
     try:
         listmod = Mod.get_all_pretty_names()
