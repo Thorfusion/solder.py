@@ -519,7 +519,7 @@ def modlibrary_post():
                 try:
                     R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + filename, R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
                 except:
-                    flash("failed to upload file to bucket", "error")
+                    flash("failed to upload zipfile to bucket", "error")
             jarfilew = request.files['jarfile']
             if jarfilew and allowed_file(jarfilew.filename):
                 jarfilename = secure_filename(jarfilew.filename)
