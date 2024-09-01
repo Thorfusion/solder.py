@@ -241,6 +241,9 @@ def apikeylibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "solder_keys") == 0:
+        return redirect(request.referrer)
 
     try:
         keys = Key.get_all_keys()
@@ -256,6 +259,10 @@ def apikeylibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "solder_keys") == 0:
+        return redirect(request.referrer)
+    
     if request.method == "POST":
         if "form-submit" in request.form:
             if "keyname" not in request.form:
@@ -278,6 +285,9 @@ def clientlibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "solder_clients") == 0:
+        return redirect(request.referrer)
 
     try:
         clients = Client.get_all_clients()
@@ -294,6 +304,10 @@ def clientlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "solder_clients") == 0:
+        return redirect(request.referrer)
+    
     if request.method == "POST":
         if "form-submit" in request.form:
             if "client_name" not in request.form:
@@ -316,6 +330,9 @@ def userlibrary():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "solder_users") == 0:
+        return redirect(request.referrer)
 
     try:
         users = User.get_all_users()
@@ -332,6 +349,10 @@ def userlibrary_post():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "solder_users") == 0:
+        return redirect(request.referrer)
+    
     if request.method == "POST":
         if "form-submit" in request.form:
             if "newemail" not in request.form:
@@ -518,6 +539,9 @@ def clients(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    
+    if User.get_permission_token(session["token"], "solder_clients") == 0:
+        return redirect(request.referrer)
 
     try:
         packs = Client_modpack.get_all_client_modpacks(id)
