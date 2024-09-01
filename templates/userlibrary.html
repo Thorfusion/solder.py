@@ -73,17 +73,6 @@
             <input type="text" class="form-control invisible" name="changeuser_email" id="changeuser_email">
         </div>
     </form>
-    {% if success %}
-    <div class="alert alert-success loginfail mx-auto" role="alert">
-        <p>{{mod.vmd5}}</p>
-        <p>{{mod.vurl}}</p>
-    </div>
-    {% endif %}
-    {% if failed %}
-    <div class="alert alert-danger loginfail mx-auto" role="alert">
-        <p>Failed!</p>
-    </div>
-    {% endif %}
 </div>
 
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>

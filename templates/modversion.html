@@ -160,16 +160,6 @@
         <input class="btn btn-success" type="submit" value="Save changes" name="form-submit" id="form-submit">
         <button type="button" id="deletemod" class="btn btn-danger" disabled onclick="submitbuttonpress('mod_delete_id', '{{ mod.id }}', 'deletemod_submit')">Delete Mod</button> <input class="form-check-input" type="checkbox" value="1" id="delete_disable" name="delete_disable" onchange="undisable('deletemod')">
     </form>
-    {% if success %}
-    <div class="alert alert-success loginfail mx-auto" role="alert">
-        <p>The server is currently hashing the file, come back again</p>
-    </div>
-    {% endif %}
-    {% if failed %}
-    <div class="alert alert-danger loginfail mx-auto" role="alert">
-        <p>Failed!</p>
-    </div>
-    {% endif %}
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="mod_delete_id" id="mod_delete_id" readonly>
         <input class="btn btn-danger invisible" type="submit" name="deletemod_submit" id="deletemod_submit" value="Delete">
