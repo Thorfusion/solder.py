@@ -392,7 +392,7 @@ def userlibrary_post():
                 return redirect(url_for('asite.userlibrary'))
             if "newuser" not in request.form:
                 return redirect(url_for('asite.userlibrary'))
-            User.new(request.form["newuser"], request.form["newemail"], request.form["newpassword"], request.remote_addr, '1')
+            User.new(request.form["newuser"], request.form["newemail"], request.form["newpassword"], request.remote_addr, Session.get_user_id(session["token"]))
             return redirect(url_for('asite.userlibrary'))
         if "form2-submit" in request.form:
             if User.get_permission_token(session["token"], "solder_users") == 0:
@@ -402,14 +402,14 @@ def userlibrary_post():
             User.delete(request.form["delete_id"])
             return redirect(url_for('asite.userlibrary'))
         if "changeuser_submit" in request.form:
-            if session.get_user_id(session["token"]) != request.form["changeuser_id"]:
+            if Session.get_user_id(session["token"]) != request.form["changeuser_id"]:
                 if User.get_permission_token(session["token"], "solder_users") == 0:
                     return redirect(request.referrer)
             if "changeuser_id" not in request.form:
                 return redirect(url_for('asite.userlibrary'))
             if "changeuser_password" not in request.form:
                 return redirect(url_for('asite.userlibrary'))
-            User.change(request.form["changeuser_id"], request.form["changeuser_password"], request.remote_addr, '1')
+            User.change(request.form["changeuser_id"], request.form["changeuser_password"], request.remote_addr, Session.get_user_id(session["token"]))
             return redirect(url_for('asite.userlibrary'))
 
     return redirect(url_for('asite.userlibrary'))

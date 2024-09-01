@@ -5,6 +5,8 @@ import threading
 import time
 from datetime import datetime
 
+from flask import flash
+
 from .database import Database
 
 
@@ -47,13 +49,13 @@ class Session:
     @staticmethod
     def get_user_id(token: str):
         conn = Database.get_connection()
-        cur = conn.cursor()
+        cur = conn.cursor(dictionary=True)
         cur.execute("SELECT user_id FROM sessions WHERE token = %s", (token,))
         try: 
-            user_id = cur.fetchone()["user_id"]
-            return (user_id)
+            return cur.fetchone()["user_id"]
         except:
-            return None
+            flash("could not fetch user id", "error")
+            return 0
 
     @staticmethod
     def new_session(ip: str, user) -> str:
