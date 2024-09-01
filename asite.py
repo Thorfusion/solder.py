@@ -528,7 +528,10 @@ def modlibrary_post():
                 jarfilew.save(os.path.join(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/", jarfilename))
                 if R2_BUCKET != None:
                     jarkeyname = "mods/" + request.form["mod"] + "/" + jarfilename
-                    R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/zip'})
+                    try:
+                        R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/zip'})
+                    except:
+                        flash("failed to upload file to bucket", "error")
             return redirect(url_for('asite.modlibrary'))
 
     return redirect(url_for('asite.modlibrary'))
