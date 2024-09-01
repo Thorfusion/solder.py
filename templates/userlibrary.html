@@ -16,6 +16,7 @@
         </thead>
         <tbody class="">
             {%for mod in users%}
+            {% if fulluserid==0 or fulluserid==mod.id %}
             <tr>
                 <td class="tablewidthid">{{mod.id}}</input></td>
                 <td class="tablemaxwidth">{{mod.email}}</td>
@@ -28,6 +29,7 @@
                     </div>
                 </td>
             </tr>
+            {% endif %}
             {%endfor%}
         </tbody>
     </table>

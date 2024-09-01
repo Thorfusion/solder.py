@@ -361,8 +361,7 @@ def userlibrary():
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
     
-    if User.get_permission_token(session["token"], "solder_users") == 0:
-        return redirect(request.referrer)
+    fulluserid = User.get_fulluser(session["token"])
 
     try:
         users = User.get_all_users()
@@ -371,7 +370,7 @@ def userlibrary():
         users = []
         flash("error when accessing user table", "error")
 
-    return render_template("userlibrary.html", users=users)
+    return render_template("userlibrary.html", users=users, fulluserid=fulluserid)
 
 
 @asite.route("/userlibrary", methods=["POST"])
@@ -402,7 +401,9 @@ def userlibrary_post():
             User.delete(request.form["delete_id"])
             return redirect(url_for('asite.userlibrary'))
         if "changeuser_submit" in request.form:
-            if Session.get_user_id(session["token"]) != request.form["changeuser_id"]:
+            userid = str(Session.get_user_id(session["token"]))
+            changeid = request.form["changeuser_id"]
+            if userid not in changeid:
                 if User.get_permission_token(session["token"], "solder_users") == 0:
                     return redirect(request.referrer)
             if "changeuser_id" not in request.form:

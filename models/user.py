@@ -118,6 +118,28 @@ class User:
         except:
             flash("unable to check your permission", "error")
             return 0
+        
+    @staticmethod
+    def get_fulluser(token: str):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT user_id FROM sessions WHERE token = %s", (token,))
+        try: 
+            user_id = cur.fetchone()["user_id"]
+            conn.commit()
+        except:
+            flash("unable to fetch user_id for permission check", "error")
+            return 0
+        cur.execute("SELECT * FROM user_permissions WHERE user_id = %s", (user_id,))
+        try: 
+            row = cur.fetchone()
+            if row["solder_full"] == 1:
+                return 0
+            if row["solder_user"] == 1:
+                return 0
+            return user_id
+        except:
+            return user_id
 
     @staticmethod
     def get_all_users() -> list:
