@@ -1,5 +1,7 @@
 import datetime
 
+from flask import flash
+
 from .database import Database
 from .modversion import Modversion
 
@@ -84,6 +86,7 @@ class Build:
         cur.execute("SELECT name FROM modpacks WHERE id = %s", (modpack_id,))
         name = cur.fetchone()["name"]
         if name is None:
+            flash("unable to get modpackname by id", "error")
             return None
         return (name)
 
@@ -94,6 +97,7 @@ class Build:
         cursor.execute("SELECT * FROM builds WHERE id = %s", (id,))
         build = cursor.fetchone()
         if build is None:
+            flash("unable to get modpack by id", "error")
             return None
         return cls(**build)
 
@@ -111,6 +115,7 @@ class Build:
         builds = cursor.fetchall()
         if builds:
             return [Build(**build) for build in builds]
+        flash("unable to get modpack", "error")
         return []
 
     @classmethod
@@ -120,6 +125,7 @@ class Build:
         cursor.execute("SELECT * FROM builds WHERE modpack_id = %s AND version = %s", (modpack.id, version))
         build = cursor.fetchone()
         if build is None:
+            flash("unable to get modpack by version", "error")
             return None
         return cls(**build)
     
@@ -132,6 +138,7 @@ class Build:
             build_id = cur.fetchone()["id"]
             return (build_id)
         except:
+            flash("unable to get marked build", "error")
             return 0
 
     def get_modversions_minimal(self):

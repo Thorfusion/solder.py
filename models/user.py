@@ -1,5 +1,7 @@
 import datetime
 
+from flask import flash
+
 from .database import Database
 from .modpack import Modpack
 from .passhasher import Passhasher
@@ -85,6 +87,7 @@ class User:
             user_id = cur.fetchone()["id"]
             return (user_id)
         except:
+            flash("failed to fetch user_id from users", "error")
             return None
         
     @staticmethod
@@ -96,13 +99,17 @@ class User:
             user_id = cur.fetchone()["user_id"]
             conn.commit()
         except:
+            flash("unable to fetch user_id for permission check", "error")
             return 0
         cur.execute("SELECT * FROM user_permissions WHERE user_id = %s", (user_id,))
         try: 
             allowed = cur.fetchone()[db_column]
             conn.commit()
+            if allowed == 0:
+                flash("Permission Denied", "error")
             return (allowed)
         except:
+            flash("unable to check your permission", "error")
             return 0
 
     @staticmethod

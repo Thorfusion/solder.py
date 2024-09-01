@@ -83,6 +83,7 @@ def modversion(id):
     except connector.ProgrammingError as e:
         Database.create_tables()
         modversions = []
+    flash("unable to get modversions", "error")
 
     return render_template("modversion.html", modSlug=mod.name, modversions=modversions, mod=mod, mirror_url=mirror_url)
 
@@ -159,6 +160,7 @@ def modpack(id):
     except connector.ProgrammingError as e:
         Database.create_tables()
         builds = []
+        flash("error when building modpack build", "error")
 
     if request.method == "POST":
         if "form-submit" in request.form:
@@ -229,7 +231,6 @@ def mainsettings():
         return redirect(url_for('alogin.login'))
 
     if User.get_permission_token(session["token"], "solder_env") == 0:
-        flash("Permission Denied", "error")
         return redirect(request.referrer)
     
     return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic)
@@ -283,6 +284,7 @@ def clientlibrary():
     except connector.ProgrammingError as e:
         Database.create_tables()
         clients = []
+        flash("error when accessing client table", "error")
 
     return render_template("clientlibrary.html", clients=clients)
 
@@ -320,6 +322,7 @@ def userlibrary():
     except connector.ProgrammingError as e:
         Database.create_tables()
         users = []
+        flash("error when accessing user table", "error")
 
     return render_template("userlibrary.html", users=users)
 
@@ -369,6 +372,7 @@ def modpackbuild(id):
 
         packbuildname = Build.get_modpackname_by_id(id)
     except connector.ProgrammingError as _:
+        flash("failed to build modpackbuild", "error")
         raise _
         Database.create_tables()
         mod_version_combo = []
@@ -422,6 +426,7 @@ def modlibrary():
     except connector.ProgrammingError as e:
         Database.create_tables()
         mods = []
+        flash("error when building mod list", "error")
 
     return render_template("modlibrary.html", mods=mods)
 
@@ -477,6 +482,7 @@ def modpacklibrary():
     except connector.ProgrammingError as e:
         Database.create_tables()
         modpacklibrary = []
+        flash("error when getting modpacklist", "error")
 
     return render_template("modpacklibrary.html", modpacklibrary=modpacklibrary)
 
@@ -518,6 +524,7 @@ def clients(id):
     except connector.ProgrammingError as e:
         Database.create_tables()
         packs = []
+        flash("error when getting clients", "error")
 
     if request.method == "POST":
         if "form-submit" in request.form:
