@@ -29,7 +29,7 @@ def login():
         if user.verify_password(request.form["password"]):
             # if new_user:
             # return render_template("login.html", failed=True)
-            session["token"] = Session.new_session(request.remote_addr)
+            session["token"] = Session.new_session(request.remote_addr, User.get_userid(request.form["username"]))
             print("login success")
             return redirect(url_for('asite.index'))
         else:

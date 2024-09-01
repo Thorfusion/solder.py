@@ -31,6 +31,8 @@ class User:
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
+        cur.execute("INSERT INTO user_permissions (user_id) VALUES (%s)", (id,))
+        conn.commit()
         return cls(id, username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
 
     @classmethod
@@ -50,6 +52,7 @@ class User:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM users WHERE id=%s", (id,))
+        cur.execute("DELETE FROM user_permissions WHERE user_id=%s", (id,))
         conn.commit()
         return None
 
@@ -72,6 +75,35 @@ class User:
         if row:
             return cls(row["id"], row["username"], row["email"], row["password"], row["created_ip"], row["last_ip"], row["created_at"], row["updated_at"], row["updated_by_ip"], row["created_by_user_id"], row["updated_by_user_id"])
         return None
+    
+    @classmethod
+    def get_userid(cls, username):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id FROM users WHERE username = %s", (username,))
+        try: 
+            user_id = cur.fetchone()["id"]
+            return (user_id)
+        except:
+            return None
+        
+    @staticmethod
+    def get_permission_token(token: str, db_column):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT user_id FROM sessions WHERE token = %s", (token,))
+        try: 
+            user_id = cur.fetchone()["user_id"]
+            conn.commit()
+        except:
+            return 0
+        cur.execute("SELECT * FROM user_permissions WHERE user_id = %s", (user_id,))
+        try: 
+            allowed = cur.fetchone()[db_column]
+            conn.commit()
+            return (allowed)
+        except:
+            return 0
 
     @staticmethod
     def get_all_users() -> list:

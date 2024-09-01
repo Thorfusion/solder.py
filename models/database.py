@@ -145,6 +145,7 @@ class Database:
                         solder_users BOOLEAN DEFAULT(0),
                         solder_keys BOOLEAN DEFAULT(0),
                         solder_clients BOOLEAN DEFAULT(0),
+                        solder_env BOOLEAN DEFAULT(0),
                         mods_create BOOLEAN DEFAULT(0),
                         mods_manage BOOLEAN DEFAULT(0),
                         mods_delete BOOLEAN DEFAULT(0),
@@ -187,7 +188,8 @@ class Database:
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
                     ip INT NOT NULL,
-                    expiry TIMESTAMP NOT NULL
+                    expiry TIMESTAMP NOT NULL,
+                    user_id INT NOT NULL
                 )"""
             )
             con.commit()
@@ -251,7 +253,7 @@ class Database:
             cur.execute(
                 """ALTER TABLE user_permissions
                     MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 """
             )
             cur.execute(
@@ -293,10 +295,16 @@ class Database:
                 """
             )
             cur.execute(
+                """ALTER TABLE user_permissions
+                    ADD COLUMN solder_env BOOLEAN DEFAULT(0)
+                """
+            )
+            cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
                     ip INT NOT NULL,
-                    expiry TIMESTAMP NOT NULL
+                    expiry TIMESTAMP NOT NULL,
+                    user_id INT NOT NULL
                 )"""
             )
             con.commit()
@@ -314,7 +322,8 @@ class Database:
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
                     ip INT NOT NULL,
-                    expiry TIMESTAMP NOT NULL
+                    expiry TIMESTAMP NOT NULL,
+                    user_id INT NOT NULL
                 )"""
             )
             con.commit()

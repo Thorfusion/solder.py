@@ -43,14 +43,14 @@ class Session:
             return cls(session[0], session[1], session[2])
         else:
             return None
-
+        
     @staticmethod
-    def new_session(ip: str) -> str:
+    def new_session(ip: str, user) -> str:
         token = secrets.token_hex(40)
         conn = Database.get_connection()
         cur = conn.cursor()
         cur.execute("DELETE FROM sessions WHERE ip = %s", (Session.ip_to_int(ip),))
-        cur.execute("INSERT INTO sessions (token, ip, expiry) VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 1 HOUR))", (token, Session.ip_to_int(ip)))
+        cur.execute("INSERT INTO sessions (token, ip, expiry, user_id) VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 1 HOUR), %s)", (token, Session.ip_to_int(ip), user))
         conn.commit()
         conn.close()
         return token

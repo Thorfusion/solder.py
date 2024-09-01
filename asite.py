@@ -3,7 +3,7 @@ import threading
 import boto3
 
 from api import solderpy_version
-from flask import Blueprint, app, redirect, render_template, request, session, url_for
+from flask import Blueprint, app, flash, redirect, render_template, request, session, url_for
 from models.build import Build
 from models.build_modversion import Build_modversion
 from models.client import Client
@@ -228,6 +228,10 @@ def mainsettings():
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
 
+    if User.get_permission_token(session["token"], "solder_env") == 0:
+        flash("Permission Denied", "error")
+        return redirect(request.referrer)
+    
     return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic)
 
 
