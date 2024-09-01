@@ -208,19 +208,19 @@ def modpack(id):
             Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild)
             return redirect(id)
         if "recommended_submit" in request.form:
-            Build.update_checkbox(id, request.form["recommended_modid"], "recommended", "modpacks")
+            Build.update_checkbox(id, request.form["modid"], "recommended", "modpacks")
             return redirect(id)
         if "latest_submit" in request.form:
-            Build.update_checkbox(id, request.form["latest_modid"], "latest", "modpacks")
+            Build.update_checkbox(id, request.form["modid"], "latest", "modpacks")
             return redirect(id)
         if "is_published_submit" in request.form:
-            Build.update_checkbox(request.form["is_published_modid"], request.form["is_published_check"], "is_published", "builds")
+            Build.update_checkbox(request.form["modid"], request.form["check"], "is_published", "builds")
             return redirect(id)
         if "private_submit" in request.form:
-            Build.update_checkbox(request.form["private_modid"], request.form["private_check"], 'private', 'builds')
+            Build.update_checkbox(request.form["modid"], request.form["check"], 'private', 'builds')
             return redirect(id)
         if "marked_submit" in request.form:
-            Build.update_checkbox_marked(request.form["marked_modid"], request.form["marked_check"])
+            Build.update_checkbox_marked(request.form["modid"], request.form["check"])
             return redirect(id)
         if "changelog_submit" in request.form:
             oldversion = request.form["changelog_oldver"]
