@@ -49,14 +49,19 @@ def modpack_slug(slug: str):
 
 
 @api.route("/api/modpack/<slug>/<build>")
-def modpack_slug_build(slug: str, build: str):
-    modpack = Modpack.get_by_cid_slug(request.args.get("cid"), slug)
+def modpack_slug_build(slugstring: str, buildstring: str):
+    modpack = Modpack.get_by_cid_slug(request.args.get("cid"), slugstring)
     if not modpack:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
-    build = modpack.get_build(build)
+    
+    buildsplit = buildstring.split("-")
+    buildsplit += ""
+    buildnumber = buildsplit[0]
+    buildtag = buildsplit[1]
+    build = modpack.get_build(buildnumber)
     if not build:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
-    modversions = build.get_modversions_minimal()
+    modversions = build.get_modversions_minimal(buildtag)
     moddata = []
     for mv in modversions:
         moddata.append(
