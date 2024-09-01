@@ -176,6 +176,15 @@ class Database:
                         )"""
             )
             cur.execute(
+                """CREATE TABLE IF NOT EXISTS user_modpack (
+                        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        modpack_id INT NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                        )"""
+            )
+            cur.execute(
                 """CREATE TABLE IF NOT EXISTS `keys` (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         name VARCHAR(255) NOT NULL UNIQUE,
@@ -306,6 +315,15 @@ class Database:
                     expiry TIMESTAMP NOT NULL,
                     user_id INT NOT NULL
                 )"""
+            )
+            cur.execute(
+                """CREATE TABLE IF NOT EXISTS user_modpack (
+                        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        modpack_id INT NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                        )"""
             )
             con.commit()
             con.close()
