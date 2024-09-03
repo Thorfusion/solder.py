@@ -40,8 +40,8 @@ class Build:
             conn.commit()
         cls(id, modpack_id, version, now, now, minecraft, "0", is_published, private, min_java, min_memory, "0")
 
-    @classmethod
-    def delete_build(cls, id):
+    @staticmethod
+    def delete_build(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (id,))
@@ -49,8 +49,8 @@ class Build:
         conn.commit()
         return None
 
-    @classmethod
-    def update(cls, id, version, minecraft, is_published, private, min_java, min_memory):
+    @staticmethod
+    def update(id, version, minecraft, is_published, private, min_java, min_memory):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -60,16 +60,16 @@ class Build:
         conn.commit()
         return None
 
-    @classmethod
-    def update_checkbox(cls, id, value, column, table):
+    @staticmethod
+    def update_checkbox(id, value, column, table):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, id))
         conn.commit()
         return None
 
-    @classmethod
-    def update_checkbox_marked(cls, id, value):
+    @staticmethod
+    def update_checkbox_marked(id, value):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("UPDATE builds SET marked = '0'")
@@ -77,8 +77,8 @@ class Build:
         conn.commit()
         return None
 
-    @classmethod
-    def get_modpackname_by_id(cls, id):
+    @staticmethod
+    def get_modpackname_by_id(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT modpack_id FROM builds WHERE id = %s", (id,))

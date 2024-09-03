@@ -29,8 +29,8 @@ class Mod:
         id = cur.fetchone()["id"]
         return cls(id, name, description, author, link, now, now, pretty_name, side, modtype, note)
 
-    @classmethod
-    def update(cls, id, name, description, author, link, pretty_name, side, modtype, note):
+    @staticmethod
+    def update(id, name, description, author, link, pretty_name, side, modtype, note):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -42,8 +42,8 @@ class Mod:
         id = cur.fetchone()["id"]
         return None
 
-    @classmethod
-    def delete_mod(cls, id):
+    @staticmethod
+    def delete_mod(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (id,))

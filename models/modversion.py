@@ -39,8 +39,8 @@ class Modversion:
             Modversion.update_modversion_jarmd5(id, jarmd5)
         return cls(id, mod_id, version, mcversion, md5, now, now, filesize)
 
-    @classmethod
-    def add_modversion_to_selected_build(cls, modver_id, mod_id, build_id, marked, optional):
+    @staticmethod
+    def add_modversion_to_selected_build(modver_id, mod_id, build_id, marked, optional):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         if marked == "1":
@@ -71,24 +71,24 @@ class Modversion:
         conn.commit()
         return None
 
-    @classmethod
-    def update_modversion_in_build(cls, oldmodver_id, modver_id, build_id):
+    @staticmethod
+    def update_modversion_in_build(oldmodver_id, modver_id, build_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("UPDATE build_modversion SET modversion_id = %s WHERE modversion_id = %s AND build_id = %s", (modver_id, oldmodver_id, build_id))
         conn.commit()
         return None
 
-    @classmethod
-    def update_modversion_jarmd5(cls, id, jarmd5):
+    @staticmethod
+    def update_modversion_jarmd5(id, jarmd5):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("UPDATE modversions SET jarmd5 = %s WHERE id = %s", (jarmd5, id))
         conn.commit()
         return None
 
-    @classmethod
-    def delete_modversion(cls, id):
+    @staticmethod
+    def delete_modversion(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM modversions WHERE id=%s", (id,))

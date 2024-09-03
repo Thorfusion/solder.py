@@ -24,8 +24,8 @@ class User_modpack:
         id = cur.fetchone()["id"]
         return cls(id, user_id, modpack_id, now, now)
 
-    @classmethod
-    def delete_user_modpack(cls, id):
+    @staticmethod
+    def delete_user_modpack(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM user_modpack WHERE id=%s", (id,))
