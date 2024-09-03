@@ -130,7 +130,7 @@ class Build:
             return [Build(**build) for build in builds]
         flash("unable to get modpack", "error")
         return []
-    
+
     @staticmethod
     def get_by_modpack_cid(modpack, cid):
         conn = Database.get_connection()
@@ -142,7 +142,7 @@ class Build:
                 WHERE modpack_id = %s
                 AND is_published = 1 AND (private = 0 OR modpack_id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))
                 ORDER BY builds.id DESC
-            """, (modpack.id,))
+            """, (modpack.id, cid))
         builds = cursor.fetchall()
         if builds:
             return [Build(**build) for build in builds]
