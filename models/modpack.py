@@ -5,7 +5,7 @@ from .database import Database
 
 
 class Modpack:
-    def __init__(self, id, name, slug, recommended, latest, created_at, updated_at, order, hidden, private, pinned):
+    def __init__(self, id, name, slug, recommended, latest, created_at, updated_at, order, hidden, private, pinned, enable_optionals=0, enable_server=0):
         self.id = id
         self.name = name
         self.slug = slug
@@ -17,6 +17,8 @@ class Modpack:
         self.hidden = hidden
         self.private = private
         self.pinned = pinned
+        self.enable_optionals = enable_optionals
+        self.enable_server = enable_server
 
     @staticmethod
     def new(name, slug, hidden, private, user_id):
@@ -71,7 +73,7 @@ class Modpack:
     def get_by_cid(cid):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modpacks WHERE hidden = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s)", (cid,))
+        cur.execute("SELECT * FROM modpacks WHERE hidden = 0 AND (private = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))", (cid,))
         rows = cur.fetchall()
         if rows:
             return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"]) for row in rows]
@@ -84,7 +86,7 @@ class Modpack:
         cur.execute("SELECT * FROM modpacks WHERE slug = %s AND (hidden = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))", (slug, cid))
         row = cur.fetchone()
         if row:
-            return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"])
+            return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"], row["enable_optionals"], row["enable_server"])
         return None
 
     @staticmethod
@@ -99,6 +101,9 @@ class Modpack:
 
     def get_builds(self):
         return Build.get_by_modpack(self)
+    
+    def get_builds_cid(self, cid):
+        return Build.get_by_modpack_cid(self, cid)
 
     def get_build(self, version):
         return Build.get_by_modpack_version(self, version)
@@ -112,5 +117,12 @@ class Modpack:
         }
 
         if self.builds is not None:
-            data["builds"] = [build.version for build in self.builds]
+            buildversions = []
+            for build in self.builds:
+                buildversions.append(build.version)
+                if self.enable_optionals:
+                    buildversions.append(build.version + "-optional")
+                if self.enable_server:
+                    buildversions.append(build.version + "-server")
+            data["builds"] = buildversions
         return data

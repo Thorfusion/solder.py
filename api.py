@@ -40,9 +40,10 @@ def modpack():
 
 @api.route("/api/modpack/<slug>")
 def modpack_slug(slug: str):
-    modpack = Modpack.get_by_cid_slug(request.args.get("cid"), slug)
+    cid = request.args.get("cid")
+    modpack = Modpack.get_by_cid_slug(cid, slug)
     if modpack:
-        modpack.builds = modpack.get_builds()
+        modpack.builds = modpack.get_builds_cid(cid)
         return jsonify(modpack.to_json())
     else:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
