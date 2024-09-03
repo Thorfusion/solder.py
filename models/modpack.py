@@ -18,20 +18,17 @@ class Modpack:
         self.private = private
         self.pinned = pinned
 
-    @classmethod
-    def new(cls, name, slug, hidden, private, user_id):
+    @staticmethod
+    def new(name, slug, hidden, private, user_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
         cur.execute("INSERT INTO modpacks (name, slug, created_at, updated_at, hidden, private, user_id) VALUES (%s, %s, %s, %s, %s, %s, %s)", (name, slug, now, now, hidden, private, user_id))
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
-        id = cur.fetchone()["id"]
-        return None
-        return cls(id, name, slug, now, now, hidden, private)
 
-    @classmethod
-    def delete_modpack(cls, id):
+    @staticmethod
+    def delete_modpack(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM builds WHERE modpack_id = %s", (id,))
@@ -42,15 +39,13 @@ class Modpack:
         cur.execute("DELETE FROM builds WHERE modpack_id = %s", (id,))
         cur.execute("DELETE FROM modpacks WHERE id=%s", (id,))
         conn.commit()
-        return None
 
-    @classmethod
+    @staticmethod
     def update_checkbox(cls, where_id, value, column, table):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, where_id))
         conn.commit()
-        return None
 
     @classmethod
     def get_by_id(cls, id):
