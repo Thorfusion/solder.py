@@ -41,8 +41,8 @@ class User:
         conn.commit()
         return cls(id, username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
 
-    @classmethod
-    def change(cls, userid, hash1, ip, creator_id):
+    @staticmethod
+    def change(userid, hash1, ip, creator_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -53,8 +53,8 @@ class User:
         conn.commit()
         return None
 
-    @classmethod
-    def delete(cls, id):
+    @staticmethod
+    def delete(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM users WHERE id=%s", (id,))
@@ -82,8 +82,8 @@ class User:
             return cls(row["id"], row["username"], row["email"], row["password"], row["created_ip"], row["last_ip"], row["created_at"], row["updated_at"], row["updated_by_ip"], row["created_by_user_id"], row["updated_by_user_id"])
         return None
     
-    @classmethod
-    def get_userid(cls, username):
+    @staticmethod
+    def get_userid(username):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT id FROM users WHERE username = %s", (username,))

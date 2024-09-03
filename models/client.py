@@ -23,8 +23,8 @@ class Client:
         id = cur.fetchone()["id"]
         return cls(id, name, uuid, now, now)
 
-    @classmethod
-    def delete_client(cls, id):
+    @staticmethod
+    def delete_client(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM clients WHERE id=%s", (id,))
