@@ -47,6 +47,8 @@ R2_ACCESS_KEY = os.getenv("R2_ACCESS_KEY")
 R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
 R2_BUCKET = os.getenv("R2_BUCKET")
 
+DB_IS_UP = Database.is_setup()
+
 class common:
 
     @staticmethod

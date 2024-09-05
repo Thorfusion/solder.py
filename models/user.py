@@ -152,8 +152,15 @@ class User:
     def any_user_exists() -> bool:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM users")
-        return cur.fetchone() is not None
+        try:
+            cur.execute("SELECT * FROM users")
+            check = cur.fetchone()
+        except:
+            flash("failed to check for existing users", "error")
+            return True
+        if check == None:
+            return False
+        return True
 
     def get_allowed_packs(self):
         conn = Database.get_connection()

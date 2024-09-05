@@ -5,18 +5,17 @@ from alogin import alogin
 from asetup import asetup
 from asite import asite
 from flask import Flask, render_template
-from models.common import debug, host, port, api_only, management_only, migratetechnic, new_user
-from models.database import Database
+from models.common import debug, host, port, api_only, management_only, migratetechnic, new_user, DB_IS_UP
 
 __version__ = solderpy_version
 
 app: Flask = Flask(__name__)
-if management_only == False or Database.is_setup() != 2:
+if management_only == False or DB_IS_UP != 2:
     app.register_blueprint(api)
 if not api_only:
-    if migratetechnic is True or new_user is True or Database.is_setup() != 1:
+    if migratetechnic is True or new_user is True or DB_IS_UP != 1:
         app.register_blueprint(asetup)
-    if Database.is_setup() == 1:
+    if DB_IS_UP == 1:
         # Note that asite must be after setup
         app.register_blueprint(alogin)
         app.register_blueprint(asite)
