@@ -12,7 +12,6 @@ if DB_IS_UP != 2:
 
 @asetup.route("/setup", methods=["GET"])
 def setup():
-    flash("Database created and user added", "success")
     if Database.is_setup() == 2:
         flash("An error occurred whilst trying to check database connection", "error")
         return render_template("setup.html")
