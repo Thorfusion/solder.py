@@ -161,7 +161,6 @@ class Build:
             build_id = cur.fetchone()["id"]
             return (build_id)
         except:
-            flash("unable to get marked build", "error")
             return 0
 
     def get_modversions_minimal(self, tag: str):
