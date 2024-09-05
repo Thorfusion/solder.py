@@ -10,6 +10,9 @@ asetup = Blueprint("asetup", __name__)
 if DB_IS_UP != 2:
     if migratetechnic is True or new_user is True:
         Database.create_session_table()
+    if DB_IS_UP == 0:
+        Database.create_tables()
+        Session.start_session_loop()
 
 @asetup.route("/setup", methods=["GET"])
 def setup():
@@ -25,7 +28,7 @@ def setup():
             return render_template("setup.html")
         return render_template("setup.html")
     else:
-        return redirect(url_for('app.login'))
+        return redirect(url_for('alogin.login'))
 
 
 @asetup.route("/setup", methods=["POST"])
@@ -41,7 +44,7 @@ def setup_creation():
                 flash("setup failed due to missing password", "error")
                 return render_template("setup.html")
             User.new(request.form["setupemail"], request.form["setupemail"],
-                    request.form["setuppassword"], request.remote_addr, '1')
+                    request.form["setuppassword"], request.remote_addr, '1', True)
             flash("user added", "success")
             return redirect(url_for('alogin.login'))
     return render_template("setup.html")

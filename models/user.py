@@ -1,7 +1,7 @@
 import datetime
 
 from flask import flash
-from models.common import new_user
+from models.common import DB_IS_UP, new_user
 
 from .database import Database
 from .modpack import Modpack
@@ -23,7 +23,7 @@ class User:
         self.updated_by_user_id = updated_by_user_id
 
     @classmethod
-    def new(cls, username, email, hash1, ip, creator_id):
+    def new(cls, username, email, hash1, ip, creator_id, setup=False):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -34,10 +34,10 @@ class User:
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
-        if new_user is False:
-            cur.execute("INSERT INTO user_permissions (user_id) VALUES (%s)", (id,))
-        if new_user is True:
+        if new_user is True or setup == True and DB_IS_UP == 0:
             cur.execute("INSERT INTO user_permissions (user_id, solder_full, solder_users, solder_keys, solder_clients, solder_env, mods_create, mods_manage, mods_delete, modpacks_create, modpacks_manage, modpacks_delete) VALUES (%s, 1, 1, 1, 1, 1, 1, 1, 1 ,1 ,1 ,1)", (id,))
+        else:
+            cur.execute("INSERT INTO user_permissions (user_id) VALUES (%s)", (id,))
         conn.commit()
         return cls(id, username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
 
