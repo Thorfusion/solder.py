@@ -47,9 +47,7 @@ class Database:
         print(table)
         conn.close()
         if table == None:
-            print("False")
             return 0
-        print("True")
         return 1
 
     @staticmethod
