@@ -1,4 +1,4 @@
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from models.database import Database
 from models.user import User
@@ -6,12 +6,12 @@ from models.common import migratetechnic, new_user
 
 asetup = Blueprint("asetup", __name__)
 
-if migratetechnic:
+if migratetechnic is True or new_user is True or Database.is_setup() == 0:
     Database.create_session_table()
 
 @asetup.route("/setup", methods=["GET"])
 def setup():
-    if not Database.is_setup():
+    if Database.is_setup() == 0:
         Database.create_tables()
     if new_user or not User.any_user_exists():
         if migratetechnic:
@@ -27,9 +27,11 @@ def setup_creation():
     if new_user or not User.any_user_exists():
         if request.form["setupemail"] is None:
             print("setup failed")
+            flash("setup failed due to missing email", "error")
             return render_template("setup.html", failed=True)
         if request.form["setuppassword"] is None:
             print("setup failed")
+            flash("setup failed due to missing password", "error")
             return render_template("setup.html", failed=True)
         User.new(request.form["setupemail"], request.form["setupemail"],
                  request.form["setuppassword"], request.remote_addr, '1')

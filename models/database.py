@@ -1,6 +1,7 @@
 from os import getenv
 
 from dotenv import load_dotenv
+from flask import flash
 from mysql import connector
 
 from .errorPrinter import ErrorPrinter
@@ -34,17 +35,22 @@ class Database:
     def is_setup() -> bool:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        sql = "SELECT table_name FROM information_schema.tables"
+        sql = "SHOW TABLES"
+        table_name = "Tables_in_" + db_name
         try:
             cur.execute(sql)
-            curr_tables = [table["table_name"] for table in cur.fetchall()]
-            for table in tables:
-                if table not in curr_tables:
-                    return False
-                return True
         except Exception as e:
             ErrorPrinter.message("An error occurred whilst trying to check database setup", e)
+            flash("Unable to connect to database" + e, "error")
+            return 2
+        table = cur.fetchone()
+        print(table)
         conn.close()
+        if table == None:
+            print("False")
+            return 0
+        print("True")
+        return 1
 
     @staticmethod
     def create_tables() -> bool:

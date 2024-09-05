@@ -5,7 +5,8 @@ from alogin import alogin
 from asetup import asetup
 from asite import asite
 from flask import Flask, render_template
-from models.common import debug, host, port, api_only, management_only
+from models.common import debug, host, port, api_only, management_only, migratetechnic, new_user
+from models.database import Database
 
 __version__ = solderpy_version
 
@@ -14,8 +15,10 @@ if not management_only:
     app.register_blueprint(api)
 if not api_only:
     app.register_blueprint(alogin)
-    app.register_blueprint(asetup)
-    app.register_blueprint(asite)
+    if migratetechnic is True or new_user is True or Database.is_setup() == 0:
+        app.register_blueprint(asetup)
+    if Database.is_setup() != 2:
+        app.register_blueprint(asite)
 
     app.secret_key = secrets.token_hex()
 
