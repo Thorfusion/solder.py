@@ -5,7 +5,7 @@ from alogin import alogin
 from asetup import asetup
 from asite import asite
 from flask import Flask, render_template
-from models.globals import debug, host, port, api_only, management_only
+from models.common import debug, host, port, api_only, management_only
 
 __version__ = solderpy_version
 

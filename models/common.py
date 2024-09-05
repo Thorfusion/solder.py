@@ -1,6 +1,8 @@
 import os
 from dotenv import load_dotenv
 
+from models.database import Database
+
 ## Solderpy version
 solderpy_version = "1.5.0"
 
@@ -44,3 +46,13 @@ R2_REGION = os.getenv("R2_REGION")
 R2_ACCESS_KEY = os.getenv("R2_ACCESS_KEY")
 R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
 R2_BUCKET = os.getenv("R2_BUCKET")
+
+class common:
+
+    @staticmethod
+    def update_checkbox(where_id, value, column, table):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, where_id))
+        conn.commit()
+

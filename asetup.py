@@ -2,7 +2,7 @@ from flask import Blueprint, redirect, render_template, request, url_for
 
 from models.database import Database
 from models.user import User
-from models.globals import migratetechnic, new_user
+from models.common import migratetechnic, new_user
 
 asetup = Blueprint("asetup", __name__)
 

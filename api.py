@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from models.key import Key
 from models.mod import Mod
 from models.modpack import Modpack
-from models.globals import solderpy_version, mirror_url
+from models.common import solderpy_version, mirror_url
 
 api = Blueprint("api", __name__)
 

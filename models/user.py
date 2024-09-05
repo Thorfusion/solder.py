@@ -1,7 +1,7 @@
 import datetime
 
 from flask import flash
-from models.globals import new_user
+from models.common import new_user
 
 from .database import Database
 from .modpack import Modpack
