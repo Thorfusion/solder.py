@@ -44,7 +44,6 @@ class Build_modversion:
         rows = cur.fetchall()
         if rows:
             return rows
-        flash("Unable to get modpack build", "error")
         return []
 
     @staticmethod
