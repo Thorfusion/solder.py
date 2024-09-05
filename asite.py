@@ -105,26 +105,26 @@ def newmodversion(id):
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
         Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
-        return redirect(id)
+        return redirect(url_for("asite.modversion", id=id))
     if "deleteversion_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_delete") == 0:
                 return redirect(request.referrer)
         if "delete_id" not in request.form:
-            return redirect(id)
+            return redirect(url_for("asite.modversion", id=id))
         Modversion.delete_modversion(request.form["delete_id"])
-        return redirect(id)
+        return redirect(url_for("asite.modversion", id=id))
     if "addtoselbuild_submit" in request.form:
         if User.get_permission_token(session["token"], "modpacks_manage") == 0:
                 return redirect(request.referrer)
         if "addtoselbuild_id" not in request.form:
-            return redirect(id)
+            return redirect(url_for("asite.modversion", id=id))
         Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id, "0", "1", "0")
-        return redirect(id)
+        return redirect(url_for("asite.modversion", id=id))
     if "deletemod_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_delete") == 0:
                 return redirect(request.referrer)
         if "mod_delete_id" not in request.form:
-            return redirect(id)
+            return redirect(url_for("asite.modversion", id=id))
         Mod.delete_mod(request.form["mod_delete_id"])
         return redirect(url_for('asite.modlibrary'))
     if "rehash_submit" in request.form:
@@ -147,7 +147,7 @@ def newmodversion(id):
         else:
             # Todo Add filesize rehash and md5 hash, if fails do not add
             Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", repo_url + request.form["newmodvermanual_url"])
-    return redirect(id)
+    return redirect(url_for("asite.modversion", id=id))
 
 
 @asite.route("/newmod", methods=["GET", "POST"])
@@ -210,22 +210,22 @@ def modpack(id):
             if "clonebuildman" in request.form and request.form['clonebuildman'] != "":
                 clonebuild = request.form['clonebuildman']
             Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild)
-            return redirect(id)
+            return redirect(url_for("asite.modpack", id=id))
         if "recommended_submit" in request.form:
             Build.update_checkbox(id, request.form["modid"], "recommended", "modpacks")
-            return redirect(id)
+            return redirect(url_for("asite.modpack", id=id))
         if "latest_submit" in request.form:
             Build.update_checkbox(id, request.form["modid"], "latest", "modpacks")
-            return redirect(id)
+            return redirect(url_for("asite.modpack", id=id))
         if "is_published_submit" in request.form:
             Build.update_checkbox(request.form["modid"], request.form["check"], "is_published", "builds")
-            return redirect(id)
+            return redirect(url_for("asite.modpack", id=id))
         if "private_submit" in request.form:
             Build.update_checkbox(request.form["modid"], request.form["check"], 'private', 'builds')
-            return redirect(id)
+            return redirect(url_for("asite.modpack", id=id))
         if "marked_submit" in request.form:
             Build.update_checkbox_marked(request.form["modid"], request.form["check"])
-            return redirect(id)
+            return redirect(url_for("asite.modpack", id=id))
         if "changelog_submit" in request.form:
             oldversion = request.form["changelog_oldver"]
             newversion = request.form["changelog_newver"]
@@ -236,7 +236,7 @@ def modpack(id):
                 return redirect(request.referrer)
             
             if "modpack_delete_id" not in request.form:
-                return redirect(id)
+                return redirect(url_for("asite.modpack", id=id))
             modpack.delete_modpack(request.form["modpack_delete_id"])
             return redirect(url_for('asite.modpacklibrary'))
 
@@ -460,20 +460,20 @@ def modpackbuild(id):
             if "private" in request.form:
                 private = request.form['private']
             Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
-            return redirect(id)
+            return redirect(url_for("asite.modpackbuild", id=id))
         if "optional_submit" in request.form:
             Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"], id)
-            return redirect(id)
+            return redirect(url_for("asite.modpackbuild", id=id))
         if "selmodver_submit" in request.form:
             Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], id)
-            return redirect(id)
+            return redirect(url_for("asite.modpackbuild", id=id))
         if "delete_submit" in request.form:
             if User.get_permission_token(session["token"], "modpacks_delete") == 0:
                 return redirect(request.referrer)
             if "delete_id" not in request.form:
-                return redirect(id)
+                return redirect(url_for("asite.modpackbuild", id=id))
             Build_modversion.delete_build_modversion(request.form["delete_id"])
-            return redirect(id)
+            return redirect(url_for("asite.modpackbuild", id=id))
         if "deletebuild_submit" in request.form:
             if User.get_permission_token(session["token"], "modpacks_delete") == 0:
                 return redirect(request.referrer)
@@ -484,7 +484,7 @@ def modpackbuild(id):
             if "newoptional" in request.form:
                 newoptional = request.form['newoptional']
             Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", newoptional)
-            return redirect(id)
+            return redirect(url_for("asite.modpackbuild", id=id))
 
     return render_template("modpackbuild.html", listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions, buildlist=buildlist)
 
@@ -636,14 +636,14 @@ def clients(id):
     if request.method == "POST":
         if "form-submit" in request.form:
             if "modpack" not in request.form:
-                return redirect(id)
+                return redirect(url_for("asite.clients", id=id))
             Client_modpack.new(id, request.form["modpack"])
-            return redirect(id)
+            return redirect(url_for("asite.clients", id=id))
         if "form2-submit" in request.form:
             if "delete_id" not in request.form:
-                return redirect(id)
+                return redirect(url_for("asite.clients", id=id))
             Client_modpack.delete_client_modpack(request.form["delete_id"])
-            return redirect(id)
+            return redirect(url_for("asite.clients", id=id))
 
     try:
         modpacklibrary = Modpack.get_all()
@@ -675,14 +675,14 @@ def user(id):
     if request.method == "POST":
         if "form-submit" in request.form:
             if "modpack" not in request.form:
-                return redirect(id)
+                return redirect(url_for("asite.user", id=id))
             User_modpack.new(id, request.form["modpack"])
-            return redirect(id)
+            return redirect(url_for("asite.user", id=id))
         if "form2-submit" in request.form:
             if "delete_id" not in request.form:
-                return redirect(id)
+                return redirect(url_for("asite.user", id=id))
             User_modpack.delete_user_modpack(request.form["delete_id"])
-            return redirect(id)
+            return redirect(url_for("asite.user", id=id))
         if "perm-submit" in request.form:
             solder_full = "0"
             solder_users = "0"
@@ -718,7 +718,7 @@ def user(id):
             if "modpacks_delete" in request.form:
                 modpacks_delete = request.form['modpacks_delete']
             User_modpack.update_userpermissions(id, solder_full, solder_users, solder_keys, solder_clients, solder_env, mods_create, mods_manage, mods_delete, modpacks_create, modpacks_manage, modpacks_delete)
-            return redirect(id)
+            return redirect(url_for("asite.user", id=id))
     
     try:
         modpacklibrary = Modpack.get_all()
