@@ -128,6 +128,7 @@ docker run --name solderpy --restart always -d -p 80:5000 thorfusion/solderpy
 #### Repo variables
 
 This is the public facing URL for your repository. This is prefix url that technic launcher uses to download the mods. Include a trailing slash!
+You dont actually need to store the files in mods but solder.py own hosting folder is mods. S3 public links can be root for an example, same with repo url aswell.
 
 ```bash
 -e SOLDER_MIRROR_URL=https://solder.example.com/mods/
