@@ -87,7 +87,7 @@ def modversion(id):
     except connector.ProgrammingError as e:
         Database.create_tables()
         modversions = []
-    flash("unable to get modversions", "error")
+        flash("unable to get modversions", "error")
 
     return render_template("modversion.html", modSlug=mod.name, modversions=modversions, mod=mod, mirror_url=mirror_url)
 
