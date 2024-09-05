@@ -29,10 +29,13 @@ class Database:
             )
         except Exception as e:
             print("Error connecting to database", e)
+            return None
         return conn
 
     @staticmethod
-    def is_setup() -> bool:
+    def is_setup() -> int:
+        if Database.get_connection() is None:
+            return 2
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         sql = "SHOW TABLES"
@@ -41,7 +44,6 @@ class Database:
             cur.execute(sql)
         except Exception as e:
             ErrorPrinter.message("An error occurred whilst trying to check database setup", e)
-            flash("Unable to connect to database" + e, "error")
             return 2
         table = cur.fetchone()
         print(table)

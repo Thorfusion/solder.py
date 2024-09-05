@@ -11,13 +11,14 @@ from models.database import Database
 __version__ = solderpy_version
 
 app: Flask = Flask(__name__)
-if not management_only:
+if management_only == False or Database.is_setup() != 2:
     app.register_blueprint(api)
 if not api_only:
-    app.register_blueprint(alogin)
-    if migratetechnic is True or new_user is True or Database.is_setup() == 0:
+    if migratetechnic is True or new_user is True or Database.is_setup() == 0 or Database.is_setup() == 2:
         app.register_blueprint(asetup)
     if Database.is_setup() != 2:
+        # Note that asite must be after setup
+        app.register_blueprint(alogin)
         app.register_blueprint(asite)
 
     app.secret_key = secrets.token_hex()
