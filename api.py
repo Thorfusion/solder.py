@@ -71,7 +71,7 @@ def modpack_slug_build(slugstring: str, buildstring: str):
                 "name": mv.modname,
                 "version": mv.version,
                 "md5": mv.md5,
-                "url": f"{mirror_url}/mods/{mv.modname}/{mv.version}.zip",
+                "url": f"{mirror_url}{mv.modname}/{mv.version}.zip",
             }
         )
     return {"minecraft": build.minecraft, "java": build.min_java, "memory": build.min_memory, "forge": None, "mods": moddata}
