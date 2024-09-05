@@ -42,13 +42,6 @@ class Modpack:
         cur.execute("DELETE FROM modpacks WHERE id=%s", (id,))
         conn.commit()
 
-    @staticmethod
-    def update_checkbox(cls, where_id, value, column, table):
-        conn = Database.get_connection()
-        cur = conn.cursor(dictionary=True)
-        cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, where_id))
-        conn.commit()
-
     @classmethod
     def get_by_id(cls, id):
         conn = Database.get_connection()

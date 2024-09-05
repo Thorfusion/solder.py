@@ -212,19 +212,19 @@ def modpack(id):
             Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild)
             return redirect(url_for("asite.modpack", id=id))
         if "recommended_submit" in request.form:
-            Build.update_checkbox(id, request.form["modid"], "recommended", "modpacks")
+            common.update_checkbox(id, request.form["modid"], "recommended", "modpacks")
             return redirect(url_for("asite.modpack", id=id))
         if "latest_submit" in request.form:
-            Build.update_checkbox(id, request.form["modid"], "latest", "modpacks")
+            common.update_checkbox(id, request.form["modid"], "latest", "modpacks")
             return redirect(url_for("asite.modpack", id=id))
         if "is_published_submit" in request.form:
-            Build.update_checkbox(request.form["modid"], request.form["check"], "is_published", "builds")
+            common.update_checkbox(request.form["modid"], request.form["check"], "is_published", "builds")
             return redirect(url_for("asite.modpack", id=id))
         if "private_submit" in request.form:
-            Build.update_checkbox(request.form["modid"], request.form["check"], 'private', 'builds')
+            common.update_checkbox(request.form["modid"], request.form["check"], 'private', 'builds')
             return redirect(url_for("asite.modpack", id=id))
         if "marked_submit" in request.form:
-            Build.update_checkbox_marked(request.form["modid"], request.form["check"])
+            common.update_checkbox_marked(request.form["modid"], request.form["check"])
             return redirect(url_for("asite.modpack", id=id))
         if "changelog_submit" in request.form:
             oldversion = request.form["changelog_oldver"]
@@ -604,15 +604,15 @@ def modpacklibrary_post():
         if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(request.form["modid"])) == False:
             return redirect(request.referrer)
         if "hidden_submit" in request.form:
-            Modpack.update_checkbox(request.form["modid"], request.form["check"], "hidden", "modpacks")
+            common.update_checkbox(request.form["modid"], request.form["check"], "hidden", "modpacks")
         if "private_submit" in request.form:
-            Modpack.update_checkbox(request.form["modid"], request.form["check"], "private", "modpacks")
+            common.update_checkbox(request.form["modid"], request.form["check"], "private", "modpacks")
         if "pinned_submit" in request.form:
-            Modpack.update_checkbox(request.form["modid"], request.form["check"], "pinned", "modpacks")
+            common.update_checkbox(request.form["modid"], request.form["check"], "pinned", "modpacks")
         if "optional_submit" in request.form:
-            Modpack.update_checkbox(request.form["modid"], request.form["check"], "enable_optionals", "modpacks")
+            common.update_checkbox(request.form["modid"], request.form["check"], "enable_optionals", "modpacks")
         if "server_submit" in request.form:
-            Modpack.update_checkbox(request.form["modid"], request.form["check"], "enable_server", "modpacks")
+            common.update_checkbox(request.form["modid"], request.form["check"], "enable_server", "modpacks")
 
     return redirect(url_for('asite.modpacklibrary'))
 

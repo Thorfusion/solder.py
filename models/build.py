@@ -61,14 +61,6 @@ class Build:
         return None
 
     @staticmethod
-    def update_checkbox(id, value, column, table):
-        conn = Database.get_connection()
-        cur = conn.cursor(dictionary=True)
-        cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, id))
-        conn.commit()
-        return None
-
-    @staticmethod
     def update_checkbox_marked(id, value):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
