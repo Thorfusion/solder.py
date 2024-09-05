@@ -37,7 +37,7 @@ class Database:
         if Database.get_connection() is None:
             return 2
         conn = Database.get_connection()
-        cur = conn.cursor(dictionary=True)
+        cur = conn.cursor()
         sql = "SHOW TABLES"
         table_name = "Tables_in_" + db_name
         try:
@@ -49,6 +49,8 @@ class Database:
         print(table)
         conn.close()
         if table == None:
+            return 0
+        if not table:
             return 0
         return 1
 

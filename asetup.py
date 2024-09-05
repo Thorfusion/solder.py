@@ -7,7 +7,7 @@ from models.common import migratetechnic, new_user
 asetup = Blueprint("asetup", __name__)
 
 if Database.is_setup() != 2:
-    if migratetechnic is True or new_user is True or Database.is_setup() == 0:
+    if migratetechnic is True or new_user is True:
         Database.create_session_table()
 
 @asetup.route("/setup", methods=["GET"])

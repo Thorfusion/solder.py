@@ -24,7 +24,7 @@ __version__ = solderpy_version
 
 asite = Blueprint("asite", __name__)
 
-if Database.is_setup() != 2:
+if Database.is_setup() == 1:
     Session.start_session_loop()
 
 ## Allowed extensions to be uploaded

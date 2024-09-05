@@ -14,9 +14,9 @@ app: Flask = Flask(__name__)
 if management_only == False or Database.is_setup() != 2:
     app.register_blueprint(api)
 if not api_only:
-    if migratetechnic is True or new_user is True or Database.is_setup() == 0 or Database.is_setup() == 2:
+    if migratetechnic is True or new_user is True or Database.is_setup() != 1:
         app.register_blueprint(asetup)
-    if Database.is_setup() != 2:
+    if Database.is_setup() == 1:
         # Note that asite must be after setup
         app.register_blueprint(alogin)
         app.register_blueprint(asite)
