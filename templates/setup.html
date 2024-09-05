@@ -18,11 +18,16 @@
             </div>
             <input type="email" placeholder="Email" name="setupemail" value="{{ request.form.setupemail }}" class="user form-control">
             <input type="password" placeholder="Password" name="setuppassword" value="{{ request.form.setuppassword }}" class="pass form-control">
-            <input type="submit" value="Setup" class="login w-100 btn btn-lg btn-primary"> {% if failed %}
-            <div class="alert alert-danger loginfail mx-auto" role="alert">
-                <p>Login failed!</p>
-            </div>
-            {% endif %}
+            <input type="submit" value="Setup" class="login w-100 btn btn-lg btn-primary">
+            {% with errors = get_flashed_messages(category_filter=["error"]) %}
+                {% if errors %}
+                <div class="alert alert-danger mx-auto" role="alert">
+                    <p>{%- for msg in errors %}
+                    {{ msg }}
+                    {% endfor -%}</p>
+                </div>
+                {% endif %}
+            {% endwith %}
         </form>
     </div>
 </body>
