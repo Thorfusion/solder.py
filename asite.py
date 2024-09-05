@@ -225,7 +225,7 @@ def modpack(id):
             common.update_checkbox(request.form["modid"], request.form["check"], 'private', 'builds')
             return redirect(url_for("asite.modpack", id=id))
         if "marked_submit" in request.form:
-            common.update_checkbox_marked(request.form["modid"], request.form["check"])
+            Build.update_checkbox_marked(request.form["modid"], request.form["check"])
             return redirect(url_for("asite.modpack", id=id))
         if "changelog_submit" in request.form:
             oldversion = request.form["changelog_oldver"]
