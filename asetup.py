@@ -1,6 +1,7 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from models.database import Database
+from models.session import Session
 from models.user import User
 from models.common import migratetechnic, new_user, DB_IS_UP
 
@@ -15,15 +16,16 @@ def setup():
     if Database.is_setup() == 2:
         flash("An error occurred whilst trying to check database connection", "error")
         return render_template("setup.html")
-    if Database.is_setup() == 0:
+    if DB_IS_UP == 0:
         Database.create_tables()
-    if new_user == True or User.any_user_exists() == True:
+        Session.start_session_loop()
+    if new_user == True or User.any_user_exists() == False:
         if migratetechnic:
             Database.migratetechnic_tables()
             return render_template("setup.html")
         return render_template("setup.html")
     else:
-        return redirect(url_for('asite.index'))
+        return redirect(url_for('app.login'))
 
 
 @asetup.route("/setup", methods=["POST"])
@@ -40,6 +42,6 @@ def setup_creation():
                 return render_template("setup.html")
             User.new(request.form["setupemail"], request.form["setupemail"],
                     request.form["setuppassword"], request.remote_addr, '1')
-            flash("Database created and user added", "success")
-            return redirect(url_for('asite.index'))
+            flash("user added", "success")
+            return redirect(url_for('alogin.login'))
     return render_template("setup.html")

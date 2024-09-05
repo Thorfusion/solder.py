@@ -15,7 +15,7 @@ if management_only == False or DB_IS_UP != 2:
 if not api_only:
     if migratetechnic is True or new_user is True or DB_IS_UP != 1:
         app.register_blueprint(asetup)
-    if DB_IS_UP == 1:
+    if DB_IS_UP != 2:
         # Note that asite must be after setup
         app.register_blueprint(alogin)
         app.register_blueprint(asite)
