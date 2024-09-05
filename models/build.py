@@ -120,7 +120,6 @@ class Build:
         builds = cursor.fetchall()
         if builds:
             return [Build(**build) for build in builds]
-        flash("unable to get modpack", "error")
         return []
 
     @staticmethod
@@ -138,7 +137,6 @@ class Build:
         builds = cursor.fetchall()
         if builds:
             return [Build(**build) for build in builds]
-        flash("unable to get modpack", "error")
         return []
 
     @classmethod
