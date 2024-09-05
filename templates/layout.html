@@ -82,6 +82,15 @@
             {% endif %}
         {% endwith %}
         {%block aside%}{% endblock %}
+        {% with errors = get_flashed_messages(category_filter=["success"]) %}
+            {% if errors %}
+            <div class="alert alert-success mx-auto" role="alert">
+                <p>{%- for msg in errors %}
+                {{ msg }}
+                {% endfor -%}</p>
+            </div>
+            {% endif %}
+        {% endwith %}
     </aside>
 
 </body>
