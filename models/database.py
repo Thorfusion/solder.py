@@ -1,4 +1,5 @@
 from os import getenv
+import os
 
 from dotenv import load_dotenv
 from flask import flash
@@ -12,6 +13,11 @@ db_port = getenv("DB_PORT")
 db_user = getenv("DB_USER")
 db_pass = getenv("DB_PASSWORD")
 db_name = getenv("DB_DATABASE")
+
+DISABLE_is_setup = False
+
+if os.getenv("DISABLE_is_setup"):
+    DISABLE_is_setup = os.getenv("DISABLE_is_setup").lower() in ["true", "t", "1", "yes", "y"]
 
 tables = ("modpacks", "builds", "mods", "modversions", "build_modversions", "users", "user_permissions", "clients", "client_modpacks", "keys")
 
@@ -34,6 +40,8 @@ class Database:
 
     @staticmethod
     def is_setup() -> int:
+        if DISABLE_is_setup == True:
+            return 1
         if Database.get_connection() is None:
             return 2
         conn = Database.get_connection()
