@@ -114,6 +114,8 @@ def newmodversion(id):
         Modversion.delete_modversion(request.form["delete_id"])
         return redirect(id)
     if "addtoselbuild_submit" in request.form:
+        if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+                return redirect(request.referrer)
         if "addtoselbuild_id" not in request.form:
             return redirect(id)
         Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id, "0", "1", "0")
@@ -137,6 +139,8 @@ def newmodversion(id):
             t = threading.Thread(target=version.rehash, args=(repo_url + request.form["rehash_url"],))
             t.start()
     if "newmodvermanual_submit" in request.form:
+        if User.get_permission_token(session["token"], "mods_create") == 0:
+                return redirect(request.referrer)
         filesie2 = Modversion.get_file_size(repo_url + request.form["newmodvermanual_url"])
         if request.form["newmodvermanual_md5"] != "":
             Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0")
@@ -244,6 +248,8 @@ def changelog(oldver, newver):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+                return redirect(request.referrer)
 
     try:
         changelog = Build_modversion.get_changelog(oldver, newver)
@@ -514,6 +520,10 @@ def modlibrary_post():
     if "form-submit" in request.form:
         markedbuild = "0"
         if "markedbuild" in request.form:
+            if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+                return redirect(request.referrer)
+            if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(request.form['markedbuild'])) == False:
+                return redirect(request.referrer)
             markedbuild = request.form['markedbuild']
         Modversion.new(request.form["modid"], request.form["mcversion"] + "-" + request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild, "0", request.form["jarmd5"])
         if 'file' not in request.files:
@@ -591,6 +601,8 @@ def modpacklibrary_post():
                 private = request.form['private']
             Modpack.new(request.form["pretty_name"], request.form["name"], hidden, private, "0")
             return redirect(url_for('asite.modpacklibrary'))
+        if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(request.form["modid"])) == False:
+            return redirect(request.referrer)
         if "hidden_submit" in request.form:
             Modpack.update_checkbox(request.form["modid"], request.form["check"], "hidden", "modpacks")
         if "private_submit" in request.form:
