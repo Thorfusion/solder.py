@@ -1,6 +1,8 @@
 from os import getenv
+import os
 
 from dotenv import load_dotenv
+from flask import flash
 from mysql import connector
 
 from .errorPrinter import ErrorPrinter
@@ -11,6 +13,11 @@ db_port = getenv("DB_PORT")
 db_user = getenv("DB_USER")
 db_pass = getenv("DB_PASSWORD")
 db_name = getenv("DB_DATABASE")
+
+DISABLE_is_setup = False
+
+if os.getenv("DISABLE_is_setup"):
+    DISABLE_is_setup = os.getenv("DISABLE_is_setup").lower() in ["true", "t", "1", "yes", "y"]
 
 tables = ("modpacks", "builds", "mods", "modversions", "build_modversions", "users", "user_permissions", "clients", "client_modpacks", "keys")
 
@@ -28,23 +35,32 @@ class Database:
             )
         except Exception as e:
             print("Error connecting to database", e)
+            return None
         return conn
 
     @staticmethod
-    def is_setup() -> bool:
+    def is_setup() -> int:
+        if DISABLE_is_setup == True:
+            return 1
+        if Database.get_connection() is None:
+            return 2
         conn = Database.get_connection()
-        cur = conn.cursor(dictionary=True)
-        sql = "SELECT table_name FROM information_schema.tables"
+        cur = conn.cursor()
+        sql = "SHOW TABLES"
+        table_name = "Tables_in_" + db_name
         try:
             cur.execute(sql)
-            curr_tables = [table["table_name"] for table in cur.fetchall()]
-            for table in tables:
-                if table not in curr_tables:
-                    return False
-                return True
         except Exception as e:
             ErrorPrinter.message("An error occurred whilst trying to check database setup", e)
+            return 2
+        table = cur.fetchall()
+        print(table)
         conn.close()
+        if table == None:
+            return 0
+        if not table:
+            return 0
+        return 1
 
     @staticmethod
     def create_tables() -> bool:
@@ -64,7 +80,9 @@ class Database:
                         `order` INT DEFAULT(0),
                         hidden TINYINT(1) DEFAULT(1),
                         private TINYINT(1) DEFAULT(0),
-                        pinned TINYINT(1) NOT NULL DEFAULT(0)
+                        pinned TINYINT(1) NOT NULL DEFAULT(0),
+                        enable_optionals BOOLEAN DEFAULT(0),
+                        enable_server BOOLEAN DEFAULT(0)
                         )"""
             )
             cur.execute(
@@ -145,6 +163,7 @@ class Database:
                         solder_users BOOLEAN DEFAULT(0),
                         solder_keys BOOLEAN DEFAULT(0),
                         solder_clients BOOLEAN DEFAULT(0),
+                        solder_env BOOLEAN DEFAULT(0),
                         mods_create BOOLEAN DEFAULT(0),
                         mods_manage BOOLEAN DEFAULT(0),
                         mods_delete BOOLEAN DEFAULT(0),
@@ -175,6 +194,15 @@ class Database:
                         )"""
             )
             cur.execute(
+                """CREATE TABLE IF NOT EXISTS user_modpack (
+                        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        modpack_id INT NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                        )"""
+            )
+            cur.execute(
                 """CREATE TABLE IF NOT EXISTS `keys` (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
                         name VARCHAR(255) NOT NULL UNIQUE,
@@ -187,7 +215,8 @@ class Database:
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
                     ip INT NOT NULL,
-                    expiry TIMESTAMP NOT NULL
+                    expiry TIMESTAMP NOT NULL,
+                    user_id INT NOT NULL
                 )"""
             )
             con.commit()
@@ -264,7 +293,9 @@ class Database:
             cur.execute(
                 """ALTER TABLE modpacks
                     ADD COLUMN user_id INT NOT NULL AFTER slug,
-                    ADD COLUMN pinned TINYINT(1) NOT NULL DEFAULT(0)
+                    ADD COLUMN pinned TINYINT(1) NOT NULL DEFAULT(0),
+                    ADD COLUMN enable_optionals BOOLEAN DEFAULT(0),
+                    ADD COLUMN enable_server BOOLEAN DEFAULT(0)
                 """
             )
             cur.execute(
@@ -293,10 +324,25 @@ class Database:
                 """
             )
             cur.execute(
+                """ALTER TABLE user_permissions
+                    ADD COLUMN solder_env BOOLEAN DEFAULT(0)
+                """
+            )
+            cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
                     ip INT NOT NULL,
-                    expiry TIMESTAMP NOT NULL
+                    expiry TIMESTAMP NOT NULL,
+                    user_id INT NOT NULL
+                )"""
+            )
+            cur.execute(
+                """CREATE TABLE IF NOT EXISTS user_modpack (
+                        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        modpack_id INT NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                 )"""
             )
             con.commit()
@@ -314,7 +360,8 @@ class Database:
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
                     ip INT NOT NULL,
-                    expiry TIMESTAMP NOT NULL
+                    expiry TIMESTAMP NOT NULL,
+                    user_id INT NOT NULL
                 )"""
             )
             con.commit()

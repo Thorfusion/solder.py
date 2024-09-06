@@ -25,11 +25,11 @@
                 <td>{{mod.version}}</td>
                 <td>{{mod.minecraft}}</td>
                 <td>{{mod.count}}</td>
-                <td><input class="form-check-input" type="radio" name="flexRadioDefault" value="" id="rec_{{mod.id}}" onclick="submitecheckedpress('recommended_modid', '{{mod.version}}', 'recommended_check', 'rec_{{mod.id}}', 'recommended_submit')" {% if modpackname.recommended==mod.version %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="radio" name="flexRadioDefault1" value="" id="latest_{{mod.id}}" onclick="submitecheckedpress('latest_modid', '{{mod.version}}', 'latest_check', 'latest_{{mod.id}}', 'latest_submit')" {% if modpackname.latest==mod.version %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="published_{{mod.id}}" onclick="submitecheckedpress('is_published_modid', '{{mod.id}}', 'is_published_check', 'published_{{mod.id}}', 'is_published_submit')" {% if mod.is_published %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" onclick="submitecheckedpress('private_modid', '{{mod.id}}', 'private_check', 'private_{{mod.id}}', 'private_submit')" {% if mod.private %}checked{% endif %}></td>
-                <td><input class="form-check-input" type="radio" name="markedbuild" id="marked_{{mod.id}}" onclick="submitecheckedpress('marked_modid', '{{mod.id}}', 'marked_check', 'marked_{{mod.id}}', 'marked_submit')" {% if mod.marked %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="radio" name="flexRadioDefault" value="" id="rec_{{mod.id}}" onclick="submitecheckedpress('modid', '{{mod.version}}', 'check', 'rec_{{mod.id}}', 'recommended_submit')" {% if modpackname.recommended==mod.version %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="radio" name="flexRadioDefault1" value="" id="latest_{{mod.id}}" onclick="submitecheckedpress('modid', '{{mod.version}}', 'check', 'latest_{{mod.id}}', 'latest_submit')" {% if modpackname.latest==mod.version %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="published_{{mod.id}}" onclick="submitecheckedpress('modid', '{{mod.id}}', 'check', 'published_{{mod.id}}', 'is_published_submit')" {% if mod.is_published %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="private_{{mod.id}}" onclick="submitecheckedpress('modid', '{{mod.id}}', 'check', 'private_{{mod.id}}', 'private_submit')" {% if mod.private %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="radio" name="markedbuild" id="marked_{{mod.id}}" onclick="submitecheckedpress('modid', '{{mod.id}}', 'check', 'marked_{{mod.id}}', 'marked_submit')" {% if mod.marked %}checked{% endif %}></td>
                 <td>
                     <div class="maxcont">
                         <a href="../modpackbuild/{{mod.id}}"><button type="button" class="btn btn-primary buttonwidth">Manage</button></a>
@@ -42,28 +42,12 @@
         </tbody>
     </table>
     <form method="post" action="">
-        <input type="text" class="form-control invisible" name="recommended_check" id="recommended_check" readonly>
-        <input type="text" class="form-control invisible" name="recommended_modid" id="recommended_modid" readonly>
+        <input type="text" class="form-control invisible" name="check" id="check" readonly>
+        <input type="text" class="form-control invisible" name="modid" id="modid" readonly>
         <input class="btn btn-danger invisible" type="submit" name="recommended_submit" id="recommended_submit" value="Delete">
-    </form>
-    <form method="post" action="">
-        <input type="text" class="form-control invisible" name="latest_check" id="latest_check" readonly>
-        <input type="text" class="form-control invisible" name="latest_modid" id="latest_modid" readonly>
         <input class="btn btn-danger invisible" type="submit" name="latest_submit" id="latest_submit" value="Delete">
-    </form>
-    <form method="post" action="">
-        <input type="text" class="form-control invisible" name="is_published_check" id="is_published_check" readonly>
-        <input type="text" class="form-control invisible" name="is_published_modid" id="is_published_modid" readonly>
         <input class="btn btn-danger invisible" type="submit" name="is_published_submit" id="is_published_submit" value="Delete">
-    </form>
-    <form method="post" action="">
-        <input type="text" class="form-control invisible" name="private_check" id="private_check" readonly>
-        <input type="text" class="form-control invisible" name="private_modid" id="private_modid" readonly>
         <input class="btn btn-danger invisible" type="submit" name="private_submit" id="private_submit" value="Delete">
-    </form>
-    <form method="post" action="">
-        <input type="text" class="form-control invisible" name="marked_check" id="marked_check" readonly>
-        <input type="text" class="form-control invisible" name="marked_modid" id="marked_modid" readonly>
         <input class="btn btn-danger invisible" type="submit" name="marked_submit" id="marked_submit" value="Delete">
     </form>
 </div>
@@ -125,17 +109,6 @@
         <input class="btn btn-success" type="submit" value="Add build" name="form-submit" id="form-submit"></input>
         <button type="button" id="deletemod" class="btn btn-danger" disabled onclick="submitbuttonpress('modpack_delete_id', '{{ modpackname.id }}', 'deletemod_submit')">Delete Modpack</button> <input class="form-check-input" type="checkbox" value="1" id="delete_disable" name="delete_disable" onchange="undisable('deletemod')">
     </form>
-    {% if success %}
-    <div class="alert alert-success loginfail mx-auto" role="alert">
-        <p>{{mod.vmd5}}</p>
-        <p>{{mod.vurl}}</p>
-    </div>
-    {% endif %}
-    {% if failed %}
-    <div class="alert alert-danger loginfail mx-auto" role="alert">
-        <p>Failed!</p>
-    </div>
-    {% endif %}
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="modpack_delete_id" id="modpack_delete_id" readonly>
         <input class="btn btn-danger invisible" type="submit" name="deletemod_submit" id="deletemod_submit" value="Delete">

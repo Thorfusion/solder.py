@@ -24,8 +24,8 @@ class Client_modpack:
         id = cur.fetchone()["id"]
         return cls(id, client_id, modpack_id, now, now, "", "")
 
-    @classmethod
-    def delete_client_modpack(cls, id):
+    @staticmethod
+    def delete_client_modpack(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM client_modpack WHERE id=%s", (id,))

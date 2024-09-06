@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify, request
 from models.key import Key
 from models.mod import Mod
 from models.modpack import Modpack
-from models.globals import solderpy_version, mirror_url
+from models.common import solderpy_version, mirror_url
 
 api = Blueprint("api", __name__)
 
@@ -40,23 +40,30 @@ def modpack():
 
 @api.route("/api/modpack/<slug>")
 def modpack_slug(slug: str):
-    modpack = Modpack.get_by_cid_slug(request.args.get("cid"), slug)
+    cid = request.args.get("cid")
+    modpack = Modpack.get_by_cid_slug(cid, slug)
     if modpack:
-        modpack.builds = modpack.get_builds()
+        modpack.builds = modpack.get_builds_cid(cid)
         return jsonify(modpack.to_json())
     else:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
 
 
-@api.route("/api/modpack/<slug>/<build>")
-def modpack_slug_build(slug: str, build: str):
-    modpack = Modpack.get_by_cid_slug(request.args.get("cid"), slug)
+@api.route("/api/modpack/<slugstring>/<buildstring>")
+def modpack_slug_build(slugstring: str, buildstring: str):
+    modpack = Modpack.get_by_cid_slug(request.args.get("cid"), slugstring)
     if not modpack:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
-    build = modpack.get_build(build)
+    
+    buildsplit = buildstring.split("-")
+    buildsplit.append("")
+    print(buildsplit)
+    buildnumber = buildsplit[0]
+    buildtag = buildsplit[1]
+    build = modpack.get_build(buildnumber)
     if not build:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
-    modversions = build.get_modversions_minimal()
+    modversions = build.get_modversions_minimal(buildtag)
     moddata = []
     for mv in modversions:
         moddata.append(
@@ -64,7 +71,7 @@ def modpack_slug_build(slug: str, build: str):
                 "name": mv.modname,
                 "version": mv.version,
                 "md5": mv.md5,
-                "url": f"{mirror_url}/mods/{mv.modname}/{mv.version}.zip",
+                "url": f"{mirror_url}{mv.modname}/{mv.version}.zip",
             }
         )
     return {"minecraft": build.minecraft, "java": build.min_java, "memory": build.min_memory, "forge": None, "mods": moddata}

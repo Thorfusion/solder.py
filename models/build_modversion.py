@@ -1,3 +1,4 @@
+from flask import flash
 from .database import Database
 
 
@@ -10,16 +11,16 @@ class Build_modversion:
         self.updated_at = updated_at
         self.optional = optional
 
-    @classmethod
-    def delete_build_modversion(cls, id):
+    @staticmethod
+    def delete_build_modversion(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM build_modversion WHERE id = %s", (id,))
         conn.commit()
         return None
 
-    @classmethod
-    def update_optional(cls, modversion_id, optional, build_id):
+    @staticmethod
+    def update_optional(modversion_id, optional, build_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("""UPDATE build_modversion 
@@ -100,4 +101,5 @@ class Build_modversion:
         rows = cur.fetchall()
         if rows:
             return rows
+        flash("Failed to make changelog", "error")
         return []

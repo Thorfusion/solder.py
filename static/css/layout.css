@@ -96,3 +96,7 @@ main {
     grid-column: 2;
     grid-row: 1;
 }
+
+.spacers {
+    min-height: 5vh;
+}
