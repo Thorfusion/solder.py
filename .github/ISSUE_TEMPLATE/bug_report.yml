@@ -4,7 +4,7 @@ title: "[BUG]: "
 labels: ["TYPE: BUG", "STATUS: NOT STARTED", "PRIORITY: N/A"]
 body:
   - type: textarea
-    id: Describe-the-bug
+    id: descibe-the-bug
     attributes:
       label: Describe the bug
       placeholder: A clear and concise description of what the bug is.
