@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from models.database import Database
 
 ## Solderpy version
-solderpy_version = "1.5.0"
+solderpy_version = "1.5.1"
 
 load_dotenv(".env")
 
