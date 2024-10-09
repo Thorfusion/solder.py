@@ -216,27 +216,27 @@ def modpack(id):
             if "clonebuildman" in request.form and request.form['clonebuildman'] != "":
                 clonebuild = request.form['clonebuildman']
             Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild)
-            flash("added" + id, "success")
+            flash("added build", "success")
             return redirect(url_for("asite.modpack", id=id))
         if "recommended_submit" in request.form:
             common.update_checkbox(id, request.form["modid"], "recommended", "modpacks")
-            flash("updated" + id, "success")
+            flash("updated " + id, "success")
             return redirect(url_for("asite.modpack", id=id))
         if "latest_submit" in request.form:
             common.update_checkbox(id, request.form["modid"], "latest", "modpacks")
-            flash("updated" + id, "success")
+            flash("updated " + id, "success")
             return redirect(url_for("asite.modpack", id=id))
         if "is_published_submit" in request.form:
             common.update_checkbox(request.form["modid"], request.form["check"], "is_published", "builds")
-            flash("updated" + id, "success")
+            flash("updated " + id, "success")
             return redirect(url_for("asite.modpack", id=id))
         if "private_submit" in request.form:
             common.update_checkbox(request.form["modid"], request.form["check"], 'private', 'builds')
-            flash("updated" + id, "success")
+            flash("updated " + id, "success")
             return redirect(url_for("asite.modpack", id=id))
         if "marked_submit" in request.form:
             Build.update_checkbox_marked(request.form["modid"], request.form["check"])
-            flash("updated" + id, "success")
+            flash("updated " + id, "success")
             return redirect(url_for("asite.modpack", id=id))
         if "changelog_submit" in request.form:
             oldversion = request.form["changelog_oldver"]
@@ -250,7 +250,7 @@ def modpack(id):
             if "modpack_delete_id" not in request.form:
                 return redirect(url_for("asite.modpack", id=id))
             modpack.delete_modpack(request.form["modpack_delete_id"])
-            flash("deleted" + id, "success")
+            flash("deleted " + id, "success")
             return redirect(url_for('asite.modpacklibrary'))
 
     return render_template("modpack.html", modpack=builds, modpackname=modpack)
@@ -325,7 +325,7 @@ def apikeylibrary_post():
             if "delete_id" not in request.form:
                 return redirect(url_for('asite.apikeylibrary'))
             Key.delete_key(request.form["delete_id"])
-            flash("deleted key" + id, "success")
+            flash("deleted key " + id, "success")
             return redirect(url_for('asite.apikeylibrary'))
 
     return redirect(url_for('asite.apikeylibrary'))
@@ -480,15 +480,15 @@ def modpackbuild(id):
             if "private" in request.form:
                 private = request.form['private']
             Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
-            flash("updated" + id, "success")
+            flash("updated " + id, "success")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "optional_submit" in request.form:
             Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"], id)
-            flash("updated" + id, "success")
+            flash("updated " + id, "success")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "selmodver_submit" in request.form:
             Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], id)
-            flash("updated" + id, "success")
+            flash("updated " + id, "success")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "delete_submit" in request.form:
             if User.get_permission_token(session["token"], "modpacks_delete") == 0:
