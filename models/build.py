@@ -168,7 +168,7 @@ class Build:
                 """SELECT modversions.id, modversions.mod_id, modversions.version, modversions.mcversion, modversions.md5, modversions.created_at, modversions.updated_at, modversions.filesize, mods.name AS modname, build_modversion.optional 
                 FROM modversions
                 INNER JOIN build_modversion ON modversions.id = build_modversion.modversion_id JOIN mods ON modversions.mod_id = mods.id 
-                WHERE build_modversion.build_id = %s AND build_modversion.optional = 1 AND mods.side IN ('CLIENT','BOTH')
+                WHERE build_modversion.build_id = %s AND mods.side IN ('CLIENT','BOTH')
                 """, (self.id,))
         elif tag == "server":
             cursor.execute(
