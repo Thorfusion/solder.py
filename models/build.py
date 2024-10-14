@@ -131,7 +131,7 @@ class Build:
                 FROM builds
                 WHERE modpack_id = %s
                 AND is_published = 1 AND (private = 0 OR modpack_id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))
-                ORDER BY builds.id DESC
+                ORDER BY builds.id ASC
             """, (modpack.id, cid))
         builds = cursor.fetchall()
         if builds:
