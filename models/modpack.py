@@ -95,10 +95,10 @@ class Modpack:
     def get_builds(self):
         return Build.get_by_modpack(self)
     
-    def get_builds_cid(self, cid):
+    def get_builds_cid_api(self, cid):
         return Build.get_by_modpack_cid(self, cid)
 
-    def get_build(self, version):
+    def get_build_api(self, version):
         return Build.get_by_modpack_version(self, version)
 
     def to_json(self):

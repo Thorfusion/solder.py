@@ -77,7 +77,7 @@ class Mod:
         return None
 
     @classmethod
-    def get_by_name(cls, name):
+    def get_by_name_api(cls, name):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM mods WHERE name = %s", (name,))
