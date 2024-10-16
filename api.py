@@ -34,14 +34,14 @@ def verify_key(key: str = None):
 
 @api.route("/api/modpack")
 def modpack():
-    modpacks = Modpack.get_by_cid(request.args.get("cid"))
+    modpacks = Modpack.get_by_cid_api(request.args.get("cid"))
     return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": mirror_url})
 
 
 @api.route("/api/modpack/<slug>")
 def modpack_slug(slug: str):
     cid = request.args.get("cid")
-    modpack = Modpack.get_by_cid_slug(cid, slug)
+    modpack = Modpack.get_by_cid_slug_api(cid, slug)
     if modpack:
         modpack.builds = modpack.get_builds_cid(cid)
         return jsonify(modpack.to_json())
@@ -51,7 +51,7 @@ def modpack_slug(slug: str):
 
 @api.route("/api/modpack/<slugstring>/<buildstring>")
 def modpack_slug_build(slugstring: str, buildstring: str):
-    modpack = Modpack.get_by_cid_slug(request.args.get("cid"), slugstring)
+    modpack = Modpack.get_by_cid_slug_api(request.args.get("cid"), slugstring)
     if not modpack:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
     
@@ -63,7 +63,7 @@ def modpack_slug_build(slugstring: str, buildstring: str):
     build = modpack.get_build(buildnumber)
     if not build:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
-    modversions = build.get_modversions_minimal(buildtag)
+    modversions = build.get_modversions_api(buildtag)
     moddata = []
     for mv in modversions:
         moddata.append(
@@ -101,7 +101,7 @@ def mod_name_version(name: str, version: str):
     mod = Mod.get_by_name(name)
     if not mod:
         return jsonify({"error": "Mod does not exist"}), 404
-    version = mod.get_version(version)
+    version = mod.get_version_api(version)
     if not version:
         return jsonify({"error": "Mod version does not exist"}), 404
     else:

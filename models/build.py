@@ -160,7 +160,7 @@ class Build:
         except:
             return 0
 
-    def get_modversions_minimal(self, tag: str):
+    def get_modversions_api(self, tag: str):
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
         if tag == "OPTIONAL":

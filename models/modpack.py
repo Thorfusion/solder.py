@@ -63,7 +63,7 @@ class Modpack:
         return []
 
     @staticmethod
-    def get_by_cid(cid):
+    def get_by_cid_api(cid):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM modpacks WHERE hidden = 0 AND (private = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))", (cid,))
@@ -73,7 +73,7 @@ class Modpack:
         return None
 
     @classmethod
-    def get_by_cid_slug(cls, cid, slug):
+    def get_by_cid_slug_api(cls, cid, slug):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM modpacks WHERE slug = %s AND (hidden = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))", (slug, cid))

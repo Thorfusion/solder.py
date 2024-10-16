@@ -124,7 +124,7 @@ class Mod:
             return Modversion(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
         return None
 
-    def get_version(self, version):
+    def get_version_api(self, version):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM modversions WHERE mod_id = %s AND version = %s", (self.id, version))
