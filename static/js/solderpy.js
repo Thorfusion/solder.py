@@ -81,16 +81,6 @@ function submitecheckedpress(id, val, textform, check, submitid) {
     document.querySelector(submit1).click();
 }
 
-
-/* test code for md5
-function buttonpress2() {
-    vers = document.getElementById('version').value
-    hash = md5(vers);
-    document.getElementById('md5').value = hash;
-}
-*/
-
-
 // Hashing md5 files
 function hashmd5() {
     let fileSelect = document.getElementById('file')
