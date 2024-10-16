@@ -24,17 +24,6 @@ class Session:
         return int(ip.replace('.', ''))
 
     @classmethod
-    def get_from_token(cls, token: str) -> Session:
-        conn = Database.get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT * FROM sessions WHERE token = %s", (token,))
-        session = cur.fetchone()
-        if session:
-            return cls(session[0], session[1], session[2])
-        else:
-            return None
-
-    @classmethod
     def get_and_update_from_token(cls, token: str) -> Session:
         conn = Database.get_connection()
         cur = conn.cursor()

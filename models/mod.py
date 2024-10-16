@@ -66,16 +66,6 @@ class Mod:
             return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"])
         return None
 
-    @staticmethod
-    def get_multi_by_id(ids: tuple):
-        conn = Database.get_connection()
-        cur = conn.cursor(dictionary=True)
-        cur.execute(f"SELECT * FROM mods WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
-        rows = cur.fetchall()
-        if rows:
-            return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"]) for row in rows]
-        return None
-
     @classmethod
     def get_by_name_api(cls, name):
         conn = Database.get_connection()
@@ -123,15 +113,6 @@ class Mod:
         if rows:
             return rows
         return []
-
-    def get_versions_by_id(self, id):
-        conn = Database.get_connection()
-        cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (id,))
-        row = cur.fetchone()
-        if row:
-            return Modversion(row["id"], row["mod_id"], row["version"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
-        return None
 
     def get_version_api(self, version):
         conn = Database.get_connection()
