@@ -109,10 +109,19 @@ class Mod:
     def get_versions(self):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
+        cur.execute("SELECT id, mod_id, version, mcversion, md5, filesize FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
         rows = cur.fetchall()
         if rows:
-            return [Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"]) for row in rows]
+            return rows
+        return []
+    
+    def get_versions_api(self) -> list:
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT version FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
+        rows = cur.fetchall()
+        if rows:
+            return rows
         return []
 
     def get_versions_by_id(self, id):

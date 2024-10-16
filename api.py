@@ -86,13 +86,13 @@ def mod():
 
 @api.route("/api/mod/<name>")
 def mod_name(name: str):
-    mod = Mod.get_by_name(name)
-    if not mod:
+    mods = Mod.get_by_name(name)
+    if not mods:
         return jsonify({"error": "Mod does not exist"}), 404
     else:
-        versions = mod.get_versions()
-        res = mod.to_json()
-        res["versions"] = [v.version for v in versions]
+        versions = Mod.get_versions_api(mods)
+        res = mods.to_json()
+        res["versions"] = [v["version"] for v in versions]
         return jsonify(res)
 
 
