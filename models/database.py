@@ -54,7 +54,6 @@ class Database:
             ErrorPrinter.message("An error occurred whilst trying to check database setup", e)
             return 2
         table = cur.fetchall()
-        print(table)
         conn.close()
         if table == None:
             return 0

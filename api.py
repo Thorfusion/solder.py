@@ -59,7 +59,6 @@ def modpack_slug_build(slugstring: str, buildstring: str):
     
     buildsplit = buildstring.split("-")
     buildsplit.append("")
-    print(buildsplit)
     buildnumber = buildsplit[0]
     buildtag = buildsplit[1]
     build = modpack.get_build_api(buildnumber)
