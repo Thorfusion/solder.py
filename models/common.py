@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from cachetools import FIFOCache, LRUCache, LFUCache, RRCache
 
 from models.database import Database
 
@@ -49,6 +50,23 @@ R2_BUCKET = os.getenv("R2_BUCKET")
 
 DB_IS_UP = Database.is_setup()
 
+cache_algorithm = os.getenv("CACHE_ALGORITHM").upper()
+if cache_algorithm not in ("FIFO", "LRU", "LFU", "RR"):
+    print("Invalid cache algorithm, using LRU as default")
+    cache_algorithm = "LRU"
+
+cache_type = None
+if cache_algorithm == "FIFO":
+    cache_type = FIFOCache
+elif cache_algorithm == "LRU":
+    cache_type = LRUCache
+elif cache_algorithm == "LFU":
+    cache_type = LFUCache
+elif cache_algorithm == "RR":
+    cache_type = RRCache
+
+cache_size = int(os.getenv("CACHE_SIZE"))
+
 class common:
 
     @staticmethod
@@ -57,4 +75,3 @@ class common:
         cur = conn.cursor(dictionary=True)
         cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, where_id))
         conn.commit()
-

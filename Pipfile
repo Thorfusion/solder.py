@@ -9,6 +9,7 @@ python-dotenv = "*"
 mysql-connector-python = "*"
 requests = "*"
 boto3 = "*"
+cachetools = "*"
 
 [dev-packages]
 
