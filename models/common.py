@@ -5,7 +5,7 @@ from cachetools import FIFOCache, LRUCache, LFUCache, RRCache
 from models.database import Database
 
 ## Solderpy version
-solderpy_version = "1.5.2"
+solderpy_version = "1.5.3"
 
 load_dotenv(".env")
 
