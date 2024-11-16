@@ -154,6 +154,20 @@ Solder.py uploads the modfiles to a volume in the container
 -v /your/path/here:/app/mods
 ```
 
+#### Caching options
+
+Set the cache eviction algorithm. Options are FIFO, LFU, LRU or RR. Default is LRU.
+
+```bash
+-e CACHE_ALGORITHM=LRU
+```
+
+Set the cache maximum size. Default is 100.
+
+```bash
+-e CACHE_SIZE=100
+```
+
 #### R2 Bucket Variables
 
 ```bash
