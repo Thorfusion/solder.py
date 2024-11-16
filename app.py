@@ -10,6 +10,7 @@ from models.common import debug, host, port, api_only, management_only, migratet
 __version__ = solderpy_version
 
 app: Flask = Flask(__name__)
+app.json.sort_keys = False
 if management_only == False or DB_IS_UP != 2:
     app.register_blueprint(api)
 if not api_only:

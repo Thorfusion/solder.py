@@ -51,7 +51,7 @@ function submitbuttonpress(id, val, submitid) {
     document.querySelector(submit2).click();
 }
 
-function submitbuttonpress2(version, name, urlform, submitid) {
+function submitbuttonpresswithurl(version, name, urlform, submitid) {
     versionname = document.getElementById(version).value;
     urllink = name + '/' + name + '-' + versionname + '.zip';
     document.getElementById(urlform).value = urllink;
@@ -80,16 +80,6 @@ function submitecheckedpress(id, val, textform, check, submitid) {
     sleep(25)
     document.querySelector(submit1).click();
 }
-
-
-/* test code for md5
-function buttonpress2() {
-    vers = document.getElementById('version').value
-    hash = md5(vers);
-    document.getElementById('md5').value = hash;
-}
-*/
-
 
 // Hashing md5 files
 function hashmd5() {

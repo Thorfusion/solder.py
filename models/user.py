@@ -63,16 +63,6 @@ class User:
         return None
 
     @classmethod
-    def get_by_id(cls, id):
-        conn = Database.get_connection()
-        cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM users WHERE id = %s", (id,))
-        row = cur.fetchone()
-        if row:
-            return cls(row["id"], row["username"], row["email"], row["password"], row["created_ip"], row["last_ip"], row["created_at"], row["updated_at"], row["updated_by_ip"], row["created_by_user_id"], row["updated_by_user_id"])
-        return None
-
-    @classmethod
     def get_by_username(cls, username):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
@@ -161,12 +151,6 @@ class User:
         if check == None:
             return False
         return True
-
-    def get_allowed_packs(self):
-        conn = Database.get_connection()
-        cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id FROM modpacks JOIN user_permissions ON modpacks.id = user_permissions.modpacks WHERE user_permissions.user_id = %s", (self.id,))
-        return Modpack.from_ids(cur.fetchall())
 
     def verify_password(self, password):
         return self.password.verify(password)

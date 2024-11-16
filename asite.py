@@ -17,7 +17,7 @@ from models.session import Session
 from models.user import User
 from mysql import connector
 from werkzeug.utils import secure_filename
-from models.common import mirror_url, debug, host, port, repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP
+from models.common import public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_algorithm, solder_url
 from models.user_modpack import User_modpack
 
 __version__ = solderpy_version
@@ -90,7 +90,7 @@ def modversion(id):
         modversions = []
         flash("unable to get modversions", "error")
 
-    return render_template("modversion.html", modSlug=mod.name, modversions=modversions, mod=mod, mirror_url=mirror_url)
+    return render_template("modversion.html", modSlug=mod.name, modversions=modversions, mod=mod, mirror_url=public_repo_url)
 
 
 @asite.route("/modversion/<id>", methods=["POST"])
@@ -138,20 +138,20 @@ def newmodversion(id):
 
         if request.form["rehash_md5"] != "":
             version = Modversion.get_by_id(request.form["rehash_id"])
-            version.update_hash(request.form["rehash_md5"], repo_url + request.form["rehash_url"])
+            version.update_hash(request.form["rehash_md5"], md5_repo_url + request.form["rehash_url"])
         else:
             version = Modversion.get_by_id(request.form["rehash_id"])
-            t = threading.Thread(target=version.rehash, args=(repo_url + request.form["rehash_url"],))
+            t = threading.Thread(target=version.rehash, args=(md5_repo_url + request.form["rehash_url"],))
             t.start()
     if "newmodvermanual_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_create") == 0:
                 return redirect(request.referrer)
-        filesie2 = Modversion.get_file_size(repo_url + request.form["newmodvermanual_url"])
+        filesie2 = Modversion.get_file_size(md5_repo_url + request.form["newmodvermanual_url"])
         if request.form["newmodvermanual_md5"] != "":
             Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0")
         else:
             # Todo Add filesize rehash and md5 hash, if fails do not add
-            Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", repo_url + request.form["newmodvermanual_url"])
+            Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", md5_repo_url + request.form["newmodvermanual_url"])
     return redirect(url_for("asite.modversion", id=id))
 
 
@@ -282,7 +282,7 @@ def mainsettings():
     if User.get_permission_token(session["token"], "solder_env") == 0:
         return redirect(request.referrer)
     
-    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, mirror_url=mirror_url, repo_url=repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP)
+    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_algorithm=cache_algorithm, solder_url=solder_url)
 
 
 @asite.route("/apikeylibrary", methods=["GET"])

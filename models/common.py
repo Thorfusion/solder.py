@@ -1,10 +1,11 @@
 import os
 from dotenv import load_dotenv
+from cachetools import FIFOCache, LRUCache, LFUCache, RRCache
 
 from models.database import Database
 
 ## Solderpy version
-solderpy_version = "1.5.2"
+solderpy_version = "1.5.3"
 
 load_dotenv(".env")
 
@@ -31,8 +32,9 @@ if os.getenv("MANAGEMENT_ONLY"):
 if os.getenv("APP_DEBUG"):
     debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
 
-mirror_url = os.getenv("SOLDER_MIRROR_URL")
-repo_url = os.getenv("SOLDER_REPO_LOCATION")
+public_repo_url = os.getenv("PUBLIC_REPO_LOCATION")
+md5_repo_url = os.getenv("MD5_REPO_LOCATION")
+solder_url = os.getenv("PUBLIC_URL_LOCATION")
 
 r2_url = os.getenv("R2_URL")
 db_name = os.getenv("DB_DATABASE")
@@ -48,6 +50,29 @@ R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
 R2_BUCKET = os.getenv("R2_BUCKET")
 
 DB_IS_UP = Database.is_setup()
+if os.getenv("CACHE_ALGORITHM"):
+    cache_algorithm = os.getenv("CACHE_ALGORITHM").upper()
+else:
+    cache_algorithm = "LRU"
+if cache_algorithm not in ("FIFO", "LRU", "LFU", "RR"):
+    print("Invalid cache algorithm, using LRU as default")
+    cache_algorithm = "LRU"
+
+cache_type = None
+if cache_algorithm == "FIFO":
+    cache_type = FIFOCache
+elif cache_algorithm == "LRU":
+    cache_type = LRUCache
+elif cache_algorithm == "LFU":
+    cache_type = LFUCache
+elif cache_algorithm == "RR":
+    cache_type = RRCache
+
+if (os.getenv("CACHE_SIZE")):
+    cache_size = int(os.getenv("CACHE_SIZE"))
+else: 
+    print("No cache size specified, using default")
+    cache_size = int(100)
 
 class common:
 
@@ -57,4 +82,3 @@ class common:
         cur = conn.cursor(dictionary=True)
         cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, where_id))
         conn.commit()
-
