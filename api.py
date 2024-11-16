@@ -32,6 +32,7 @@ def verify_key(key: str = None):
         return jsonify({"error": "Invalid key provided."})
 
 
+@api.route("/api/modpack/") # fix for technic website not following their own api
 @api.route("/api/modpack")
 def modpack():
     modpacks = Modpack.get_by_cid(request.args.get("cid"))
