@@ -50,8 +50,10 @@ R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
 R2_BUCKET = os.getenv("R2_BUCKET")
 
 DB_IS_UP = Database.is_setup()
-
-cache_algorithm = os.getenv("CACHE_ALGORITHM").upper()
+if os.getenv("CACHE_ALGORITHM"):
+    cache_algorithm = os.getenv("CACHE_ALGORITHM").upper()
+else:
+    cache_algorithm = "LRU"
 if cache_algorithm not in ("FIFO", "LRU", "LFU", "RR"):
     print("Invalid cache algorithm, using LRU as default")
     cache_algorithm = "LRU"
@@ -66,7 +68,11 @@ elif cache_algorithm == "LFU":
 elif cache_algorithm == "RR":
     cache_type = RRCache
 
-cache_size = int(os.getenv("CACHE_SIZE"))
+if int(os.getenv("CACHE_SIZE")):
+    cache_size = int(os.getenv("CACHE_SIZE"))
+else: 
+    print("No cache size specified, using default")
+    cache_size = int(100)
 
 class common:
 
