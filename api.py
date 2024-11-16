@@ -3,7 +3,7 @@ from cachetools import cached
 from models.key import Key
 from models.mod import Mod
 from models.modpack import Modpack
-from models.common import solderpy_version, mirror_url
+from models.common import solderpy_version, public_repo_url, solder_url
 from models.common import cache_type, cache_size
 
 api = Blueprint("api", __name__)
@@ -37,7 +37,7 @@ def verify_key(key: str = None):
 @cached(cache_type(cache_size), key=lambda: request.args.get("cid"))
 def modpack():
     modpacks = Modpack.get_by_cid_api(request.args.get("cid"))
-    return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": mirror_url})
+    return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": solder_url})
 
 @api.route("/api/modpack/<slug>")
 @cached(cache_type(cache_size), key=lambda slug: request.args.get("cid") + slug)
@@ -72,7 +72,7 @@ def modpack_slug_build(slugstring: str, buildstring: str):
                 "name": mv.modname,
                 "version": mv.version,
                 "md5": mv.md5,
-                "url": f"{mirror_url}{mv.modname}/{mv.modname}-{mv.version}.zip",
+                "url": f"{public_repo_url}{mv.modname}/{mv.modname}-{mv.version}.zip",
             }
         )
     return {"minecraft": build.minecraft, "java": build.min_java, "memory": build.min_memory, "forge": None, "mods": moddata}
@@ -107,5 +107,5 @@ def mod_name_version(name: str, version: str):
         return jsonify({"error": "Mod version does not exist"}), 404
     else:
         res = version.to_json()
-        res["url"] = f"{mirror_url}{name}/{version.version}.zip"
+        res["url"] = f"{public_repo_url}{name}/{version.version}.zip"
         return jsonify(res)

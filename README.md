@@ -131,13 +131,19 @@ This is the public facing URL for your repository. This is prefix url that techn
 You dont actually need to store the files in mods but solder.py own hosting folder is mods. S3 public links can be root for an example, same with repo url aswell.
 
 ```bash
--e SOLDER_MIRROR_URL=https://solder.example.com/mods/
+-e PUBLIC_REPO_LOCATION=https://solder.example.com/mods/
 ```
 
-This is the url solder.py uses to calculate md5 and filesize when rehashing or adding a mod manually. This is currently only url, so use localhost or local ip address if on the same network, else use same url as mirror url.
+This is the url solder.py uses to calculate md5 and filesize when rehashing or adding a mod manually. This is currently only url, so use localhost or local ip address if on the same network, else use same url as public repo url.
 
 ```bash
--e SOLDER_REPO_LOCATION=https://solder.example.com/mods/
+-e MD5_REPO_LOCATION=https://solder.example.com/mods/
+```
+
+This is the public facing url for solder instance
+
+```bash
+-e PUBLIC_URL_LOCATION=https://solder.example.com/
 ```
 
 #### Volumes

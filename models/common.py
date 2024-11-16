@@ -32,8 +32,9 @@ if os.getenv("MANAGEMENT_ONLY"):
 if os.getenv("APP_DEBUG"):
     debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
 
-mirror_url = os.getenv("SOLDER_MIRROR_URL")
-repo_url = os.getenv("SOLDER_REPO_LOCATION")
+public_repo_url = os.getenv("PUBLIC_REPO_LOCATION")
+md5_repo_url = os.getenv("MD5_REPO_LOCATION")
+solder_url = os.getenv("PUBLIC_URL_LOCATION")
 
 r2_url = os.getenv("R2_URL")
 db_name = os.getenv("DB_DATABASE")
