@@ -33,6 +33,8 @@ def verify_key(key: str = None):
     else:
         return jsonify({"error": "Invalid key provided."})
 
+
+@api.route("/api/modpack/") # fix for technic website not following their own api
 @api.route("/api/modpack")
 @cached(cache_type(cache_size), key=lambda: request.args.get("cid"))
 def modpack():
