@@ -36,13 +36,13 @@ def verify_key(key: str = None):
 
 @api.route("/api/modpack/") # fix for technic website not following their own api
 @api.route("/api/modpack")
-@cached(cache_type(cache_size), key=lambda: request.args.get("cid"))
+@cached(cache_type(cache_size), key=lambda: str(request.args.get("cid")))
 def modpack():
     modpacks = Modpack.get_by_cid_api(request.args.get("cid"))
     return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": solder_url})
 
 @api.route("/api/modpack/<slug>")
-@cached(cache_type(cache_size), key=lambda slug: request.args.get("cid") + slug)
+@cached(cache_type(cache_size), key=lambda slug: str(request.args.get("cid")) + slug)
 def modpack_slug(slug: str):
     cid = request.args.get("cid")
     modpack = Modpack.get_by_cid_slug_api(cid, slug)
@@ -53,7 +53,7 @@ def modpack_slug(slug: str):
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
 
 @api.route("/api/modpack/<slugstring>/<buildstring>")
-@cached(cache_type(cache_size), key=lambda slugstring, buildstring: request.args.get("cid") + slugstring + buildstring)
+@cached(cache_type(cache_size), key=lambda slugstring, buildstring: str(request.args.get("cid")) + slugstring + buildstring)
 def modpack_slug_build(slugstring: str, buildstring: str):
     modpack = Modpack.get_by_cid_slug_api(request.args.get("cid"), slugstring)
     if not modpack:
