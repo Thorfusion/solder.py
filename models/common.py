@@ -68,7 +68,7 @@ elif cache_algorithm == "LFU":
 elif cache_algorithm == "RR":
     cache_type = RRCache
 
-if int(os.getenv("CACHE_SIZE")):
+if (os.getenv("CACHE_SIZE")):
     cache_size = int(os.getenv("CACHE_SIZE"))
 else: 
     print("No cache size specified, using default")
