@@ -3,7 +3,7 @@ from cachetools import cached
 from models.key import Key
 from models.mod import Mod
 from models.modpack import Modpack
-from models.common import solderpy_version, public_repo_url, solder_url
+from models.common import solderpy_version, public_repo_url
 from models.common import cache_type, cache_size
 
 api = Blueprint("api", __name__)
@@ -39,7 +39,7 @@ def verify_key(key: str = None):
 @cached(cache_type(cache_size), key=lambda: str(request.args.get("cid")))
 def modpack():
     modpacks = Modpack.get_by_cid_api(request.args.get("cid"))
-    return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": solder_url})
+    return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": public_repo_url})
 
 @api.route("/api/modpack/<slug>")
 @cached(cache_type(cache_size), key=lambda slug: str(request.args.get("cid")) + slug)
