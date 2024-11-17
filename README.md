@@ -173,12 +173,6 @@ This is the url solder.py uses to calculate md5 and filesize when rehashing or a
 -e MD5_REPO_LOCATION=https://solder.example.com/mods/
 ```
 
-This is the public facing url for solder instance
-
-```bash
--e PUBLIC_URL_LOCATION=https://solder.example.com/
-```
-
 #### Volumes
 
 Solder.py uploads the modfiles to a volume in the container
