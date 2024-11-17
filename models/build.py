@@ -102,7 +102,6 @@ class Build:
         cursor.execute("SELECT * FROM builds WHERE id = %s", (id,))
         build = cursor.fetchone()
         if build is None:
-            flash("unable to get modpack by id", "error")
             return None
         return cls(**build)
 
