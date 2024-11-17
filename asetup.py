@@ -23,8 +23,10 @@ def setup():
         Database.create_tables()
         Session.start_session_loop()
     if new_user == True or User.any_user_exists() == False:
-        if migratetechnic:
+        if migratetechnic == True:
+            print("migrating database")
             Database.migratetechnic_tables()
+            print("database migrated")
             return render_template("setup.html")
         return render_template("setup.html")
     else:
