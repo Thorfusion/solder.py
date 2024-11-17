@@ -16,7 +16,7 @@ api_only = False
 management_only = False
 debug = False
 
-host = os.getenv("APP_URL")
+host = os.getenv("APP_HOST")
 port = os.getenv("APP_PORT")
 
 if os.getenv("NEW_USER"):
