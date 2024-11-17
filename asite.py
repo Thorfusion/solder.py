@@ -325,8 +325,7 @@ def apikeylibrary_post():
             if "delete_id" not in request.form:
                 return redirect(url_for('asite.apikeylibrary'))
             Key.delete_key(request.form["delete_id"])
-            flash("deleted key " + id, "success")
-            return redirect(url_for('asite.apikeylibrary'))
+            flash("deleted key", "success")
 
     return redirect(url_for('asite.apikeylibrary'))
 
