@@ -120,6 +120,21 @@ class Build:
         if builds:
             return [Build(**build) for build in builds]
         return []
+    
+    @staticmethod
+    def get_by_modpack_api(modpack):
+        conn = Database.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT builds.*
+                FROM builds
+                WHERE modpack_id = %s
+                ORDER BY builds.id ASC
+            """, (modpack.id,))
+        builds = cursor.fetchall()
+        if builds:
+            return [Build(**build) for build in builds]
+        return []
 
     @staticmethod
     def get_by_modpack_cid(modpack, cid):

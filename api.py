@@ -35,12 +35,20 @@ def verify_key(key: str = None):
 
 
 @api.route("/api/modpack")
-@cached(cache_type(cache_size), key=lambda: str(request.args.get("cid")) + str(request.args.get('include')))
+@cached(cache_type(cache_size), key=lambda: str(request.args.get("cid")) + str(request.args.get('include')) + str(request.args.get('k')))
 def modpack():
     cid = request.args.get("cid")
-    modpacks = Modpack.get_by_cid_api(cid)
+    keys = request.args.get("k")
+    key = Key.get_key(keys)
+    if key:
+        modpacks = Modpack.get_all_api()
+    else:
+        modpacks = Modpack.get_by_cid_api(cid)
     if request.args.get('include') == "full":
-        return jsonify({"modpacks": {modpack.slug: Modpack.to_modpack_json(cid, modpack.slug) for modpack in modpacks}, "mirror_url": public_repo_url})
+        if key:
+            return jsonify({"modpacks": {modpack.slug: Modpack.to_modpack_json_all(modpack.slug) for modpack in modpacks}, "mirror_url": public_repo_url})
+        else:
+            return jsonify({"modpacks": {modpack.slug: Modpack.to_modpack_json(cid, modpack.slug) for modpack in modpacks}, "mirror_url": public_repo_url})
     else:
         return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": public_repo_url})
 
