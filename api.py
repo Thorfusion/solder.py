@@ -121,6 +121,8 @@ def mod():
     return jsonify(
         {"error": "Mod does not exist"}
     ), 404
+    Mods = Mod.get_all()
+    return jsonify({"mods": {Mods.name: Mods.pretty_name for Mods in Mods}})
 
 @api.route("/api/mod/<name>")
 @cached(cache_type(cache_size), key=lambda name: name)
