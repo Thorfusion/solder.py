@@ -5,7 +5,7 @@ from cachetools import FIFOCache, LRUCache, LFUCache, RRCache
 from models.database import Database
 
 ## Solderpy version
-solderpy_version = "1.5.3"
+solderpy_version = "1.6.0"
 
 load_dotenv(".env")
 
@@ -16,7 +16,7 @@ api_only = False
 management_only = False
 debug = False
 
-host = os.getenv("APP_URL")
+host = os.getenv("APP_HOST")
 port = os.getenv("APP_PORT")
 
 if os.getenv("NEW_USER"):
@@ -32,11 +32,16 @@ if os.getenv("MANAGEMENT_ONLY"):
 if os.getenv("APP_DEBUG"):
     debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
 
+if not os.getenv("PUBLIC_REPO_LOCATION"):
+    print("PUBLIC_REPO_LOCATION not set")
+if not os.getenv("MD5_REPO_LOCATION"):
+    print("MD5_REPO_LOCATION not set")
 public_repo_url = os.getenv("PUBLIC_REPO_LOCATION")
 md5_repo_url = os.getenv("MD5_REPO_LOCATION")
-solder_url = os.getenv("PUBLIC_URL_LOCATION")
 
 r2_url = os.getenv("R2_URL")
+if not os.getenv("DB_DATABASE"):
+    print("DB_DATABASE not set")
 db_name = os.getenv("DB_DATABASE")
 
 UPLOAD_FOLDER = "./mods/"
@@ -54,6 +59,7 @@ if os.getenv("CACHE_ALGORITHM"):
     cache_algorithm = os.getenv("CACHE_ALGORITHM").upper()
 else:
     cache_algorithm = "LRU"
+    print("Invalid cache algorithm, using LRU as default")
 if cache_algorithm not in ("FIFO", "LRU", "LFU", "RR"):
     print("Invalid cache algorithm, using LRU as default")
     cache_algorithm = "LRU"

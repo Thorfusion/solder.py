@@ -3,7 +3,7 @@ from cachetools import cached
 from models.key import Key
 from models.mod import Mod
 from models.modpack import Modpack
-from models.common import solderpy_version, public_repo_url, solder_url
+from models.common import solderpy_version, public_repo_url
 from models.common import cache_type, cache_size
 
 api = Blueprint("api", __name__)
@@ -34,27 +34,48 @@ def verify_key(key: str = None):
         return jsonify({"error": "Invalid key provided."})
 
 
-@api.route("/api/modpack/") # fix for technic website not following their own api
 @api.route("/api/modpack")
-@cached(cache_type(cache_size), key=lambda: request.args.get("cid"))
+@cached(cache_type(cache_size), key=lambda: str(request.args.get("cid")) + str(request.args.get('include')) + str(request.args.get('k')))
 def modpack():
-    modpacks = Modpack.get_by_cid_api(request.args.get("cid"))
-    return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": solder_url})
+    cid = request.args.get("cid")
+    keys = request.args.get("k")
+    key = Key.get_key(keys)
+    if key:
+        modpacks = Modpack.get_all_api()
+    else:
+        modpacks = Modpack.get_by_cid_api(cid)
+    if request.args.get('include') == "full":
+        if key:
+            return jsonify({"modpacks": {modpack.slug: Modpack.to_modpack_json_all(modpack.slug) for modpack in modpacks}, "mirror_url": public_repo_url})
+        else:
+            return jsonify({"modpacks": {modpack.slug: Modpack.to_modpack_json(cid, modpack.slug) for modpack in modpacks}, "mirror_url": public_repo_url})
+    else:
+        return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": public_repo_url})
 
 @api.route("/api/modpack/<slug>")
-@cached(cache_type(cache_size), key=lambda slug: request.args.get("cid") + slug)
+@cached(cache_type(cache_size), key=lambda slug: str(request.args.get("cid")) + str(request.args.get('k')) + slug)
 def modpack_slug(slug: str):
     cid = request.args.get("cid")
-    modpack = Modpack.get_by_cid_slug_api(cid, slug)
-    if modpack:
-        modpack.builds = modpack.get_builds_cid_api(cid)
-        return jsonify(modpack.to_json())
+    keys = request.args.get("k")
+    key = Key.get_key(keys)
+    if key:
+        modpack = Modpack.get_all_by_slug_api(slug)
+        if modpack:
+            modpack.builds = modpack.get_builds_api()
+            return jsonify(modpack.to_json())
     else:
-        return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
+        modpack = Modpack.get_by_cid_slug_api(cid, slug)
+        if modpack:
+            modpack.builds = modpack.get_builds_cid_api(cid)
+            return jsonify(modpack.to_json())
+    return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
 
 @api.route("/api/modpack/<slugstring>/<buildstring>")
-@cached(cache_type(cache_size), key=lambda slugstring, buildstring: request.args.get("cid") + slugstring + buildstring)
+@cached(cache_type(cache_size), key=lambda slugstring, buildstring: str(request.args.get("cid")) + str(request.args.get("include")) + str(request.args.get("k")) + slugstring + buildstring)
 def modpack_slug_build(slugstring: str, buildstring: str):
+    keys = request.args.get("k")
+    key = Key.get_key(keys)
+    # Todo, add api key verification that bypass cid verification
     modpack = Modpack.get_by_cid_slug_api(request.args.get("cid"), slugstring)
     if not modpack:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
@@ -68,15 +89,30 @@ def modpack_slug_build(slugstring: str, buildstring: str):
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
     modversions = build.get_modversions_api(buildtag)
     moddata = []
-    for mv in modversions:
-        moddata.append(
-            {
-                "name": mv.modname,
-                "version": mv.version,
-                "md5": mv.md5,
-                "url": f"{public_repo_url}{mv.modname}/{mv.modname}-{mv.version}.zip",
-            }
-        )
+    if request.args.get('include') == "mods":
+        for mv in modversions:
+            moddata.append(
+                {
+                    "name": mv.modname,
+                    "version": mv.version,
+                    "md5": mv.md5,
+                    "url": f"{public_repo_url}{mv.modname}/{mv.modname}-{mv.version}.zip",
+                    "pretty_name": mv.pretty_name,
+                    "author": mv.author,
+                    "description": mv.description,
+                    "link": mv.link,
+                }
+            )
+    else:
+        for mv in modversions:
+            moddata.append(
+                {
+                    "name": mv.modname,
+                    "version": mv.version,
+                    "md5": mv.md5,
+                    "url": f"{public_repo_url}{mv.modname}/{mv.modname}-{mv.version}.zip",
+                }
+            )
     return {"minecraft": build.minecraft, "java": build.min_java, "memory": build.min_memory, "forge": None, "mods": moddata}
 
 
@@ -85,6 +121,8 @@ def mod():
     return jsonify(
         {"error": "Mod does not exist"}
     ), 404
+    Mods = Mod.get_all()
+    return jsonify({"mods": {Mods.name: Mods.pretty_name for Mods in Mods}})
 
 @api.route("/api/mod/<name>")
 @cached(cache_type(cache_size), key=lambda name: name)

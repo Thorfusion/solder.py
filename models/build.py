@@ -102,7 +102,6 @@ class Build:
         cursor.execute("SELECT * FROM builds WHERE id = %s", (id,))
         build = cursor.fetchone()
         if build is None:
-            flash("unable to get modpack by id", "error")
             return None
         return cls(**build)
 
@@ -116,6 +115,21 @@ class Build:
                 LEFT JOIN (SELECT build_id, COUNT(*) AS count FROM build_modversion GROUP BY build_id) modcount ON builds.id = modcount.build_id
                 WHERE modpack_id = %s
                 ORDER BY builds.id DESC
+            """, (modpack.id,))
+        builds = cursor.fetchall()
+        if builds:
+            return [Build(**build) for build in builds]
+        return []
+    
+    @staticmethod
+    def get_by_modpack_api(modpack):
+        conn = Database.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute(
+            """SELECT builds.*
+                FROM builds
+                WHERE modpack_id = %s
+                ORDER BY builds.id ASC
             """, (modpack.id,))
         builds = cursor.fetchall()
         if builds:
@@ -165,21 +179,21 @@ class Build:
         cursor = conn.cursor(dictionary=True)
         if tag == "optional":
             cursor.execute(
-                """SELECT modversions.id, modversions.mod_id, modversions.version, modversions.mcversion, modversions.md5, modversions.created_at, modversions.updated_at, modversions.filesize, mods.name AS modname, build_modversion.optional 
+                """SELECT modversions.id, modversions.mod_id, modversions.version, modversions.mcversion, modversions.md5, modversions.created_at, modversions.updated_at, modversions.filesize, mods.name AS modname, mods.pretty_name, mods.author, mods.link, build_modversion.optional 
                 FROM modversions
                 INNER JOIN build_modversion ON modversions.id = build_modversion.modversion_id JOIN mods ON modversions.mod_id = mods.id 
                 WHERE build_modversion.build_id = %s AND mods.side IN ('CLIENT','BOTH')
                 """, (self.id,))
         elif tag == "server":
             cursor.execute(
-                """SELECT modversions.id, modversions.mod_id, modversions.version, modversions.mcversion, modversions.md5, modversions.created_at, modversions.updated_at, modversions.filesize, mods.name AS modname, build_modversion.optional 
+                """SELECT modversions.id, modversions.mod_id, modversions.version, modversions.mcversion, modversions.md5, modversions.created_at, modversions.updated_at, modversions.filesize, mods.name AS modname, mods.pretty_name, mods.author, mods.link, build_modversion.optional 
                 FROM modversions
                 INNER JOIN build_modversion ON modversions.id = build_modversion.modversion_id JOIN mods ON modversions.mod_id = mods.id 
                 WHERE build_modversion.build_id = %s AND build_modversion.optional = 0 AND mods.side IN ('SERVER','BOTH')
                 """, (self.id,))
         else:
             cursor.execute(
-                """SELECT modversions.id, modversions.mod_id, modversions.version, modversions.mcversion, modversions.md5, modversions.created_at, modversions.updated_at, modversions.filesize, mods.name AS modname, build_modversion.optional 
+                """SELECT modversions.id, modversions.mod_id, modversions.version, modversions.mcversion, modversions.md5, modversions.created_at, modversions.updated_at, modversions.filesize, mods.name AS modname, mods.pretty_name, mods.author, mods.link, mods.description, build_modversion.optional 
                 FROM modversions
                 INNER JOIN build_modversion ON modversions.id = build_modversion.modversion_id JOIN mods ON modversions.mod_id = mods.id 
                 WHERE build_modversion.build_id = %s AND build_modversion.optional = 0 AND mods.side IN ('CLIENT','BOTH')
@@ -190,6 +204,10 @@ class Build:
             for mv in modversions:
                 v = Modversion(mv["id"], mv["mod_id"], mv["version"], mv["mcversion"], mv["md5"], mv["created_at"], mv["updated_at"], mv["filesize"], mv["optional"])
                 v.modname = mv["modname"]
+                v.pretty_name = mv["pretty_name"]
+                v.author = mv["author"]
+                v.link = mv["link"]
+                v.description = mv["description"]
                 versions.append(v)
             return versions
         return None

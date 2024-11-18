@@ -125,15 +125,11 @@ class Mod:
 
     def to_json(self):
         return {
-            "id": self.id,
             "name": self.name,
-            "description": self.description,
-            "author": self.author,
-            "link": self.link,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
             "pretty_name": self.pretty_name,
+            "author": self.author,
+            "description": self.description,
+            "link": self.link,
             "side": self.side,
             "type": self.modtype,
-            "note": self.note
         }

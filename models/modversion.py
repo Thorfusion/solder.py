@@ -146,11 +146,8 @@ class Modversion:
 
     def to_json(self):
         return {
-            "id": self.id,
             "mod_id": self.mod_id,
             "version": self.version,
             "md5": self.md5,
-            "created_at": self.created_at,
-            "updated_at": self.updated_at,
             "filesize": self.filesize,
         }

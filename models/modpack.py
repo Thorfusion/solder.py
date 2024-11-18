@@ -71,12 +71,32 @@ class Modpack:
         if rows:
             return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"]) for row in rows]
         return None
+    
+    @staticmethod
+    def get_all_api():
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM modpacks")
+        rows = cur.fetchall()
+        if rows:
+            return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"]) for row in rows]
+        return None
 
     @classmethod
     def get_by_cid_slug_api(cls, cid, slug):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("SELECT * FROM modpacks WHERE slug = %s AND (hidden = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))", (slug, cid))
+        row = cur.fetchone()
+        if row:
+            return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"], row["enable_optionals"], row["enable_server"])
+        return None
+    
+    @classmethod
+    def get_all_by_slug_api(cls, slug):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
         row = cur.fetchone()
         if row:
             return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"], row["enable_optionals"], row["enable_server"])
@@ -97,9 +117,27 @@ class Modpack:
     
     def get_builds_cid_api(self, cid):
         return Build.get_by_modpack_cid(self, cid)
+    
+    def get_builds_api(self):
+        return Build.get_by_modpack_api(self)
 
     def get_build_api(self, version):
         return Build.get_by_modpack_version(self, version)
+    
+    @staticmethod
+    def to_modpack_json(cid, slug):
+        modpackd = Modpack.get_by_cid_slug_api(cid, slug)
+        if modpackd:
+            modpackd.builds = Build.get_by_modpack_cid(modpackd, cid)
+            return modpackd.to_json()
+        
+    @staticmethod
+    def to_modpack_json_all(slug):
+        modpackd = Modpack.get_all_by_slug_api(slug)
+        if modpackd:
+            modpackd.builds = Build.get_by_modpack_api(modpackd)
+            return modpackd.to_json()
+        
 
     def to_json(self):
         data = {

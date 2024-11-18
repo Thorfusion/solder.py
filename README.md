@@ -10,30 +10,63 @@
 
 # About solder.py
 
-With critical missing features in technic solder and solder.cf now costs money and is mothballed right now we needed an more modern solder to use.
-With new features like allowing solder to be used on multiple launchers and much simpler in design than original solder, its much easier to install and maintain.
-We strive to keep the efficiency and simplicity of use at a top, removing unnecessary steps and keeping a simple look.
-solder.py is even compatible with original solder's database, visit the install section below.
+solder.py is solder written in python with major features over technic's solder.
 
-## Features over original solder
++ ### Easy install with docker
 
-+ Easy install with docker
-+ Native Mod uploading
-+ Internal descriptions of mods
-+ Function that allows mod version being uploaded/added to auto add/replace in selected build
-+ Clone builds from other modpacks
-+ R2 bucket integration with mod uploading, host your files on the cloud!  
-+ MCIL optional mod tag
-+ Generate changelog
-+ Pin your favorite modpacks to your menu!
++ ### Efficient user experience
+
+  solder.py is designed to allow a minimal button clicking as possible.
+
+  + #### Selected build feature
+
+    This feature allows the user to select a modpack build that the user is working on. menu has a own pin for it, new uploaded modversion can be added/updated to selected build directly and more.
+
+  + #### Pin your modpacks to menu
+
+  + #### Clone builds from other modpacks
+
++ ### Mod uploading
+
+  + #### S3 bucket compatbility
+
++ ### API only modee
+
+  Host a public api with only read permission to database and have another instance with manegement in your local network
+
++ ### Shadow builds
+
+  An shadow build is a build that is generated automatically out of your created build, based on set factors.
+
+  + #### Optional shadow build
+
+    solder.py allows user to set a mod as an optional in a modpack build. enabling optional builds on a modpack, useful for modpack devs that want to provide a more demanding build with shaders.
+
+  + #### Server shadow build
+
+    solder.py allows user to set client/server side on mods, this shadow build only contain server compatible mods
+
++ ### Internal notation on mods
+
++ ### Generate changelog
+
++ ### MCInstance Loader Support (in dev)
+
+  Multi launcher support
+
++ ### Database compatbility with technic solder
+
+  solder.py only adds extra tables and columns and can be dual run with technic solder
+
 
 # Features to be added in the future
 
 + Maven integration
 + Modrinth integration
-+ MCIL export support
 
 ## Unfinished Features in dev
+
++ MCInstance Loader support
 
 # Installation/Updating
 
@@ -44,7 +77,7 @@ Users of solder.cf need to use the migrating tool which isn't available at this 
 
 You need to be familiar with hosting websites and linux. We will help anyone who needs help but google is a good friend.
 
-### Requirements (work in progress)
+### Requirements
 
 + MySQL Server
 + Python on Host machine unless running docker
@@ -75,7 +108,7 @@ exit
 
 ## Setting up MySQL: Migrating to solder.py
 
-Well we dont have your database name nor username so go get it!
+Get your database name and user information
 
 ## Install solder.py
 
@@ -92,13 +125,13 @@ solder.py needs to be run by an production wsgi, our docker image uses gunicorn
 ### Pull the latest image from docker hub
 
 ```bash
-docker pull thorfusion/solderpy
+docker pull thorfusion/solderpy:latest
 ```
 
 ### Launch an container, remember to also add the enviroment variables further down
 
 ```bash
-docker run --name solderpy --restart always -d -p 80:5000 thorfusion/solderpy
+docker run --name solderpy --restart always -d -p 80:5000 thorfusion/solderpy:latest
 ```
 
 ### Enviroment variables for docker image
@@ -140,12 +173,6 @@ This is the url solder.py uses to calculate md5 and filesize when rehashing or a
 -e MD5_REPO_LOCATION=https://solder.example.com/mods/
 ```
 
-This is the public facing url for solder instance
-
-```bash
--e PUBLIC_URL_LOCATION=https://solder.example.com/
-```
-
 #### Volumes
 
 Solder.py uploads the modfiles to a volume in the container
@@ -168,7 +195,7 @@ Set the cache maximum size. Default is 100.
 -e CACHE_SIZE=100
 ```
 
-#### R2 Bucket Variables
+#### S3/R2 Bucket Variables
 
 ```bash
 -e R2_ENDPOINT=
@@ -254,7 +281,7 @@ When you have installed the container with the required envirables and created a
 
 #### Step 2 Setup screen
 
-Setup screen will take some time as when requesting this page, solder.py is creating the other tables in the database. when done the user will be presented with a email and password box with a setup button in the bottom, this is the administrator account you are creating. when setup is done, you will be redirected to login screen
+user will be presented with a email and password box with a setup button in the bottom, this is the administrator account you are creating. when setup is done, you will be redirected to login screen
 
 #### Step 3 Login screen again
 
