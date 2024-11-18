@@ -64,7 +64,7 @@ body:
       description:
       placeholder: "Add screenshots to help explain your problem here. If you don't, we may not help you."
   - type: textarea
-    id: Enviroment Variables
+    id: Enviroment-Variables
     attributes:
       label: Provide censored enviroment variables here
       description:
