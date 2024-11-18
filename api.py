@@ -71,8 +71,11 @@ def modpack_slug(slug: str):
     return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
 
 @api.route("/api/modpack/<slugstring>/<buildstring>")
-@cached(cache_type(cache_size), key=lambda slugstring, buildstring: str(request.args.get("cid")) + slugstring + buildstring)
+@cached(cache_type(cache_size), key=lambda slugstring, buildstring: str(request.args.get("cid")) + str(request.args.get("include")) + str(request.args.get("k")) + slugstring + buildstring)
 def modpack_slug_build(slugstring: str, buildstring: str):
+    keys = request.args.get("k")
+    key = Key.get_key(keys)
+    # Todo, add api key verification that bypass cid verification
     modpack = Modpack.get_by_cid_slug_api(request.args.get("cid"), slugstring)
     if not modpack:
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
@@ -86,15 +89,30 @@ def modpack_slug_build(slugstring: str, buildstring: str):
         return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
     modversions = build.get_modversions_api(buildtag)
     moddata = []
-    for mv in modversions:
-        moddata.append(
-            {
-                "name": mv.modname,
-                "version": mv.version,
-                "md5": mv.md5,
-                "url": f"{public_repo_url}{mv.modname}/{mv.modname}-{mv.version}.zip",
-            }
-        )
+    if request.args.get('include') == "mods":
+        for mv in modversions:
+            moddata.append(
+                {
+                    "name": mv.modname,
+                    "version": mv.version,
+                    "md5": mv.md5,
+                    "url": f"{public_repo_url}{mv.modname}/{mv.modname}-{mv.version}.zip",
+                    "pretty_name": mv.pretty_name,
+                    "author": mv.author,
+                    "description": mv.description,
+                    "link": mv.link,
+                }
+            )
+    else:
+        for mv in modversions:
+            moddata.append(
+                {
+                    "name": mv.modname,
+                    "version": mv.version,
+                    "md5": mv.md5,
+                    "url": f"{public_repo_url}{mv.modname}/{mv.modname}-{mv.version}.zip",
+                }
+            )
     return {"minecraft": build.minecraft, "java": build.min_java, "memory": build.min_memory, "forge": None, "mods": moddata}
 
 
