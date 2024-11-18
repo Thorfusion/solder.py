@@ -117,6 +117,9 @@ class Modpack:
     
     def get_builds_cid_api(self, cid):
         return Build.get_by_modpack_cid(self, cid)
+    
+    def get_builds_api(self):
+        return Build.get_by_modpack_api(self)
 
     def get_build_api(self, version):
         return Build.get_by_modpack_version(self, version)

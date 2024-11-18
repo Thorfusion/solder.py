@@ -53,15 +53,22 @@ def modpack():
         return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": public_repo_url})
 
 @api.route("/api/modpack/<slug>")
-@cached(cache_type(cache_size), key=lambda slug: str(request.args.get("cid")) + slug)
+@cached(cache_type(cache_size), key=lambda slug: str(request.args.get("cid")) + str(request.args.get('k')) + slug)
 def modpack_slug(slug: str):
     cid = request.args.get("cid")
-    modpack = Modpack.get_by_cid_slug_api(cid, slug)
-    if modpack:
-        modpack.builds = modpack.get_builds_cid_api(cid)
-        return jsonify(modpack.to_json())
+    keys = request.args.get("k")
+    key = Key.get_key(keys)
+    if key:
+        modpack = Modpack.get_all_by_slug_api(slug)
+        if modpack:
+            modpack.builds = modpack.get_builds_api()
+            return jsonify(modpack.to_json())
     else:
-        return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
+        modpack = Modpack.get_by_cid_slug_api(cid, slug)
+        if modpack:
+            modpack.builds = modpack.get_builds_cid_api(cid)
+            return jsonify(modpack.to_json())
+    return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
 
 @api.route("/api/modpack/<slugstring>/<buildstring>")
 @cached(cache_type(cache_size), key=lambda slugstring, buildstring: str(request.args.get("cid")) + slugstring + buildstring)
