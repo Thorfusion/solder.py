@@ -37,12 +37,11 @@ def verify_key(key: str = None):
 @api.route("/api/modpack")
 @cached(cache_type(cache_size), key=lambda: str(request.args.get("cid")) + str(request.args.get('include')))
 def modpack():
+    cid = request.args.get("cid")
+    modpacks = Modpack.get_by_cid_api(cid)
     if request.args.get('include') == "full":
-        cid = request.args.get("cid")
-        modpacks = Modpack.get_by_cid_api(cid)
         return jsonify({"modpacks": {modpack.slug: Modpack.to_modpack_json(cid, modpack.slug) for modpack in modpacks}, "mirror_url": public_repo_url})
     else:
-        modpacks = Modpack.get_by_cid_api(request.args.get("cid"))
         return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": public_repo_url})
 
 @api.route("/api/modpack/<slug>")
