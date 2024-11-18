@@ -100,6 +100,14 @@ class Modpack:
 
     def get_build_api(self, version):
         return Build.get_by_modpack_version(self, version)
+    
+    @staticmethod
+    def to_modpack_json(cid, slug):
+        modpackd = Modpack.get_by_cid_slug_api(cid, slug)
+        if modpackd:
+            modpackd.builds = Build.get_by_modpack_cid(modpackd, cid)
+            return modpackd.to_json()
+        
 
     def to_json(self):
         data = {
