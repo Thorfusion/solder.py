@@ -34,12 +34,14 @@ def verify_key(key: str = None):
         return jsonify({"error": "Invalid key provided."})
 
 
-@api.route("/api/modpack/") # fix for technic website not following their own api
 @api.route("/api/modpack")
-@cached(cache_type(cache_size), key=lambda: str(request.args.get("cid")))
+@cached(cache_type(cache_size), key=lambda: str(request.args.get("cid")) + str(request.args.get('include')))
 def modpack():
-    modpacks = Modpack.get_by_cid_api(request.args.get("cid"))
-    return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": public_repo_url})
+    if request.args.get('include') == "full":
+        return jsonify({"mirror_url": public_repo_url})
+    else:
+        modpacks = Modpack.get_by_cid_api(request.args.get("cid"))
+        return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": public_repo_url})
 
 @api.route("/api/modpack/<slug>")
 @cached(cache_type(cache_size), key=lambda slug: str(request.args.get("cid")) + slug)
