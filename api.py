@@ -127,9 +127,6 @@ def mod():
 @api.route("/api/mod/<name>")
 @cached(cache_type(cache_size), key=lambda name: name)
 def mod_name(name: str):
-    return jsonify(
-        {"error": "Mod does not exist"}
-    ), 404
     mods = Mod.get_by_name_api(name)
     if not mods:
         return jsonify({"error": "Mod does not exist"}), 404
@@ -142,9 +139,6 @@ def mod_name(name: str):
 @api.route("/api/mod/<name>/<version>")
 @cached(cache_type(cache_size), key=lambda name, version: name + version)
 def mod_name_version(name: str, version: str):
-    return jsonify(
-        {"error": "Mod does not exist"}
-    ), 404
     mod = Mod.get_by_name_api(name)
     if not mod:
         return jsonify({"error": "Mod does not exist"}), 404
