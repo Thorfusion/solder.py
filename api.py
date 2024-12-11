@@ -1,10 +1,10 @@
 from flask import Blueprint, jsonify, request
-from cachetools import cached
+from cachetools import cached, TTLCache
 from models.key import Key
 from models.mod import Mod
 from models.modpack import Modpack
 from models.common import solderpy_version, public_repo_url
-from models.common import cache_type, cache_size
+from models.common import cache_size, cache_ttl
 
 api = Blueprint("api", __name__)
 
@@ -35,7 +35,7 @@ def verify_key(key: str = None):
 
 
 @api.route("/api/modpack")
-@cached(cache_type(cache_size), key=lambda: str(request.args.get("cid")) + str(request.args.get('include')) + str(request.args.get('k')))
+@cached(TTLCache(cache_size, cache_ttl), key=lambda: str(request.args.get("cid")) + str(request.args.get('include')) + str(request.args.get('k')))
 def modpack():
     cid = request.args.get("cid")
     keys = request.args.get("k")
@@ -53,7 +53,7 @@ def modpack():
         return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": public_repo_url})
 
 @api.route("/api/modpack/<slug>")
-@cached(cache_type(cache_size), key=lambda slug: str(request.args.get("cid")) + str(request.args.get('k')) + slug)
+@cached(TTLCache(cache_size, cache_ttl), key=lambda slug: str(request.args.get("cid")) + str(request.args.get('k')) + slug)
 def modpack_slug(slug: str):
     cid = request.args.get("cid")
     keys = request.args.get("k")
@@ -71,7 +71,7 @@ def modpack_slug(slug: str):
     return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
 
 @api.route("/api/modpack/<slugstring>/<buildstring>")
-@cached(cache_type(cache_size), key=lambda slugstring, buildstring: str(request.args.get("cid")) + str(request.args.get("include")) + str(request.args.get("k")) + slugstring + buildstring)
+@cached(TTLCache(cache_size, cache_ttl), key=lambda slugstring, buildstring: str(request.args.get("cid")) + str(request.args.get("include")) + str(request.args.get("k")) + slugstring + buildstring)
 def modpack_slug_build(slugstring: str, buildstring: str):
     keys = request.args.get("k")
     key = Key.get_key(keys)
@@ -125,7 +125,7 @@ def mod():
     return jsonify({"mods": {Mods.name: Mods.pretty_name for Mods in Mods}})
 
 @api.route("/api/mod/<name>")
-@cached(cache_type(cache_size), key=lambda name: name)
+@cached(TTLCache(cache_size, cache_ttl), key=lambda name: name)
 def mod_name(name: str):
     mods = Mod.get_by_name_api(name)
     if not mods:
@@ -137,7 +137,7 @@ def mod_name(name: str):
         return jsonify(res)
 
 @api.route("/api/mod/<name>/<version>")
-@cached(cache_type(cache_size), key=lambda name, version: name + version)
+@cached(TTLCache(cache_size, cache_ttl), key=lambda name, version: name + version)
 def mod_name_version(name: str, version: str):
     mod = Mod.get_by_name_api(name)
     if not mod:
