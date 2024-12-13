@@ -183,13 +183,13 @@ Solder.py uploads the modfiles to a volume in the container
 
 #### Caching options
 
-Set the cache eviction algorithm. Options are FIFO, LFU, LRU or RR. Default is LRU.
+Set the cache time to live, default 300 (seconds)
 
 ```bash
--e CACHE_ALGORITHM=LRU
+-e CACHE_TTL=300
 ```
 
-Set the cache maximum size. Default is 100.
+Set the cache maximum size ie how much memory usage. Default is 100 (MB).
 
 ```bash
 -e CACHE_SIZE=100
