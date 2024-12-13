@@ -1,11 +1,10 @@
 import os
 from dotenv import load_dotenv
-from cachetools import FIFOCache, LRUCache, LFUCache, RRCache
 
 from models.database import Database
 
 ## Solderpy version
-solderpy_version = "1.6.0"
+solderpy_version = "1.6.1"
 
 load_dotenv(".env")
 
@@ -79,6 +78,12 @@ if (os.getenv("CACHE_SIZE")):
 else: 
     print("No cache size specified, using default")
     cache_size = int(100)
+
+if (os.getenv("CACHE_TTL")):
+    cache_tool = int(os.getenv("CACHE_TTL"))
+else:
+    print("No cache ttl specified, using default")
+    cache_tool = 300
 
 class common:
 
