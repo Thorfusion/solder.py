@@ -17,7 +17,7 @@ COPY /.dockerignore /app/
 COPY /Dockerfile /app/
 RUN mkdir /app/mods
 VOLUME /app/mods
-ENV APP_URL=0.0.0.0
+ENV APP_HOST=0.0.0.0
 ENV APP_PORT=5000
 ENV APP_DEBUG=false
 EXPOSE 5000
