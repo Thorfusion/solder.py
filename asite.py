@@ -17,7 +17,7 @@ from models.session import Session
 from models.user import User
 from mysql import connector
 from werkzeug.utils import secure_filename
-from models.common import public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_algorithm
+from models.common import public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl
 from models.user_modpack import User_modpack
 
 __version__ = solderpy_version
@@ -282,7 +282,7 @@ def mainsettings():
     if User.get_permission_token(session["token"], "solder_env") == 0:
         return redirect(request.referrer)
     
-    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_algorithm=cache_algorithm)
+    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_ttl=cache_ttl)
 
 
 @asite.route("/apikeylibrary", methods=["GET"])
