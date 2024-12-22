@@ -62,10 +62,10 @@ else:
     cache_size = int(100)
 
 if (os.getenv("CACHE_TTL")):
-    cache_tool = int(os.getenv("CACHE_TTL"))
+    cache_ttl = int(os.getenv("CACHE_TTL"))
 else:
     print("No cache ttl specified, using default")
-    cache_tool = 300
+    cache_ttl = 300
 
 class common:
 
