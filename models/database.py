@@ -213,7 +213,7 @@ class Database:
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
-                    ip INT NOT NULL,
+                    ip VARCHAR(255) NOT NULL,
                     expiry TIMESTAMP NOT NULL,
                     user_id INT NOT NULL
                 )"""
@@ -330,7 +330,7 @@ class Database:
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
-                    ip INT NOT NULL,
+                    ip VARCHAR(255) NOT NULL,
                     expiry TIMESTAMP NOT NULL,
                     user_id INT NOT NULL
                 )"""
@@ -358,7 +358,7 @@ class Database:
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
-                    ip INT NOT NULL,
+                    ip VARCHAR(255) NOT NULL,
                     expiry TIMESTAMP NOT NULL,
                     user_id INT NOT NULL
                 )"""
