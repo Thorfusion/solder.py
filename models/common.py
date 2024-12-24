@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from models.database import Database
 
 ## Solderpy version
-solderpy_version = "1.6.1"
+solderpy_version = "1.7.0"
 
 load_dotenv(".env")
 
@@ -14,9 +14,13 @@ migratetechnic = False
 api_only = False
 management_only = False
 debug = False
+reverse_proxy = False
 
 host = os.getenv("APP_HOST")
 port = os.getenv("APP_PORT")
+
+if os.getenv("PROXY_IP"):
+    reverse_proxy = True
 
 if os.getenv("NEW_USER"):
     new_user = os.getenv("NEW_USER").lower() in ["true", "t", "1", "yes", "y"]

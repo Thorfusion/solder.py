@@ -219,6 +219,27 @@ Note that R2 Bucket functionality gets activated when R2_BUCKET is used
 -e R2_REGION=
 ```
 
+#### Reverse Proxy Variables
+
+solder.py only trusts one reverse proxy at a time. solder.py will work fine without these variables, but only one user can stay logged in at a time.
+
+```bash
+-e PROXY_IP=192.168.1.1
+```
+
+For NGINX users when your reverse proxy is the only proxy in the chain, you use this in your location
+
+```conf
+proxy_set_header X-Forwarded-For $remote_addr;
+```
+
+However if your reverse proxy is behind another one, like cloudflare you need to use this forwarding instead
+
+```conf
+proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+```
+
+
 #### Adding a new user
 
 Enables the /setup page if the database already exists and you need to add a new user

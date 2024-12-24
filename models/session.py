@@ -14,7 +14,7 @@ class Session:
     running: bool = False
     thread: threading.Thread = None
 
-    def __init__(self, token: str, ip: int, expiry: datetime):
+    def __init__(self, token: str, ip, expiry: datetime):
         self.token = token
         self.ip = ip
         self.expiry = expiry
@@ -47,12 +47,12 @@ class Session:
             return 0
 
     @staticmethod
-    def new_session(ip: str, user) -> str:
+    def new_session(ip, user):
         token = secrets.token_hex(40)
         conn = Database.get_connection()
         cur = conn.cursor()
-        cur.execute("DELETE FROM sessions WHERE ip = %s", (Session.ip_to_int(ip),))
-        cur.execute("INSERT INTO sessions (token, ip, expiry, user_id) VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 1 HOUR), %s)", (token, Session.ip_to_int(ip), user))
+        cur.execute("DELETE FROM sessions WHERE ip = %s", (ip,))
+        cur.execute("INSERT INTO sessions (token, ip, expiry, user_id) VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 1 HOUR), %s)", (token, ip, user))
         conn.commit()
         conn.close()
         return token
@@ -69,7 +69,7 @@ class Session:
     def verify_session(token, ip):
         session = Session.get_and_update_from_token(token)
         if session:
-            if session.ip == Session.ip_to_int(ip):
+            if session.ip == ip:
                 return True
         return False
 
