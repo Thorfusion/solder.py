@@ -36,7 +36,7 @@ class Build:
             modversions = cur.fetchall()
             if modversions:
                 for mv in modversions:
-                    cur.execute("INSERT INTO build_modversion (modversion_id, build_id) VALUES (%s, %s)", (mv["modversion_id"], id))
+                    cur.execute("INSERT INTO build_modversion (modversion_id, build_id, optional) VALUES (%s, %s, %s)", (mv["modversion_id"], id, mv["optional"]))
             conn.commit()
         cls(id, modpack_id, version, now, now, minecraft, "0", is_published, private, min_java, min_memory, "0")
 
