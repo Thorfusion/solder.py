@@ -12,49 +12,49 @@
 
 solder.py is solder written in python with major features over technic's solder.
 
-+ ### Easy install with docker
++ **Easy install with docker**
 
-+ ### Efficient user experience
++ **Efficient user experience**
 
   solder.py is designed to allow a minimal button clicking as possible.
 
-  + #### Selected build feature
+  + **Selected build feature**
 
     This feature allows the user to select a modpack build that the user is working on. menu has a own pin for it, new uploaded modversion can be added/updated to selected build directly and more.
 
-  + #### Pin your modpacks to menu
+  + **Pin your modpacks to menu**
 
-  + #### Clone builds from other modpacks
+  + **Clone builds from other modpacks**
 
-+ ### Mod uploading
++ **Mod uploading**
 
-  + #### S3 bucket compatbility
+  + **S3 bucket compatbility**
 
-+ ### API only modee
++ **API only mode**
 
   Host a public api with only read permission to database and have another instance with manegement in your local network
 
-+ ### Shadow builds
++ **Shadow builds**
 
   An shadow build is a build that is generated automatically out of your created build, based on set factors.
 
-  + #### Optional shadow build
+  + **Optional shadow build**
 
     solder.py allows user to set a mod as an optional in a modpack build. enabling optional builds on a modpack, useful for modpack devs that want to provide a more demanding build with shaders.
 
-  + #### Server shadow build
+  + **Server shadow build**
 
     solder.py allows user to set client/server side on mods, this shadow build only contain server compatible mods
 
-+ ### Internal notation on mods
++ **Internal notation on mods**
 
-+ ### Generate changelog
++ **Generate changelog**
 
-+ ### MCInstance Loader Support (in dev)
++ **MCInstance Loader Support (in dev)**
 
   Multi launcher support
 
-+ ### Database compatbility with technic solder
++ **Database compatbility with technic solder**
 
   solder.py only adds extra tables and columns and can be dual run with technic solder
 
