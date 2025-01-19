@@ -101,7 +101,7 @@ Create a database and give the user access to it
 
 ```sql
 CREATE DATABASE solderpy;
-GRANT ALL ON solder.* TO 'solderpy'@'localhost';
+GRANT ALL ON solderpy.* TO 'solderpy'@'localhost';
 FLUSH PRIVILEGES;
 exit
 ```
