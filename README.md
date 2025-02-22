@@ -72,13 +72,13 @@ solder.py is solder written in python with major features over technic's solder.
 solder.py is compatible with the original database and only adds columns to tables for the extra features we have, you can even dual run with both solder.py and original solder.
 Users of solder.cf need to use the migrating tool which isn't available at this stage.
 
-+ [Setting up MySQL](##setting-up-mysql-for-new-installations)
-+ [Setting up Reverse Proxy](##setting-up-reverse-proxy)
-+ [Setting up Filehosting](##setting-up-filehosting-s3--r2-bucket)
-+ [Installing solder.py](##install-solderpy-with-docker)
-  + [solder.py enviroment variables](###enviroment-variables-for-docker-image)
-  + [solder.py docker example](###example)
-  + [Web Setup solder.py](###docker-container-installed-setup-on-website)
++ [Setting up MySQL](#setting-up-mysql-for-new-installations)
++ [Setting up Reverse Proxy](#setting-up-reverse-proxy)
++ [Setting up Filehosting](#setting-up-filehosting--s3r2-bucket)
++ [Installing solder.py](#install-solderpy-with-docker)
+  + [solder.py enviroment variables](#enviroment-variables-for-docker-image)
+  + [solder.py docker example](#example)
+  + [Web Setup solder.py](#docker-container-installed-setup-on-website)
 
 ## Pre-install
 
