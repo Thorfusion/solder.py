@@ -1,6 +1,7 @@
 import os
 import threading
 import boto3
+import concurrent
 
 from api import solderpy_version
 from flask import Blueprint, app, flash, redirect, render_template, request, session, url_for
@@ -453,18 +454,24 @@ def modpackbuild(id):
     if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(id)) == False:
         return redirect(request.referrer)
 
-    try:
-        listmod = Mod.get_all_pretty_names()
-        packbuild = Build.get_by_id(id)
-        listmodversions = Modversion.get_all()
-        buildlist = Build_modversion.get_modpack_build(id)
-
-        packbuildname = Build.get_modpackname_by_id(id)
-    except connector.ProgrammingError as _:
-        flash("failed to build modpackbuild", "error")
-        raise _
-        Database.create_tables()
-        mod_version_combo = []
+    if request.method == "GET":
+        try:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                threadlistmod = executor.submit(Mod.get_all_pretty_names)
+                threadpackbuild = executor.submit(Build.get_by_id, id)
+                threadlistmodversions = executor.submit(Modversion.get_all)
+                threadbuildlist = executor.submit(Build_modversion.get_modpack_build, id)
+                threadpackbuildname = executor.submit(Build.get_modpackname_by_id, id)
+                listmod = threadlistmod.result()
+                packbuild = threadpackbuild.result()
+                listmodversions = threadlistmodversions.result()
+                buildlist = threadbuildlist.result()
+                packbuildname = threadpackbuildname.result()
+        except connector.ProgrammingError as _:
+            flash("failed to build modpackbuild", "error")
+            raise _
+            Database.create_tables()
+            mod_version_combo = []
 
     if request.method == "POST":
         if "form-submit" in request.form:
