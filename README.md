@@ -58,7 +58,6 @@ solder.py is solder written in python with major features over technic's solder.
 
   solder.py only adds extra tables and columns and can be dual run with technic solder
 
-
 # Features to be added in the future
 
 + Maven integration
@@ -73,15 +72,26 @@ solder.py is solder written in python with major features over technic's solder.
 solder.py is compatible with the original database and only adds columns to tables for the extra features we have, you can even dual run with both solder.py and original solder.
 Users of solder.cf need to use the migrating tool which isn't available at this stage.
 
++ [Setting up MySQL](#setting-up-mysql-for-new-installations)
++ [Setting up Reverse Proxy](#setting-up-reverse-proxy)
++ [Setting up Filehosting](#setting-up-filehosting--s3r2-bucket)
++ [Installing solder.py](#install-solderpy-with-docker)
+  + [solder.py enviroment variables](#enviroment-variables-for-docker-image)
+  + [solder.py docker example](#example)
+  + [Web Setup solder.py](#docker-container-installed-setup-on-website)
+
 ## Pre-install
 
 You need to be familiar with hosting websites and linux. We will help anyone who needs help but google is a good friend.
 
-### Requirements
+### Recommended requirements
 
 + MySQL Server
-+ Python on Host machine unless running docker
-+ Apache or NGINX or equivalent for reverse proxy if applicable
++ Docker
++ Apache, NGINX or equivalent for reverse proxy
++ Filehosting server or S3/R2 bucket.
+
+NOTE: Hosting solder.py manually and not with the official docker image, support is limited.
 
 ## Setting up MySQL: for new installations
 
@@ -101,24 +111,38 @@ Create a database and give the user access to it
 
 ```sql
 CREATE DATABASE solderpy;
-GRANT ALL ON solder.* TO 'solderpy'@'localhost';
+GRANT ALL ON solderpy.* TO 'solderpy'@'localhost';
 FLUSH PRIVILEGES;
 exit
 ```
 
-## Setting up MySQL: Migrating to solder.py
+### Setting up MySQL: Migrating to solder.py
 
 Get your database name and user information
 
-## Install solder.py
+## Setting up Reverse proxy
+
+For NGINX users when your reverse proxy is the only proxy in the chain, you use this in your location
+
+```conf
+proxy_set_header X-Forwarded-For $remote_addr;
+```
+
+However if your reverse proxy is behind another one, like cloudflare you need to use this forwarding instead
+
+```conf
+proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+```
+
+## Setting up Filehosting / S3/R2 bucket
+
+You can use the same nginx/apache server for both reverse proxy and filehosting.
+
+## Install solder.py with python (Limited support)
 
 You need to set the enviroment variables either through host or as a .env file, see the .env.example for further use
 
 solder.py needs to be run by an production wsgi, our docker image uses gunicorn
-
-```bash
-
-```
 
 ## Install solder.py with docker
 
@@ -175,7 +199,9 @@ This is the url solder.py uses to calculate md5 and filesize when rehashing or a
 
 #### Volumes
 
-Solder.py uploads the modfiles to a volume in the container
+Solder.py uploads the modfiles to a volume in the container regardless of S3 functionality. By setting the volume This folder can be accessed by apache/nginx so you can host its files. solder.py does not host the mod files as python isn't really suited for this.
+
+If not specified, mods will not be persistant.
 
 ```bash
 -v /your/path/here:/app/mods
@@ -227,19 +253,6 @@ solder.py only trusts one reverse proxy at a time. solder.py will work fine with
 -e PROXY_IP=192.168.1.1
 ```
 
-For NGINX users when your reverse proxy is the only proxy in the chain, you use this in your location
-
-```conf
-proxy_set_header X-Forwarded-For $remote_addr;
-```
-
-However if your reverse proxy is behind another one, like cloudflare you need to use this forwarding instead
-
-```conf
-proxy_set_header X-Forwarded-For $http_x_forwarded_for;
-```
-
-
 #### Adding a new user
 
 Enables the /setup page if the database already exists and you need to add a new user
@@ -279,11 +292,12 @@ docker run -d \
   --name solderpy \
   -e DB_HOST=192.168.1.1 \
   -e DB_PORT=3306 \
-  -e DB_USER=solderpy \
-  -e DB_PASSWORD=solderpy \
-  -e DB_DATABASE=solderpy \
-  -e SOLDER_MIRROR_URL=https://example.com/mods/ \
-  -e SOLDER_REPO_LOCATION=http://localhost/mods/ \
+  -e DB_USER=solderpyuser \
+  -e DB_PASSWORD=solderpypassword \
+  -e DB_DATABASE=solderpydb \
+  -e MD5_REPO_LOCATION=http://example.com/mods/ \
+  -e SOLDER_REPO_LOCATION=https://localhost/mods/ \
+  -e PROXY_IP=192.168.1.2\
   -p 80:5000 \
   -v /solderpy/mods:/app/mods \
   --restart unless-stopped \
@@ -298,7 +312,7 @@ Remember to set NEW_USER and TECHNIC_MIGRATION if using existing technic databas
 
 #### Step 1 Login screen
 
-When you have installed the container with the required envirables and created an mysql database and user that has access to said database, next step is to go to solder.py (http://example.com) where you will be redirected to login screen. by seeing this login screen, an successful connection to the database has been achieved. where you can find a table named sessions. go to (http://example.com/setup)
+When you have installed the container with the required envirables and created an mysql database and user that has access to said database, next step is to go to solder.py (<http://example.com>) where you will be redirected to login screen. by seeing this login screen, an successful connection to the database has been achieved. where you can find a table named sessions. go to (<http://example.com/setup>)
 
 #### Step 2 Setup screen
 
