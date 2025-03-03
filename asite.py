@@ -457,14 +457,16 @@ def modpackbuild(id):
     if request.method == "GET":
         try:
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                threadlistmod = executor.submit(Mod.get_all_pretty_names)
+                threadlistmod = executor.submit(Mod.get_all_pretty_names_build, id)
                 threadpackbuild = executor.submit(Build.get_by_id, id)
-                threadlistmodversions = executor.submit(Modversion.get_all)
+                threadlistmodversionsin = executor.submit(Modversion.get_all_in_build, id)
+                threadlistmodversionsout = executor.submit(Modversion.get_all_out_build, id)
                 threadbuildlist = executor.submit(Build_modversion.get_modpack_build, id)
                 threadpackbuildname = executor.submit(Build.get_modpackname_by_id, id)
                 listmod = threadlistmod.result()
                 packbuild = threadpackbuild.result()
-                listmodversions = threadlistmodversions.result()
+                listmodversionsin = threadlistmodversionsin.result()
+                listmodversionsout = threadlistmodversionsout.result()
                 buildlist = threadbuildlist.result()
                 packbuildname = threadpackbuildname.result()
         except connector.ProgrammingError as _:
@@ -518,7 +520,7 @@ def modpackbuild(id):
             flash("added modversion to marked build", "success")
             return redirect(url_for("asite.modpackbuild", id=id))
 
-    return render_template("modpackbuild.html", listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions, buildlist=buildlist)
+    return render_template("modpackbuild.html", listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversionsin=listmodversionsin, listmodversionsout=listmodversionsout, buildlist=buildlist)
 
 
 @asite.route("/modlibrary", methods=["GET"])

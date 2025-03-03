@@ -22,12 +22,10 @@
                 <td class="tablewidth70 tablemaxwidth">{{combo.pretty_name}} ({{combo.name}})</td>
                 <td class="tablewidth20">
                     <select class="form-select" name="selmodver_{{combo.modid}}" id="selmodver_{{combo.modid}}" onchange="submitoptionpress('selmodver_oldver', '{{combo.modverid}}', 'selmodver_ver', 'selmodver_{{combo.modid}}', 'selmodver_submit');">
-                        {%for modlist in listmodversions%}
-                        {% if modlist.mcversion == None or modlist.mcversion == packbuild.minecraft %}
+                        {%for modlist in listmodversionsin%}
                         {%if combo.modid == modlist.mod_id %}
                         <option {%if combo.version==modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}</option>
                         {% endif %}
-                        {%endif%}
                         {%endfor%}
                     </select>
                 </td>
@@ -68,7 +66,7 @@
             <select class="form-select" name="modnames" id="modnames" onchange="hideoptions('modnames');" required>
                 <option class="is-invalid" name="modfirst2" hidden="true" selected="selected" value="">Select mod</option>
                 {%for lmod in listmod%}
-                <option value="{{lmod.id}}" {%for combo in buildlist%} {% if combo.modid==lmod.id %} hidden="true" {% endif %} {%endfor%} required>{{lmod.pretty_name}}</option>
+                <option value="{{lmod.id}}" required>{{lmod.pretty_name}}</option>
                 {%endfor%}
             </select>
         </div>
@@ -76,10 +74,8 @@
             <label for="modversion" class="form-label">Modversion</label>
             <select class="form-select" name="modversion" id="modversion" required>
                 <option class="is-invalid" name="modfirst" value="">Select mod first</option>
-                {%for modlist in listmodversions%}
-                {% if modlist.mcversion == None or modlist.mcversion == packbuild.minecraft %}
+                {%for modlist in listmodversionsout%}
                 <option value="{{modlist.id}}" id="modversion_{{modlist.mod_id}}" name="modlist" hidden="true">{{modlist.version}}</option>
-                {% endif %}
                 {%endfor%}
             </select>
         </div>

@@ -107,10 +107,58 @@ class Modversion:
         return None
 
     @staticmethod
-    def get_all():
+    def get_all_in_build(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, mod_id, version, mcversion FROM modversions")
+        cur.execute("SELECT minecraft FROM builds WHERE id = %s", (id,))
+        version = cur.fetchone()["minecraft"]
+        cur.execute(
+            """SELECT *
+                FROM
+                (
+                    SELECT id, mod_id, version, mcversion 
+                    FROM modversions 
+                    WHERE mcversion = %s OR mcversion IS NULL
+                ) AS build1
+                LEFT OUTER JOIN 
+                (
+                    SELECT build_modversion.id AS mid, modversions.mod_id AS modid2
+                    FROM build_modversion
+                    INNER JOIN modversions ON build_modversion.modversion_id = modversions.id
+                    WHERE build_id = %s
+                ) AS build2
+                ON build1.mod_id = build2.modid2
+                WHERE modid2 IS NOT NULL
+            """, (version, id))
+        rows = cur.fetchall()
+        if rows:
+            return rows
+        return []
+    
+    @staticmethod
+    def get_all_out_build(id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT minecraft FROM builds WHERE id = %s", (id,))
+        version = cur.fetchone()["minecraft"]
+        cur.execute(
+            """SELECT *
+                FROM
+                (
+                    SELECT id, mod_id, version, mcversion 
+                    FROM modversions 
+                    WHERE mcversion = %s OR mcversion IS NULL
+                ) AS build1
+                LEFT OUTER JOIN 
+                (
+                    SELECT build_modversion.id AS mid, modversions.mod_id AS modid2
+                    FROM build_modversion
+                    INNER JOIN modversions ON build_modversion.modversion_id = modversions.id
+                    WHERE build_id = %s
+                ) AS build2
+                ON build1.mod_id = build2.modid2
+                WHERE modid2 IS NULL
+            """, (version, id))
         rows = cur.fetchall()
         if rows:
             return rows
