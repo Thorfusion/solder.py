@@ -20,6 +20,7 @@ from mysql import connector
 from werkzeug.utils import secure_filename
 from models.common import public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl
 from models.user_modpack import User_modpack
+from models.errorPrinter import ErrorPrinter
 
 __version__ = solderpy_version
 
@@ -576,16 +577,13 @@ def modlibrary_post():
                     R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + filename, R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
                 except:
                     flash("failed to upload zipfile to bucket", "error")
-            jarfilew = request.files['jarfile']
-            if jarfilew and allowed_file(jarfilew.filename):
-                jarfilename = secure_filename(jarfilew.filename)
+            if request.form["jarmd5"] != "0":
                 print("saving jar")
-                createFolder(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/")
-                jarfilew.save(os.path.join(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/", jarfilename))
+                jarfilename = Mod.extract_jar_from_zip(UPLOAD_FOLDER + request.form["mod"] + "/" + filename)
                 if R2_BUCKET != None:
-                    jarkeyname = "mods/" + request.form["mod"] + "/" + jarfilename
+                    jarkeyname = os.path.abspath(jarfilename)
                     try:
-                        R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/zip'})
+                        R2.upload_file(jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/jar'})
                     except:
                         flash("failed to upload jarfile to bucket", "error")
             flash("added modversion", "success")
