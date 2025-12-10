@@ -575,7 +575,8 @@ def modlibrary_post():
                 keyname = "mods/" + request.form["mod"] + "/" + filename
                 try:
                     R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + filename, R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
-                except:
+                except Exception as e:
+                    ErrorPrinter.message("failed to upload zipfile to buckets", e)
                     flash("failed to upload zipfile to bucket", "error")
             if request.form["jarmd5"] != "0":
                 print("saving jar")
@@ -584,7 +585,8 @@ def modlibrary_post():
                     jarkeyname = os.path.abspath(jarfilename)
                     try:
                         R2.upload_file(jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/jar'})
-                    except:
+                    except Exception as e:
+                        ErrorPrinter.message("failed to upload jarfile to buckets", e)
                         flash("failed to upload jarfile to bucket", "error")
             flash("added modversion", "success")
             return redirect(url_for('asite.modlibrary'))
