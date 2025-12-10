@@ -148,7 +148,7 @@ class Mod:
             with zip_ref.open(jar_inside_zip) as source, open(output_path, 'wb') as target:
                 target.write(source.read())
 
-            return output_path
+            return jar_name
 
 
     def to_json(self):
