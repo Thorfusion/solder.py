@@ -34,7 +34,8 @@ class Database:
                 database=db_name,
             )
         except Exception as e:
-            print("Error connecting to database", e)
+            ErrorPrinter.message("Error connecting to database", e)
+            flash("Error connecting to database", "error")
             return None
         return conn
 
@@ -52,6 +53,7 @@ class Database:
             cur.execute(sql)
         except Exception as e:
             ErrorPrinter.message("An error occurred whilst trying to check database setup", e)
+            flash("An error occurred whilst trying to check database setup", "error")
             return 2
         table = cur.fetchall()
         conn.close()
@@ -222,6 +224,7 @@ class Database:
             con.close()
         except Exception as e:
             ErrorPrinter.message("Error creating tables", e)
+            flash("Error creating tables", "error")
 
     @staticmethod
     def migratetechnic_tables() -> bool:
@@ -349,6 +352,7 @@ class Database:
             print("technic database migrated!")
         except Exception:
             ErrorPrinter.message("Error migration technic tables", Exception)
+            flash("Error migration technic tables", "error")
 
     @staticmethod
     def create_session_table() -> bool:
@@ -367,3 +371,4 @@ class Database:
             con.close()
         except Exception:
             print.message("Error making session table", Exception)
+            flash("Error making session table", "error")
