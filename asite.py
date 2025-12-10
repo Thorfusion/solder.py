@@ -582,9 +582,8 @@ def modlibrary_post():
                 print("saving jar")
                 jarfilename = Mod.extract_jar_from_zip(UPLOAD_FOLDER + request.form["mod"] + "/" + filename)
                 if R2_BUCKET != None:
-                    jarkeyname = os.path.abspath(jarfilename)
                     try:
-                        R2.upload_file(jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/jar'})
+                        R2.upload_file(jarfilename, R2_BUCKET, jarfilename, ExtraArgs={'ContentType': 'application/jar'})
                     except Exception as e:
                         ErrorPrinter.message("failed to upload jarfile to buckets", e)
                         flash("failed to upload jarfile to bucket", "error")
