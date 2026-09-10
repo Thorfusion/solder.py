@@ -128,7 +128,8 @@ class Database:
                         jarmd5 VARCHAR(255),
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        filesize INT
+                        filesize INT,
+                        INDEX idx_modversions_mod_mcversion (mod_id, mcversion)
                         )"""
             )
             cur.execute(
@@ -138,7 +139,8 @@ class Database:
                         build_id INT NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        optional TINYINT(1) NOT NULL DEFAULT(0)
+                        optional TINYINT(1) NOT NULL DEFAULT(0),
+                        INDEX idx_build_modversion_build_version (build_id, modversion_id)
                         )"""
             )
             cur.execute(
@@ -333,6 +335,20 @@ class Database:
                 "ALTER TABLE user_permissions ADD COLUMN solder_env BOOLEAN DEFAULT 0",
             ),
         )
+        index_migrations = (
+            (
+                "build_modversion",
+                "idx_build_modversion_build_version",
+                "ALTER TABLE build_modversion "
+                "ADD INDEX idx_build_modversion_build_version (build_id, modversion_id)",
+            ),
+            (
+                "modversions",
+                "idx_modversions_mod_mcversion",
+                "ALTER TABLE modversions "
+                "ADD INDEX idx_modversions_mod_mcversion (mod_id, mcversion)",
+            ),
+        )
 
         con = Database.get_connection()
         if con is None:
@@ -351,6 +367,19 @@ class Database:
                          AND TABLE_NAME = %s
                          AND COLUMN_NAME = %s""",
                     (db_name, table, column),
+                )
+                if cur.fetchone() is None:
+                    cur.execute(query)
+
+            for table, index, query in index_migrations:
+                cur.execute(
+                    """SELECT 1
+                       FROM information_schema.STATISTICS
+                       WHERE TABLE_SCHEMA = %s
+                         AND TABLE_NAME = %s
+                         AND INDEX_NAME = %s
+                       LIMIT 1""",
+                    (db_name, table, index),
                 )
                 if cur.fetchone() is None:
                     cur.execute(query)

@@ -1,7 +1,6 @@
 import os
 import threading
 import boto3
-import concurrent
 
 from api import solderpy_version
 from flask import Blueprint, app, flash, redirect, render_template, request, session, url_for
@@ -455,25 +454,6 @@ def modpackbuild(id):
     if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(id)) == False:
         return redirect(request.referrer)
 
-    if request.method == "GET":
-        try:
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                threadlistmod = executor.submit(Mod.get_all_pretty_names)
-                threadpackbuild = executor.submit(Build.get_by_id, id)
-                threadlistmodversions = executor.submit(Modversion.get_all)
-                threadbuildlist = executor.submit(Build_modversion.get_modpack_build, id)
-                threadpackbuildname = executor.submit(Build.get_modpackname_by_id, id)
-                listmod = threadlistmod.result()
-                packbuild = threadpackbuild.result()
-                listmodversions = threadlistmodversions.result()
-                buildlist = threadbuildlist.result()
-                packbuildname = threadpackbuildname.result()
-        except connector.ProgrammingError as _:
-            flash("failed to build modpackbuild", "error")
-            raise _
-            Database.create_tables()
-            mod_version_combo = []
-
     if request.method == "POST":
         if "form-submit" in request.form:
             publish = "0"
@@ -519,7 +499,24 @@ def modpackbuild(id):
             flash("added modversion to marked build", "success")
             return redirect(url_for("asite.modpackbuild", id=id))
 
-    return render_template("modpackbuild.html", listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions, buildlist=buildlist)
+    try:
+        editor = Build_modversion.get_build_editor_data(id)
+    except connector.ProgrammingError:
+        flash("failed to build modpackbuild", "error")
+        raise
+
+    if editor is None:
+        flash("unable to find build", "error")
+        return redirect(url_for("asite.modpacklibrary"))
+
+    return render_template(
+        "modpackbuild.html",
+        listmod=editor.listmod,
+        packbuild=editor.packbuild,
+        packbuildname=editor.packbuildname,
+        listmodversions=editor.listmodversions,
+        buildlist=editor.buildlist,
+    )
 
 
 @asite.route("/modlibrary", methods=["GET"])

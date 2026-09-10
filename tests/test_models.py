@@ -12,6 +12,7 @@ from tests.environment import configure_test_environment
 configure_test_environment()
 
 from models.build import Build  # noqa: E402
+from models.build_modversion import Build_modversion  # noqa: E402
 from models.common import common  # noqa: E402
 from models.database import Database  # noqa: E402
 from models.mod import Mod  # noqa: E402
@@ -174,6 +175,114 @@ class ModelBehaviorTests(unittest.TestCase):
             versions = build.get_modversions_api("")
 
         self.assertEqual(versions, [])
+
+    def test_build_editor_groups_versions_and_excludes_assigned_mods(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = {
+            "id": 7,
+            "modpack_id": 3,
+            "version": "2.0",
+            "created_at": None,
+            "updated_at": None,
+            "minecraft": "1.21.1",
+            "forge": None,
+            "is_published": 1,
+            "private": 0,
+            "min_java": "21",
+            "min_memory": 4096,
+            "marked": 0,
+            "modpack_name": "Example Pack",
+        }
+        cursor.fetchall.side_effect = [
+            [
+                {
+                    "id": 11,
+                    "optional": 0,
+                    "version": "1.0",
+                    "modverid": 101,
+                    "name": "first",
+                    "pretty_name": "First Mod",
+                    "modid": 1,
+                },
+                {
+                    "id": 12,
+                    "optional": 1,
+                    "version": "2.0",
+                    "modverid": 201,
+                    "name": "second",
+                    "pretty_name": "Second Mod",
+                    "modid": 2,
+                },
+            ],
+            [
+                {"id": 1, "pretty_name": "First Mod"},
+                {"id": 2, "pretty_name": "Second Mod"},
+                {"id": 3, "pretty_name": "Available Mod"},
+                {"id": 4, "pretty_name": "No Compatible Version"},
+            ],
+            [
+                {"id": 102, "mod_id": 1, "version": "1.1", "mcversion": None},
+                {
+                    "id": 101,
+                    "mod_id": 1,
+                    "version": "1.0",
+                    "mcversion": "1.21.1",
+                },
+                {
+                    "id": 201,
+                    "mod_id": 2,
+                    "version": "2.0",
+                    "mcversion": "1.21.1",
+                },
+                {
+                    "id": 301,
+                    "mod_id": 3,
+                    "version": "3.0",
+                    "mcversion": "1.21.1",
+                },
+            ],
+        ]
+
+        with patch(
+            "models.build_modversion.Database.get_connection",
+            return_value=connection,
+        ):
+            editor = Build_modversion.get_build_editor_data(7)
+
+        self.assertEqual(editor.packbuild.id, 7)
+        self.assertEqual(editor.packbuildname, "Example Pack")
+        self.assertEqual([mod["id"] for mod in editor.listmod], [3, 4])
+        self.assertEqual(
+            [version["id"] for version in editor.listmodversions], [301]
+        )
+        self.assertEqual(
+            [version["id"] for version in editor.buildlist[0]["versions"]],
+            [102, 101],
+        )
+        self.assertEqual(
+            [version["id"] for version in editor.buildlist[1]["versions"]],
+            [201],
+        )
+        self.assertEqual(cursor.execute.call_count, 4)
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_missing_build_editor_data_closes_its_connection(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = None
+
+        with patch(
+            "models.build_modversion.Database.get_connection",
+            return_value=connection,
+        ):
+            editor = Build_modversion.get_build_editor_data(404)
+
+        self.assertIsNone(editor)
+        self.assertEqual(cursor.execute.call_count, 1)
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
 
     def test_empty_database_returns_empty_public_modpack_lists(self):
         connection = Mock()

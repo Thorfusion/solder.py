@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import os
 import subprocess
@@ -124,18 +125,28 @@ def migrate_technic_schema(image: str, network: str) -> None:
         "raise SystemExit(0 if Database.migratetechnic_tables() else 1)"
     )
     for _ in range(2):
-        docker(
-            "run",
-            "--rm",
-            "--network",
-            network,
-            *database_environment("mysql"),
-            image,
-            "python",
-            "-c",
-            migration_command,
+        result = subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--network",
+                network,
+                *database_environment("mysql"),
+                image,
+                "python",
+                "-c",
+                migration_command,
+            ],
             capture_output=True,
+            text=True,
+            check=False,
         )
+        if result.returncode != 0:
+            raise RuntimeError(
+                "Technic migration failed:\n"
+                f"{result.stdout.strip()}\n{result.stderr.strip()}"
+            )
 
 
 def verify_migrated_schema(database_container: str) -> None:
@@ -175,6 +186,25 @@ def verify_migrated_schema(database_container: str) -> None:
     )
     if int(table_count) != 2:
         raise AssertionError("Migration did not create sessions and user_modpack")
+
+    expected_indexes = (
+        ("build_modversion", "idx_build_modversion_build_version"),
+        ("modversions", "idx_modversions_mod_mcversion"),
+    )
+    index_conditions = " OR ".join(
+        f"(TABLE_NAME = '{table}' AND INDEX_NAME = '{index}')"
+        for table, index in expected_indexes
+    )
+    index_count = mysql(
+        database_container,
+        "SELECT COUNT(DISTINCT TABLE_NAME, INDEX_NAME) "
+        "FROM information_schema.STATISTICS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ({index_conditions});",
+    )
+    if int(index_count) != len(expected_indexes):
+        raise AssertionError(
+            f"Migration created {index_count}/{len(expected_indexes)} performance indexes"
+        )
 
 
 def request_json(endpoint: str) -> dict:
@@ -239,7 +269,10 @@ def exercise_synthetic_user_login(base_url: str) -> None:
         ).encode(),
         method="POST",
     )
-    opener = urllib.request.build_opener(NoRedirect)
+    cookies = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(cookies), NoRedirect
+    )
     try:
         opener.open(request, timeout=5)  # nosec B310
     except urllib.error.HTTPError as error:
@@ -249,6 +282,11 @@ def exercise_synthetic_user_login(base_url: str) -> None:
             ) from error
     else:
         raise AssertionError("Synthetic user login did not redirect after success")
+
+    with opener.open(f"{base_url}/modpackbuild/1", timeout=5) as response:
+        build_editor = response.read()
+        if response.status != 200 or b"CI Example Mod" not in build_editor:
+            raise AssertionError("The authenticated build editor did not render")
 
 
 def test_fixture(image: str, fixture: Path, migrate: bool) -> None:
