@@ -269,6 +269,8 @@ def seed_api_access_scenario(database_container: str) -> None:
                 '17', 4096, 0),
                (23, 22, 'private', '1.20.1', NULL, 1, 1, '17', 4096, 0),
                (24, 22, 'unpublished', '1.20.1', NULL, 0, 0,
+                '17', 4096, 0),
+               (25, 22, 'previous', '1.20.1', '47.3.0', 1, 0,
                 '17', 4096, 0);
 
            INSERT INTO client_modpack
@@ -277,6 +279,41 @@ def seed_api_access_scenario(database_container: str) -> None:
                (21, 1, 21, '2024-01-01 00:00:00', '2024-01-01 00:00:00'),
                (22, 1, 22, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
 
+           INSERT INTO mods
+               (id, name, description, author, link, pretty_name, side, modtype)
+           VALUES
+               (20, 'ci-client-only', 'Synthetic client package', 'CI',
+                'https://example.invalid/client', 'CI Client Only',
+                'CLIENT', 'MOD'),
+               (21, 'ci-server-only', 'Synthetic server package', 'CI',
+                'https://example.invalid/server', 'CI Server Only',
+                'SERVER', 'MOD'),
+               (22, 'ci-optional-both', 'Synthetic optional package', 'CI',
+                'https://example.invalid/optional', 'CI Optional Both',
+                'BOTH', 'MOD'),
+               (23, 'ci-optional-server', 'Synthetic optional server package',
+                'CI', 'https://example.invalid/optional-server',
+                'CI Optional Server', 'SERVER', 'MOD'),
+               (24, 'ci-removed-server', 'Synthetic removed server package',
+                'CI', 'https://example.invalid/removed', 'CI Removed Server',
+                'SERVER', 'MOD');
+
+           INSERT INTO modversions
+               (id, mod_id, version, mcversion, md5, filesize)
+           VALUES
+               (20, 20, '1.0', '1.20.1',
+                '20202020202020202020202020202020', 2020),
+               (21, 21, '1.0', '1.20.1',
+                '21212121212121212121212121212121', 2121),
+               (22, 22, '1.0', '1.20.1',
+                '22222222222222222222222222222222', 2222),
+               (23, 23, '1.0', '1.20.1',
+                '23232323232323232323232323232323', 2323),
+               (24, 1, '0.9', '1.20.1',
+                '24242424242424242424242424242424', 2424),
+               (25, 24, '1.0', '1.20.1',
+                '25252525252525252525252525252525', 2525);
+
            INSERT INTO build_modversion
                (id, modversion_id, build_id, optional)
            VALUES
@@ -284,7 +321,13 @@ def seed_api_access_scenario(database_container: str) -> None:
                (21, 1, 21, 0),
                (22, 1, 22, 0),
                (23, 1, 23, 0),
-               (24, 1, 24, 0);""",
+               (24, 1, 24, 0),
+               (30, 20, 22, 0),
+               (31, 21, 22, 0),
+               (32, 22, 22, 1),
+               (33, 23, 22, 1),
+               (34, 24, 25, 0),
+               (35, 25, 25, 0);""",
     )
 
 
@@ -392,7 +435,15 @@ def exercise_database_api(base_url: str) -> None:
     hyphenated = request_json(f"{variant_url}/1.20.1-beta-2")
     if hyphenated.get("id") != 22 or hyphenated.get("forge") != "47.3.0":
         raise AssertionError(f"Hyphenated build was parsed incorrectly: {hyphenated}")
-    if hyphenated.get("mods", [{}])[0].get("filesize") != 1024:
+    example_mod = next(
+        (
+            mod
+            for mod in hyphenated.get("mods", [])
+            if mod.get("name") == "ci-example-mod"
+        ),
+        {},
+    )
+    if example_mod.get("filesize") != 1024:
         raise AssertionError(f"Build manifest parity fields are missing: {hyphenated}")
 
     optional = request_json(f"{variant_url}/1.20.1-beta-2-optional")
@@ -401,6 +452,46 @@ def exercise_database_api(base_url: str) -> None:
     server = request_json(f"{variant_url}/1.20.1-beta-2-server")
     if server.get("id") != 22:
         raise AssertionError(f"Server build suffix was parsed incorrectly: {server}")
+
+    server_query = request_json(
+        f"{variant_url}/recommended?target=server&optional=true"
+    )
+    if server_query.get("version") != "1.20.1-beta-2":
+        raise AssertionError(f"Recommended channel was not resolved: {server_query}")
+    if server_query.get("target") != "server" or not server_query.get("optional"):
+        raise AssertionError(f"Server manifest metadata was missing: {server_query}")
+    if len(server_query.get("manifest_hash", "")) != 64:
+        raise AssertionError(f"Server manifest hash was missing: {server_query}")
+    expected_server_mods = {
+        "ci-example-mod": ("BOTH", False),
+        "ci-optional-both": ("BOTH", True),
+        "ci-optional-server": ("SERVER", True),
+        "ci-server-only": ("SERVER", False),
+    }
+    actual_server_mods = {
+        mod["name"]: (mod.get("side"), mod.get("optional"))
+        for mod in server_query.get("mods", [])
+    }
+    if actual_server_mods != expected_server_mods:
+        raise AssertionError(
+            f"Server/optional filtering was incorrect: {server_query}"
+        )
+
+    comparison = request_json(
+        f"{variant_url}/latest?target=server&from=previous"
+    ).get("changes", {})
+    if [mod["name"] for mod in comparison.get("added", [])] != [
+        "ci-server-only"
+    ]:
+        raise AssertionError(f"Server additions were incorrect: {comparison}")
+    if [
+        change["to"]["name"] for change in comparison.get("updated", [])
+    ] != ["ci-example-mod"]:
+        raise AssertionError(f"Server updates were incorrect: {comparison}")
+    if [mod["name"] for mod in comparison.get("removed", [])] != [
+        "ci-removed-server"
+    ]:
+        raise AssertionError(f"Server removals were incorrect: {comparison}")
 
     mods = request_json(f"{base_url}/api/mod")
     if mods.get("mods", {}).get("ci-example-mod") != "CI Example Mod":

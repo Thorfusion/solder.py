@@ -92,6 +92,10 @@ class ModelSerializationTests(unittest.TestCase):
             modpack.to_json()["builds"],
             ["3", "3-optional", "3-server"],
         )
+        self.assertEqual(
+            modpack.to_json()["capabilities"],
+            {"optional": True, "server": True},
+        )
 
     def test_modversion_serialization_matches_the_api_contract(self):
         version = Modversion(2, 1, "3.0", "1.21.1", "abc123", None, None, 4096)
@@ -473,6 +477,48 @@ class ModelBehaviorTests(unittest.TestCase):
             [version.modname for version in versions],
             ["alpha", "Example2", "example10"],
         )
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("mods.side IN ('CLIENT', 'BOTH')", query)
+        self.assertEqual(parameters, (1, 0))
+
+    def test_server_manifest_can_include_optional_server_mods(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [
+            {
+                "id": 3,
+                "mod_id": 2,
+                "version": "1.0",
+                "mcversion": "1.21.1",
+                "md5": "abc",
+                "created_at": None,
+                "updated_at": None,
+                "filesize": 1024,
+                "modname": "server-library",
+                "pretty_name": "Server Library",
+                "author": "CI",
+                "link": None,
+                "description": None,
+                "side": "SERVER",
+                "modtype": "MOD",
+                "optional": 1,
+            }
+        ]
+        build = Build(
+            1, 2, "3", None, None, "1.21.1", None, 1, 0, "21", 4096, 0
+        )
+
+        with patch("models.build.Database.get_connection", return_value=connection):
+            versions = build.get_modversions_api(
+                target="server", include_optional=True
+            )
+
+        self.assertEqual([version.modname for version in versions], ["server-library"])
+        self.assertEqual(versions[0].side, "SERVER")
+        self.assertEqual(versions[0].optional, 1)
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("mods.side IN ('SERVER', 'BOTH')", query)
+        self.assertEqual(parameters, (1, 1))
 
     def test_modversion_build_memberships_are_shaped_for_the_read_api(self):
         connection = Mock()

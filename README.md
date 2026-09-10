@@ -73,6 +73,48 @@ solder.py is solder written in python with major features over technic's solder.
 
 + MCInstance Loader support
 
+## Server and optional API manifests
+
+solder.py keeps the Technic read API paths and response defaults. A normal
+launcher request remains unchanged:
+
+```text
+GET /api/modpack/example-pack/1.0
+```
+
+Clients that understand solder.py's shadow-build features can request a target
+and optional packages with query arguments:
+
+```text
+GET /api/modpack/example-pack/1.0?target=server
+GET /api/modpack/example-pack/1.0?optional=true
+GET /api/modpack/example-pack/1.0?target=server&optional=true
+```
+
+`target=client` includes `CLIENT` and `BOTH` packages. `target=server` includes
+`SERVER` and `BOTH` packages. Optional packages are excluded unless
+`optional=true` is supplied. The existing `-optional` and `-server` build
+suffixes remain supported as aliases.
+
+Server updaters can use `recommended` or `latest` in place of a build version.
+Extended manifests report the resolved version, target, optional mode and a
+stable SHA-256 manifest hash:
+
+```text
+GET /api/modpack/example-pack/recommended?target=server
+```
+
+Supplying an installed build in `from` also returns package-level additions,
+updates and removals:
+
+```text
+GET /api/modpack/example-pack/latest?target=server&from=1.0
+```
+
+The comparison describes Solder packages. A server updater remains responsible
+for tracking which files were extracted from each package when removing an old
+package.
+
 # Installation/Updating
 
 solder.py is compatible with the original database and only adds columns to tables for the extra features we have, you can even dual run with both solder.py and original solder.

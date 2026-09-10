@@ -218,6 +218,10 @@ class Modpack:
             "display_name": self.name,
             "recommended": self.recommended,
             "latest": self.latest,
+            "capabilities": {
+                "optional": bool(self.enable_optionals),
+                "server": bool(self.enable_server),
+            },
         }
 
         if self.builds is not None:

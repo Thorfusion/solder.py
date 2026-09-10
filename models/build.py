@@ -228,31 +228,57 @@ class Build:
         except:
             return 0
 
-    def get_modversions_api(self, tag: str):
+    def get_modversions_api(
+        self, tag: str = "", target=None, include_optional=None
+    ):
+        if target is None:
+            target = "server" if tag == "server" else "client"
+        if include_optional is None:
+            include_optional = tag == "optional"
+        if target not in {"client", "server"}:
+            raise ValueError("target must be client or server")
+
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
-        if tag == "optional":
-            cursor.execute(
-                """SELECT modversions.id, modversions.mod_id, modversions.version, modversions.mcversion, modversions.md5, modversions.created_at, modversions.updated_at, modversions.filesize, mods.name AS modname, mods.pretty_name, mods.author, mods.link, mods.description, build_modversion.optional 
-                FROM modversions
-                INNER JOIN build_modversion ON modversions.id = build_modversion.modversion_id JOIN mods ON modversions.mod_id = mods.id 
-                WHERE build_modversion.build_id = %s AND mods.side IN ('CLIENT','BOTH')
-                """, (self.id,))
-        elif tag == "server":
-            cursor.execute(
-                """SELECT modversions.id, modversions.mod_id, modversions.version, modversions.mcversion, modversions.md5, modversions.created_at, modversions.updated_at, modversions.filesize, mods.name AS modname, mods.pretty_name, mods.author, mods.link, mods.description, build_modversion.optional 
-                FROM modversions
-                INNER JOIN build_modversion ON modversions.id = build_modversion.modversion_id JOIN mods ON modversions.mod_id = mods.id 
-                WHERE build_modversion.build_id = %s AND build_modversion.optional = 0 AND mods.side IN ('SERVER','BOTH')
-                """, (self.id,))
-        else:
-            cursor.execute(
-                """SELECT modversions.id, modversions.mod_id, modversions.version, modversions.mcversion, modversions.md5, modversions.created_at, modversions.updated_at, modversions.filesize, mods.name AS modname, mods.pretty_name, mods.author, mods.link, mods.description, build_modversion.optional 
-                FROM modversions
-                INNER JOIN build_modversion ON modversions.id = build_modversion.modversion_id JOIN mods ON modversions.mod_id = mods.id 
-                WHERE build_modversion.build_id = %s AND build_modversion.optional = 0 AND mods.side IN ('CLIENT','BOTH')
-                """, (self.id,))
         try:
+            if target == "server":
+                cursor.execute(
+                    """SELECT modversions.id, modversions.mod_id,
+                              modversions.version, modversions.mcversion,
+                              modversions.md5, modversions.created_at,
+                              modversions.updated_at, modversions.filesize,
+                              mods.name AS modname, mods.pretty_name,
+                              mods.author, mods.link, mods.description,
+                              mods.side, mods.modtype,
+                              build_modversion.optional
+                       FROM modversions
+                       INNER JOIN build_modversion
+                           ON modversions.id = build_modversion.modversion_id
+                       INNER JOIN mods ON modversions.mod_id = mods.id
+                       WHERE build_modversion.build_id = %s
+                         AND (%s = 1 OR build_modversion.optional = 0)
+                         AND mods.side IN ('SERVER', 'BOTH')""",
+                    (self.id, int(include_optional)),
+                )
+            else:
+                cursor.execute(
+                    """SELECT modversions.id, modversions.mod_id,
+                              modversions.version, modversions.mcversion,
+                              modversions.md5, modversions.created_at,
+                              modversions.updated_at, modversions.filesize,
+                              mods.name AS modname, mods.pretty_name,
+                              mods.author, mods.link, mods.description,
+                              mods.side, mods.modtype,
+                              build_modversion.optional
+                       FROM modversions
+                       INNER JOIN build_modversion
+                           ON modversions.id = build_modversion.modversion_id
+                       INNER JOIN mods ON modversions.mod_id = mods.id
+                       WHERE build_modversion.build_id = %s
+                         AND (%s = 1 OR build_modversion.optional = 0)
+                         AND mods.side IN ('CLIENT', 'BOTH')""",
+                    (self.id, int(include_optional)),
+                )
             modversions = cursor.fetchall()
             versions = []
             for mv in modversions:
@@ -262,6 +288,8 @@ class Build:
                 v.author = mv["author"]
                 v.link = mv["link"]
                 v.description = mv["description"]
+                v.side = mv.get("side", "BOTH")
+                v.modtype = mv.get("modtype", "MOD")
                 versions.append(v)
 
             def natural_name_key(modversion):

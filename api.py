@@ -1,3 +1,5 @@
+import hashlib
+import json
 from threading import RLock
 
 from cachetools import cached, TTLCache
@@ -18,12 +20,14 @@ def _api_cached(key):
 
 
 def _cache_key(*path_parts):
-    return (
-        *path_parts,
-        request.args.get("cid"),
-        request.args.get("include"),
-        request.args.get("k"),
+    # Include every query argument that can influence a response. This keeps
+    # extension arguments such as target/optional/from from sharing a cached
+    # response, while also making argument order irrelevant.
+    query_arguments = tuple(
+        (name, tuple(request.args.getlist(name)))
+        for name in sorted(request.args.keys())
     )
+    return (*path_parts, query_arguments)
 
 
 def _has_valid_api_key():
@@ -37,10 +41,26 @@ def _get_accessible_modpack(slug, cid, api_key):
     return Modpack.get_by_cid_slug_api(cid, slug)
 
 
+def _get_build_by_version_or_channel(modpack, requested_version, cid, api_key):
+    build = modpack.get_build_api(requested_version, cid=cid, api_key=api_key)
+    if build:
+        return build
+
+    if requested_version in {"recommended", "latest"}:
+        channel_version = getattr(modpack, requested_version, None)
+        if channel_version:
+            return modpack.get_build_api(
+                channel_version, cid=cid, api_key=api_key
+            )
+    return None
+
+
 def _get_requested_build(modpack, requested_version, cid, api_key):
     # Prefer a real build whose name ends in -optional or -server. The virtual
     # solder.py variants are only considered when no exact build exists.
-    build = modpack.get_build_api(requested_version, cid=cid, api_key=api_key)
+    build = _get_build_by_version_or_channel(
+        modpack, requested_version, cid, api_key
+    )
     if build:
         return build, ""
 
@@ -53,22 +73,131 @@ def _get_requested_build(modpack, requested_version, cid, api_key):
             base_version = requested_version[: -len(suffix)]
             if not base_version:
                 break
-            build = modpack.get_build_api(
-                base_version, cid=cid, api_key=api_key
+            build = _get_build_by_version_or_channel(
+                modpack, base_version, cid, api_key
             )
             if build:
                 return build, tag
     return None, ""
 
 
+def _boolean_argument(name, default=False):
+    value = request.args.get(name)
+    if value is None:
+        return default
+    normalized = value.casefold()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true or false")
+
+
+def _manifest_options(legacy_variant):
+    requested_target = request.args.get("target")
+    target = (requested_target or "client").casefold()
+    if target not in {"client", "server"}:
+        raise ValueError("target must be client or server")
+
+    optional_was_requested = request.args.get("optional") is not None
+    include_optional = _boolean_argument("optional", default=False)
+
+    if legacy_variant == "server":
+        if requested_target is not None and target != "server":
+            raise ValueError("The -server build suffix requires target=server")
+        target = "server"
+    elif legacy_variant == "optional":
+        if requested_target is not None and target != "client":
+            raise ValueError("The -optional build suffix requires target=client")
+        if optional_was_requested and not include_optional:
+            raise ValueError("The -optional build suffix requires optional=true")
+        include_optional = True
+
+    return target, include_optional
+
+
 def _mod_download_url(mod_name, version):
     return f"{public_repo_url}{mod_name}/{mod_name}-{version}.zip"
+
+
+def _mod_manifest_entry(modversion, expanded=False, extended=False):
+    entry = {
+        "id": modversion.id,
+        "name": modversion.modname,
+        "version": modversion.version,
+        "md5": modversion.md5,
+        "filesize": modversion.filesize,
+        "url": _mod_download_url(modversion.modname, modversion.version),
+    }
+    if expanded:
+        entry.update(
+            {
+                "pretty_name": modversion.pretty_name,
+                "author": modversion.author,
+                "description": modversion.description,
+                "link": modversion.link,
+            }
+        )
+    if extended:
+        entry.update(
+            {
+                "side": getattr(modversion, "side", "BOTH"),
+                "type": getattr(modversion, "modtype", "MOD"),
+                "optional": bool(modversion.optional),
+            }
+        )
+    return entry
+
+
+def _manifest_changes(previous, current, from_version, to_version):
+    previous_by_name = {mod["name"]: mod for mod in previous}
+    current_by_name = {mod["name"]: mod for mod in current}
+
+    added = [
+        mod for mod in current if mod["name"] not in previous_by_name
+    ]
+    removed = [
+        mod for mod in previous if mod["name"] not in current_by_name
+    ]
+    updated = []
+    for current_mod in current:
+        old_mod = previous_by_name.get(current_mod["name"])
+        if old_mod and (
+            old_mod["version"] != current_mod["version"]
+            or old_mod["md5"] != current_mod["md5"]
+        ):
+            updated.append({"from": old_mod, "to": current_mod})
+
+    return {
+        "from": from_version,
+        "to": to_version,
+        "added": added,
+        "updated": updated,
+        "removed": removed,
+    }
+
+
+def _add_manifest_hash(manifest):
+    serialized = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+    manifest["manifest_hash"] = hashlib.sha256(serialized).hexdigest()
 
 
 @api.route("/api/")
 def api_info():
     return jsonify(
-        {"api": "solder.py", "version": "v" + solderpy_version, "stream": "DEV"}
+        {
+            "api": "solder.py",
+            "version": "v" + solderpy_version,
+            "stream": "DEV",
+            "capabilities": {
+                "build_channels": True,
+                "build_comparison": True,
+                "optional_manifests": True,
+                "server_manifests": True,
+            },
+        }
     )
 
 
@@ -150,46 +279,73 @@ def modpack_slug_build(slugstring: str, buildstring: str):
     )
     if not build:
         return jsonify({"error": "Build does not exist"}), 404
-    modversions = build.get_modversions_api(buildtag)
-    moddata = []
-    if request.args.get("include") == "mods":
-        for mv in modversions:
-            moddata.append(
-                {
-                    "id": mv.id,
-                    "name": mv.modname,
-                    "version": mv.version,
-                    "md5": mv.md5,
-                    "filesize": mv.filesize,
-                    "url": _mod_download_url(mv.modname, mv.version),
-                    "pretty_name": mv.pretty_name,
-                    "author": mv.author,
-                    "description": mv.description,
-                    "link": mv.link,
-                }
-            )
-    else:
-        for mv in modversions:
-            moddata.append(
-                {
-                    "id": mv.id,
-                    "name": mv.modname,
-                    "version": mv.version,
-                    "md5": mv.md5,
-                    "filesize": mv.filesize,
-                    "url": _mod_download_url(mv.modname, mv.version),
-                }
-            )
-    return jsonify(
-        {
-            "id": build.id,
-            "minecraft": build.minecraft,
-            "java": build.min_java,
-            "memory": build.min_memory,
-            "forge": build.forge,
-            "mods": moddata,
-        }
+
+    try:
+        target, include_optional = _manifest_options(buildtag)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+
+    if target == "server" and not current_modpack.enable_server:
+        return jsonify({"error": "Server manifests are not enabled"}), 404
+    if include_optional and not current_modpack.enable_optionals:
+        return jsonify({"error": "Optional manifests are not enabled"}), 404
+
+    expanded = request.args.get("include") == "mods"
+    extended = (
+        request.args.get("target") is not None
+        or request.args.get("optional") is not None
+        or request.args.get("from") is not None
+        or buildstring in {"recommended", "latest"}
     )
+    modversions = build.get_modversions_api(
+        target=target, include_optional=include_optional
+    )
+    moddata = [
+        _mod_manifest_entry(mv, expanded=expanded, extended=extended)
+        for mv in modversions
+    ]
+    manifest = {
+        "id": build.id,
+        "minecraft": build.minecraft,
+        "java": build.min_java,
+        "memory": build.min_memory,
+        "forge": build.forge,
+        "mods": moddata,
+    }
+
+    if extended:
+        manifest.update(
+            {
+                "modpack": current_modpack.slug,
+                "version": build.version,
+                "target": target,
+                "optional": include_optional,
+            }
+        )
+        _add_manifest_hash(manifest)
+
+    from_version = request.args.get("from")
+    if from_version:
+        previous_build = _get_build_by_version_or_channel(
+            current_modpack, from_version, cid, api_key
+        )
+        if not previous_build:
+            return jsonify({"error": "Comparison build does not exist"}), 404
+        previous_versions = previous_build.get_modversions_api(
+            target=target, include_optional=include_optional
+        )
+        previous_data = [
+            _mod_manifest_entry(mv, expanded=expanded, extended=True)
+            for mv in previous_versions
+        ]
+        manifest["changes"] = _manifest_changes(
+            previous_data, moddata, previous_build.version, build.version
+        )
+
+    response = jsonify(manifest)
+    if extended:
+        response.set_etag(manifest["manifest_hash"])
+    return response
 
 
 @api.route("/api/mod")

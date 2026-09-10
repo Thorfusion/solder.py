@@ -37,7 +37,17 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.get_json(),
-            {"api": "solder.py", "version": "v1.7.4", "stream": "DEV"},
+            {
+                "api": "solder.py",
+                "version": "v1.7.4",
+                "stream": "DEV",
+                "capabilities": {
+                    "build_channels": True,
+                    "build_comparison": True,
+                    "optional_manifests": True,
+                    "server_manifests": True,
+                },
+            },
         )
 
     def test_verify_requires_an_api_key(self):
@@ -231,7 +241,9 @@ class ApiTests(unittest.TestCase):
         modpack.get_build_api.assert_called_once_with(
             "42", cid="client-123", api_key=False
         )
-        build.get_modversions_api.assert_called_once_with("")
+        build.get_modversions_api.assert_called_once_with(
+            target="client", include_optional=False
+        )
 
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
     @patch.object(api_module.Key, "get_key", return_value=None)
@@ -276,7 +288,9 @@ class ApiTests(unittest.TestCase):
                 call("42", cid="client-123", api_key=False),
             ],
         )
-        build.get_modversions_api.assert_called_once_with("optional")
+        build.get_modversions_api.assert_called_once_with(
+            target="client", include_optional=True
+        )
 
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
     @patch.object(api_module.Key, "get_key", return_value=None)
@@ -301,7 +315,182 @@ class ApiTests(unittest.TestCase):
         modpack.get_build_api.assert_called_once_with(
             "1.20.1-beta-2", cid="client-123", api_key=False
         )
-        build.get_modversions_api.assert_called_once_with("")
+        build.get_modversions_api.assert_called_once_with(
+            target="client", include_optional=False
+        )
+
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_server_manifest_query_has_deployment_metadata(
+        self, _get_key, get_modpack
+    ):
+        modpack = Mock(
+            slug="stable",
+            enable_server=1,
+            enable_optionals=1,
+        )
+        build = Mock(
+            id=7,
+            version="42",
+            minecraft="1.21.1",
+            min_java="21",
+            min_memory=4096,
+            forge="52.0.1",
+        )
+        build.get_modversions_api.return_value = [
+            SimpleNamespace(
+                id=9,
+                modname="example",
+                version="2.0",
+                md5="abc123",
+                filesize=1234,
+                side="BOTH",
+                modtype="MOD",
+                optional=0,
+            )
+        ]
+        modpack.get_build_api.return_value = build
+        get_modpack.return_value = modpack
+
+        response = self.client.get(
+            "/api/modpack/stable/42?target=server&optional=true"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["modpack"], "stable")
+        self.assertEqual(payload["version"], "42")
+        self.assertEqual(payload["target"], "server")
+        self.assertTrue(payload["optional"])
+        self.assertEqual(payload["mods"][0]["side"], "BOTH")
+        self.assertFalse(payload["mods"][0]["optional"])
+        self.assertEqual(len(payload["manifest_hash"]), 64)
+        self.assertEqual(
+            response.headers["ETag"], f'"{payload["manifest_hash"]}"'
+        )
+        build.get_modversions_api.assert_called_once_with(
+            target="server", include_optional=True
+        )
+
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_recommended_channel_resolves_to_real_build(
+        self, _get_key, get_modpack
+    ):
+        modpack = Mock(
+            slug="stable",
+            recommended="42",
+            latest="43",
+            enable_server=1,
+            enable_optionals=0,
+        )
+        build = Mock(
+            id=7,
+            version="42",
+            minecraft="1.21.1",
+            min_java="21",
+            min_memory=4096,
+            forge=None,
+        )
+        build.get_modversions_api.return_value = []
+        modpack.get_build_api.side_effect = [None, build]
+        get_modpack.return_value = modpack
+
+        response = self.client.get(
+            "/api/modpack/stable/recommended?target=server"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["version"], "42")
+        self.assertEqual(
+            modpack.get_build_api.call_args_list,
+            [
+                call("recommended", cid=None, api_key=False),
+                call("42", cid=None, api_key=False),
+            ],
+        )
+
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_server_manifest_can_compare_with_an_installed_build(
+        self, _get_key, get_modpack
+    ):
+        modpack = Mock(
+            slug="stable",
+            enable_server=1,
+            enable_optionals=0,
+        )
+        current = Mock(
+            id=2,
+            version="2",
+            minecraft="1.21.1",
+            min_java="21",
+            min_memory=4096,
+            forge=None,
+        )
+        previous = Mock(id=1, version="1")
+
+        def version(identifier, name, release, checksum):
+            return SimpleNamespace(
+                id=identifier,
+                modname=name,
+                version=release,
+                md5=checksum,
+                filesize=1024,
+                side="SERVER",
+                modtype="MOD",
+                optional=0,
+            )
+
+        current.get_modversions_api.return_value = [
+            version(2, "added", "1.0", "a"),
+            version(3, "updated", "2.0", "b"),
+        ]
+        previous.get_modversions_api.return_value = [
+            version(4, "removed", "1.0", "c"),
+            version(5, "updated", "1.0", "d"),
+        ]
+        modpack.get_build_api.side_effect = [current, previous]
+        get_modpack.return_value = modpack
+
+        response = self.client.get(
+            "/api/modpack/stable/2?target=server&from=1"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        changes = response.get_json()["changes"]
+        self.assertEqual(changes["from"], "1")
+        self.assertEqual(changes["to"], "2")
+        self.assertEqual([mod["name"] for mod in changes["added"]], ["added"])
+        self.assertEqual(
+            [change["to"]["name"] for change in changes["updated"]],
+            ["updated"],
+        )
+        self.assertEqual(
+            [mod["name"] for mod in changes["removed"]], ["removed"]
+        )
+
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_invalid_manifest_options_are_rejected(
+        self, _get_key, get_modpack
+    ):
+        modpack = Mock(
+            enable_server=1,
+            enable_optionals=1,
+        )
+        modpack.get_build_api.return_value = Mock()
+        get_modpack.return_value = modpack
+
+        target_response = self.client.get(
+            "/api/modpack/stable/42?target=dedicated"
+        )
+        optional_response = self.client.get(
+            "/api/modpack/stable/42?optional=perhaps"
+        )
+
+        self.assertEqual(target_response.status_code, 400)
+        self.assertEqual(optional_response.status_code, 400)
 
     @patch.object(api_module.Mod, "get_all_api")
     def test_mod_catalog_matches_technic_read_api(self, get_mods):
