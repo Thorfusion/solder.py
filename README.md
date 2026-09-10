@@ -388,7 +388,9 @@ Pull requests and trusted branch pushes run several complementary checks:
 - Container integration tests restore sanitized, synthetic versions of both a
   Technic Solder backup and the current solder.py backup. They verify the
   Technic migration twice for idempotency, then exercise API keys, clients,
-  modpacks, builds, and mod versions against a real MySQL server.
+  modpacks, builds, and mod versions against a real MySQL server. The API checks
+  cover public, hidden, private, unpublished, optional, server, and hyphenated
+  build cases.
 - GitHub dependency review checks dependency changes made by pull requests.
 
 Run the Python checks locally with:

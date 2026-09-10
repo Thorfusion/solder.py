@@ -191,7 +191,12 @@ def verify_migrated_schema(database_container: str) -> None:
 
     expected_indexes = (
         ("build_modversion", "idx_build_modversion_build_version"),
+        ("build_modversion", "idx_build_modversion_version_build"),
+        ("builds", "idx_builds_modpack_version_access"),
+        ("client_modpack", "idx_client_modpack_modpack_client"),
+        ("client_modpack", "idx_client_modpack_client_modpack"),
         ("modversions", "idx_modversions_mod_mcversion"),
+        ("modversions", "idx_modversions_mod_version"),
     )
     index_conditions = " OR ".join(
         f"(TABLE_NAME = '{table}' AND INDEX_NAME = '{index}')"
@@ -240,14 +245,65 @@ def seed_dependency_scenario(database_container: str) -> None:
     )
 
 
-def request_json(endpoint: str) -> dict:
+def seed_api_access_scenario(database_container: str) -> None:
+    mysql(
+        database_container,
+        """INSERT INTO modpacks
+               (id, name, slug, user_id, recommended, latest, `order`, hidden,
+                private, pinned, enable_optionals, enable_server)
+           VALUES
+               (20, 'CI Hidden Pack', 'ci-hidden-pack', 1, '1.0', '1.0',
+                20, 1, 0, 0, 0, 0),
+               (21, 'CI Private Pack', 'ci-private-pack', 1, '1.0', '1.0',
+                21, 0, 1, 0, 0, 0),
+               (22, 'CI API Variants', 'ci-api-variants', 1,
+                '1.20.1-beta-2', '1.20.1-beta-2', 22, 0, 0, 0, 1, 1);
+
+           INSERT INTO builds
+               (id, modpack_id, version, minecraft, forge, is_published,
+                private, min_java, min_memory, marked)
+           VALUES
+               (20, 20, '1.0', '1.21.1', NULL, 1, 0, '21', 2048, 0),
+               (21, 21, '1.0', '1.21.1', NULL, 1, 0, '21', 2048, 0),
+               (22, 22, '1.20.1-beta-2', '1.20.1', '47.3.0', 1, 0,
+                '17', 4096, 0),
+               (23, 22, 'private', '1.20.1', NULL, 1, 1, '17', 4096, 0),
+               (24, 22, 'unpublished', '1.20.1', NULL, 0, 0,
+                '17', 4096, 0);
+
+           INSERT INTO client_modpack
+               (id, client_id, modpack_id, created_at, updated_at)
+           VALUES
+               (21, 1, 21, '2024-01-01 00:00:00', '2024-01-01 00:00:00'),
+               (22, 1, 22, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
+
+           INSERT INTO build_modversion
+               (id, modversion_id, build_id, optional)
+           VALUES
+               (20, 1, 20, 0),
+               (21, 1, 21, 0),
+               (22, 1, 22, 0),
+               (23, 1, 23, 0),
+               (24, 1, 24, 0);""",
+    )
+
+
+def request_json_with_status(endpoint: str) -> tuple[int, dict]:
     parsed = urllib.parse.urlsplit(endpoint)
     if parsed.scheme != "http" or parsed.hostname != "127.0.0.1":
         raise ValueError(f"Refusing non-loopback test endpoint: {endpoint}")
-    with urllib.request.urlopen(endpoint, timeout=5) as response:  # nosec B310
-        if response.status != 200:
-            raise AssertionError(f"{endpoint} returned HTTP {response.status}")
-        return json.load(response)
+    try:
+        with urllib.request.urlopen(endpoint, timeout=5) as response:  # nosec B310
+            return response.status, json.load(response)
+    except urllib.error.HTTPError as error:
+        return error.code, json.load(error)
+
+
+def request_json(endpoint: str) -> dict:
+    status, payload = request_json_with_status(endpoint)
+    if status != 200:
+        raise AssertionError(f"{endpoint} returned HTTP {status}: {payload}")
+    return payload
 
 
 def wait_for_application(container: str, endpoint: str) -> None:
@@ -274,8 +330,20 @@ def exercise_database_api(base_url: str) -> None:
 
     client = urllib.parse.quote("ci-client-id-not-a-secret")
     modpacks = request_json(f"{base_url}/api/modpack?cid={client}")
-    if modpacks.get("modpacks") != {"ci-example-pack": "CI Example Pack"}:
+    expected_client_packs = {
+        "ci-example-pack": "CI Example Pack",
+        "ci-private-pack": "CI Private Pack",
+        "ci-api-variants": "CI API Variants",
+    }
+    if modpacks.get("modpacks") != expected_client_packs:
         raise AssertionError(f"Modpack fixture was not readable: {modpacks}")
+
+    public_modpacks = request_json(f"{base_url}/api/modpack")
+    if public_modpacks.get("modpacks") != {
+        "ci-example-pack": "CI Example Pack",
+        "ci-api-variants": "CI API Variants",
+    }:
+        raise AssertionError(f"Public modpack visibility was incorrect: {public_modpacks}")
 
     modpack = request_json(f"{base_url}/api/modpack/ci-example-pack?cid={client}")
     if modpack.get("builds") != ["1.0"]:
@@ -288,6 +356,77 @@ def exercise_database_api(base_url: str) -> None:
         raise AssertionError(f"Build metadata was not readable: {manifest}")
     if [mod.get("name") for mod in manifest.get("mods", [])] != ["ci-example-mod"]:
         raise AssertionError(f"Mod-version fixture was not readable: {manifest}")
+
+    hidden = request_json(f"{base_url}/api/modpack/ci-hidden-pack")
+    if hidden.get("name") != "ci-hidden-pack":
+        raise AssertionError(f"Hidden public pack was not reachable by slug: {hidden}")
+
+    private_url = f"{base_url}/api/modpack/ci-private-pack"
+    private_status, _ = request_json_with_status(private_url)
+    if private_status != 404:
+        raise AssertionError("Private modpack was exposed without credentials")
+    private_pack = request_json(f"{private_url}?cid={client}")
+    if private_pack.get("name") != "ci-private-pack":
+        raise AssertionError(f"CID did not grant private-pack access: {private_pack}")
+    private_by_key = request_json(
+        f"{private_url}?k=ci-api-key-not-a-secret"
+    )
+    if private_by_key.get("name") != "ci-private-pack":
+        raise AssertionError(f"API key did not grant private-pack access: {private_by_key}")
+
+    variant_url = f"{base_url}/api/modpack/ci-api-variants"
+    private_build_status, _ = request_json_with_status(
+        f"{variant_url}/private"
+    )
+    if private_build_status != 404:
+        raise AssertionError("Private build was exposed without credentials")
+    request_json(f"{variant_url}/private?cid={client}")
+    request_json(f"{variant_url}/private?k=ci-api-key-not-a-secret")
+
+    unpublished_status, _ = request_json_with_status(
+        f"{variant_url}/unpublished?k=ci-api-key-not-a-secret"
+    )
+    if unpublished_status != 404:
+        raise AssertionError("Unpublished build was exposed through an API key")
+
+    hyphenated = request_json(f"{variant_url}/1.20.1-beta-2")
+    if hyphenated.get("id") != 22 or hyphenated.get("forge") != "47.3.0":
+        raise AssertionError(f"Hyphenated build was parsed incorrectly: {hyphenated}")
+    if hyphenated.get("mods", [{}])[0].get("filesize") != 1024:
+        raise AssertionError(f"Build manifest parity fields are missing: {hyphenated}")
+
+    optional = request_json(f"{variant_url}/1.20.1-beta-2-optional")
+    if optional.get("id") != 22:
+        raise AssertionError(f"Optional build suffix was parsed incorrectly: {optional}")
+    server = request_json(f"{variant_url}/1.20.1-beta-2-server")
+    if server.get("id") != 22:
+        raise AssertionError(f"Server build suffix was parsed incorrectly: {server}")
+
+    mods = request_json(f"{base_url}/api/mod")
+    if mods.get("mods", {}).get("ci-example-mod") != "CI Example Mod":
+        raise AssertionError(f"Mod catalogue was not readable: {mods}")
+
+    mod_version = request_json(f"{base_url}/api/mod/ci-example-mod/1.0")
+    expected_url = "https://example.invalid/mods/ci-example-mod/ci-example-mod-1.0.zip"
+    if mod_version.get("url") != expected_url:
+        raise AssertionError(f"Mod-version URL was incorrect: {mod_version}")
+    public_build_ids = [build["id"] for build in mod_version.get("builds", [])]
+    if public_build_ids != [1, 20, 22]:
+        raise AssertionError(
+            f"Mod-version public build memberships were incorrect: {mod_version}"
+        )
+
+    mod_version_with_cid = request_json(
+        f"{base_url}/api/mod/ci-example-mod/1.0?cid={client}"
+    )
+    client_build_ids = [
+        build["id"] for build in mod_version_with_cid.get("builds", [])
+    ]
+    if client_build_ids != [1, 20, 21, 22, 23]:
+        raise AssertionError(
+            "Mod-version CID build memberships were incorrect: "
+            f"{mod_version_with_cid}"
+        )
 
 
 def exercise_synthetic_user_login(base_url: str, database_container: str) -> None:
@@ -446,6 +585,7 @@ def test_fixture(image: str, fixture: Path, migrate: bool) -> None:
             verify_migrated_schema(database_container)
 
         seed_dependency_scenario(database_container)
+        seed_api_access_scenario(database_container)
 
         docker(
             "run",
@@ -455,7 +595,7 @@ def test_fixture(image: str, fixture: Path, migrate: bool) -> None:
             "--network",
             network,
             "--publish",
-            "127.0.0.1::5000",
+            "127.0.0.1:0:5000",
             *database_environment("mysql"),
             image,
             capture_output=True,

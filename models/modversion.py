@@ -243,6 +243,73 @@ class Modversion:
             return rows
         return []
 
+    def get_builds_api(self, cid=None, api_key=False):
+        """List published builds containing this version that the caller can read."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            if api_key:
+                cur.execute(
+                    """SELECT DISTINCT
+                              builds.id AS build_id,
+                              builds.version AS build_version,
+                              modpacks.id AS modpack_id,
+                              modpacks.slug AS modpack_slug,
+                              modpacks.name AS modpack_name
+                       FROM build_modversion
+                       INNER JOIN builds
+                           ON build_modversion.build_id = builds.id
+                       INNER JOIN modpacks
+                           ON builds.modpack_id = modpacks.id
+                       WHERE build_modversion.modversion_id = %s
+                         AND builds.is_published = 1
+                       ORDER BY builds.id ASC""",
+                    (self.id,),
+                )
+            else:
+                cur.execute(
+                    """SELECT DISTINCT
+                              builds.id AS build_id,
+                              builds.version AS build_version,
+                              modpacks.id AS modpack_id,
+                              modpacks.slug AS modpack_slug,
+                              modpacks.name AS modpack_name
+                       FROM build_modversion
+                       INNER JOIN builds
+                           ON build_modversion.build_id = builds.id
+                       INNER JOIN modpacks
+                           ON builds.modpack_id = modpacks.id
+                       WHERE build_modversion.modversion_id = %s
+                         AND builds.is_published = 1
+                         AND (
+                              (modpacks.private = 0 AND builds.private = 0)
+                              OR EXISTS (
+                                  SELECT 1
+                                  FROM client_modpack cm
+                                  INNER JOIN clients c ON cm.client_id = c.id
+                                  WHERE cm.modpack_id = modpacks.id
+                                    AND c.uuid = %s
+                              )
+                         )
+                       ORDER BY builds.id ASC""",
+                    (self.id, cid),
+                )
+            return [
+                {
+                    "id": row["build_id"],
+                    "version": row["build_version"],
+                    "modpack": {
+                        "id": row["modpack_id"],
+                        "name": row["modpack_slug"],
+                        "display_name": row["modpack_name"],
+                    },
+                }
+                for row in cur.fetchall()
+            ]
+        finally:
+            cur.close()
+            conn.close()
+
     def get_file_size(url):
         response = requests.head(url)  # Only get headers, not content
         file_size = int(response.headers.get('content-length', -1))  # Get file size from headers

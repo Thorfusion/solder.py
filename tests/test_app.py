@@ -46,6 +46,18 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn(b"404", response.data)
 
+    def test_unknown_api_route_returns_json(self):
+        response = self.client.get("/api/this-route-does-not-exist")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.get_json(), {"error": "Not Found"})
+
+    def test_wrong_api_method_returns_json(self):
+        response = self.client.post("/api/modpack")
+
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(response.get_json(), {"error": "Method Not Allowed"})
+
     def test_duplicate_mod_shows_an_error_and_preserves_the_form(self):
         with self.client.session_transaction() as flask_session:
             flask_session["token"] = "valid-test-token"

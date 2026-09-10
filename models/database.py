@@ -33,6 +33,52 @@ class Database:
         INDEX idx_mod_dependencies_dependency (dependency_mod_id)
     )"""
 
+    API_INDEX_MIGRATIONS = (
+        (
+            "build_modversion",
+            "idx_build_modversion_build_version",
+            "ALTER TABLE build_modversion "
+            "ADD INDEX idx_build_modversion_build_version (build_id, modversion_id)",
+        ),
+        (
+            "build_modversion",
+            "idx_build_modversion_version_build",
+            "ALTER TABLE build_modversion "
+            "ADD INDEX idx_build_modversion_version_build (modversion_id, build_id)",
+        ),
+        (
+            "builds",
+            "idx_builds_modpack_version_access",
+            "ALTER TABLE builds "
+            "ADD INDEX idx_builds_modpack_version_access "
+            "(modpack_id, version, is_published, private)",
+        ),
+        (
+            "client_modpack",
+            "idx_client_modpack_modpack_client",
+            "ALTER TABLE client_modpack "
+            "ADD INDEX idx_client_modpack_modpack_client (modpack_id, client_id)",
+        ),
+        (
+            "client_modpack",
+            "idx_client_modpack_client_modpack",
+            "ALTER TABLE client_modpack "
+            "ADD INDEX idx_client_modpack_client_modpack (client_id, modpack_id)",
+        ),
+        (
+            "modversions",
+            "idx_modversions_mod_mcversion",
+            "ALTER TABLE modversions "
+            "ADD INDEX idx_modversions_mod_mcversion (mod_id, mcversion)",
+        ),
+        (
+            "modversions",
+            "idx_modversions_mod_version",
+            "ALTER TABLE modversions "
+            "ADD INDEX idx_modversions_mod_version (mod_id, version)",
+        ),
+    )
+
     @staticmethod
     def get_connection() -> connector.connection:
         try:
@@ -110,7 +156,9 @@ class Database:
                         private TINYINT(1) DEFAULT(0),
                         min_java VARCHAR(255),
                         min_memory INT,
-                        marked TINYINT(1) NOT NULL DEFAULT(0)
+                        marked TINYINT(1) NOT NULL DEFAULT(0),
+                        INDEX idx_builds_modpack_version_access
+                            (modpack_id, version, is_published, private)
                         )"""
             )
             cur.execute(
@@ -139,7 +187,8 @@ class Database:
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         filesize INT,
-                        INDEX idx_modversions_mod_mcversion (mod_id, mcversion)
+                        INDEX idx_modversions_mod_mcversion (mod_id, mcversion),
+                        INDEX idx_modversions_mod_version (mod_id, version)
                         )"""
             )
             cur.execute(
@@ -150,7 +199,8 @@ class Database:
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         optional TINYINT(1) NOT NULL DEFAULT(0),
-                        INDEX idx_build_modversion_build_version (build_id, modversion_id)
+                        INDEX idx_build_modversion_build_version (build_id, modversion_id),
+                        INDEX idx_build_modversion_version_build (modversion_id, build_id)
                         )"""
             )
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
@@ -205,7 +255,9 @@ class Database:
                         client_id INT NOT NULL,
                         modpack_id INT NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX idx_client_modpack_modpack_client (modpack_id, client_id),
+                        INDEX idx_client_modpack_client_modpack (client_id, modpack_id)
                         )"""
             )
             cur.execute(
@@ -346,21 +398,6 @@ class Database:
                 "ALTER TABLE user_permissions ADD COLUMN solder_env BOOLEAN DEFAULT 0",
             ),
         )
-        index_migrations = (
-            (
-                "build_modversion",
-                "idx_build_modversion_build_version",
-                "ALTER TABLE build_modversion "
-                "ADD INDEX idx_build_modversion_build_version (build_id, modversion_id)",
-            ),
-            (
-                "modversions",
-                "idx_modversions_mod_mcversion",
-                "ALTER TABLE modversions "
-                "ADD INDEX idx_modversions_mod_mcversion (mod_id, mcversion)",
-            ),
-        )
-
         con = Database.get_connection()
         if con is None:
             return False
@@ -382,7 +419,7 @@ class Database:
                 if cur.fetchone() is None:
                     cur.execute(query)
 
-            for table, index, query in index_migrations:
+            for table, index, query in Database.API_INDEX_MIGRATIONS:
                 cur.execute(
                     """SELECT 1
                        FROM information_schema.STATISTICS
@@ -439,6 +476,30 @@ class Database:
         try:
             cur = con.cursor()
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
+
+            for table, index, query in Database.API_INDEX_MIGRATIONS:
+                cur.execute(
+                    """SELECT 1
+                       FROM information_schema.TABLES
+                       WHERE TABLE_SCHEMA = %s
+                         AND TABLE_NAME = %s
+                       LIMIT 1""",
+                    (db_name, table),
+                )
+                if cur.fetchone() is None:
+                    continue
+
+                cur.execute(
+                    """SELECT 1
+                       FROM information_schema.STATISTICS
+                       WHERE TABLE_SCHEMA = %s
+                         AND TABLE_NAME = %s
+                         AND INDEX_NAME = %s
+                       LIMIT 1""",
+                    (db_name, table, index),
+                )
+                if cur.fetchone() is None:
+                    cur.execute(query)
             con.commit()
             return True
         except Exception as error:

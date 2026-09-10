@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from flask import Flask
 
@@ -25,6 +25,7 @@ class ApiTests(unittest.TestCase):
             api_module.modpack,
             api_module.modpack_slug,
             api_module.modpack_slug_build,
+            api_module.mod,
             api_module.mod_name,
             api_module.mod_name_version,
         ):
@@ -95,6 +96,32 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["modpacks"], {})
 
+    @patch.object(api_module.Modpack, "get_by_cid_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_full_modpack_list_uses_already_loaded_packs(
+        self, _get_key, get_modpacks
+    ):
+        modpack = Mock(slug="stable")
+        modpack.get_builds_api.return_value = [SimpleNamespace(version="42")]
+        modpack.to_json.return_value = {
+            "id": 1,
+            "name": "stable",
+            "display_name": "Stable Pack",
+            "builds": ["42"],
+        }
+        get_modpacks.return_value = [modpack]
+
+        response = self.client.get(
+            "/api/modpack?cid=client-123&include=full"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["modpacks"]["stable"]["builds"], ["42"])
+        modpack.get_builds_api.assert_called_once_with(
+            cid="client-123", api_key=False
+        )
+        modpack.to_json.assert_called_once_with()
+
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
     @patch.object(api_module.Key, "get_key", return_value=None)
     def test_modpack_details_include_client_visible_builds(
@@ -113,7 +140,9 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["builds"], ["42"])
-        modpack.get_builds_cid_api.assert_called_once_with("client-123")
+        modpack.get_builds_api.assert_called_once_with(
+            cid="client-123", api_key=False
+        )
 
     @patch.object(api_module.Modpack, "get_by_cid_slug_api", return_value=None)
     @patch.object(api_module.Key, "get_key", return_value=None)
@@ -124,14 +153,56 @@ class ApiTests(unittest.TestCase):
         self.assertIn("does not exist", response.get_json()["error"])
 
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Modpack, "get_all_by_slug_api")
+    @patch.object(api_module.Key, "get_key")
+    def test_api_key_is_enforced_on_build_requests(
+        self, get_key, get_by_key, get_by_cid
+    ):
+        get_key.return_value = SimpleNamespace(name="CI key")
+        modpack = Mock()
+        build = Mock(
+            id=7,
+            minecraft="1.21.1",
+            min_java="21",
+            min_memory=4096,
+            forge=None,
+        )
+        build.get_modversions_api.return_value = []
+        modpack.get_build_api.return_value = build
+        get_by_key.return_value = modpack
+
+        response = self.client.get(
+            "/api/modpack/private/42?k=valid-api-key"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        get_by_key.assert_called_once_with("private")
+        get_by_cid.assert_not_called()
+        modpack.get_build_api.assert_called_once_with(
+            "42", cid=None, api_key=True
+        )
+
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
     @patch.object(api_module.Key, "get_key", return_value=None)
     def test_build_manifest_contains_download_information(
         self, _get_key, get_modpack
     ):
         modpack = Mock()
-        build = Mock(minecraft="1.21.1", min_java="21", min_memory=4096)
+        build = Mock(
+            id=7,
+            minecraft="1.21.1",
+            min_java="21",
+            min_memory=4096,
+            forge="52.0.1",
+        )
         build.get_modversions_api.return_value = [
-            SimpleNamespace(modname="example", version="2.0", md5="abc123")
+            SimpleNamespace(
+                id=9,
+                modname="example",
+                version="2.0",
+                md5="abc123",
+                filesize=1234,
+            )
         ]
         modpack.get_build_api.return_value = build
         get_modpack.return_value = modpack
@@ -146,12 +217,19 @@ class ApiTests(unittest.TestCase):
             response.get_json()["mods"],
             [
                 {
+                    "id": 9,
                     "name": "example",
                     "version": "2.0",
                     "md5": "abc123",
+                    "filesize": 1234,
                     "url": "https://cdn.example.test/mods/example/example-2.0.zip",
                 }
             ],
+        )
+        self.assertEqual(response.get_json()["id"], 7)
+        self.assertEqual(response.get_json()["forge"], "52.0.1")
+        modpack.get_build_api.assert_called_once_with(
+            "42", cid="client-123", api_key=False
         )
         build.get_modversions_api.assert_called_once_with("")
 
@@ -160,20 +238,28 @@ class ApiTests(unittest.TestCase):
     def test_optional_build_can_include_full_mod_metadata(
         self, _get_key, get_modpack
     ):
-        modpack = Mock()
-        build = Mock(minecraft="1.21.1", min_java="21", min_memory=4096)
+        modpack = Mock(enable_optionals=1, enable_server=0)
+        build = Mock(
+            id=7,
+            minecraft="1.21.1",
+            min_java="21",
+            min_memory=4096,
+            forge=None,
+        )
         build.get_modversions_api.return_value = [
             SimpleNamespace(
+                id=9,
                 modname="example",
                 version="2.0",
                 md5="abc123",
+                filesize=1234,
                 pretty_name="Example Mod",
                 author="Example Author",
                 description="Example description",
                 link="https://example.test/mod",
             )
         ]
-        modpack.get_build_api.return_value = build
+        modpack.get_build_api.side_effect = [None, build]
         get_modpack.return_value = modpack
 
         response = self.client.get(
@@ -183,18 +269,67 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["mods"][0]["pretty_name"], "Example Mod")
         self.assertEqual(response.get_json()["mods"][0]["author"], "Example Author")
+        self.assertEqual(
+            modpack.get_build_api.call_args_list,
+            [
+                call("42-optional", cid="client-123", api_key=False),
+                call("42", cid="client-123", api_key=False),
+            ],
+        )
         build.get_modversions_api.assert_called_once_with("optional")
 
-    @patch.object(api_module.Mod, "get_versions_api")
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_hyphenated_build_name_is_not_truncated(self, _get_key, get_modpack):
+        modpack = Mock()
+        build = Mock(
+            id=8,
+            minecraft="1.21.1",
+            min_java="21",
+            min_memory=4096,
+            forge=None,
+        )
+        build.get_modversions_api.return_value = []
+        modpack.get_build_api.return_value = build
+        get_modpack.return_value = modpack
+
+        response = self.client.get(
+            "/api/modpack/stable/1.20.1-beta-2?cid=client-123"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        modpack.get_build_api.assert_called_once_with(
+            "1.20.1-beta-2", cid="client-123", api_key=False
+        )
+        build.get_modversions_api.assert_called_once_with("")
+
+    @patch.object(api_module.Mod, "get_all_api")
+    def test_mod_catalog_matches_technic_read_api(self, get_mods):
+        get_mods.return_value = [
+            SimpleNamespace(name="first", pretty_name="First Mod"),
+            SimpleNamespace(name="second", pretty_name="Second Mod"),
+        ]
+
+        response = self.client.get("/api/mod")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.get_json(),
+            {"mods": {"first": "First Mod", "second": "Second Mod"}},
+        )
+
     @patch.object(api_module.Mod, "get_by_name_api")
-    def test_mod_details_list_available_versions(self, get_mod, get_versions):
-        mod = Mock()
+    def test_mod_details_list_available_versions(self, get_mod):
+        mod = Mock(id=3)
         mod.to_json.return_value = {
             "name": "example",
             "pretty_name": "Example Mod",
         }
+        mod.get_versions_api.return_value = [
+            {"version": "1.0"},
+            {"version": "2.0"},
+        ]
         get_mod.return_value = mod
-        get_versions.return_value = [{"version": "1.0"}, {"version": "2.0"}]
 
         response = self.client.get("/api/mod/example")
 
@@ -211,13 +346,14 @@ class ApiTests(unittest.TestCase):
     @patch.object(api_module.Mod, "get_by_name_api")
     def test_mod_version_has_download_url(self, get_mod):
         mod = Mock()
-        version = Mock(version="2.0")
+        version = Mock(id=4, version="2.0")
         version.to_json.return_value = {
             "mod_id": 1,
             "version": "2.0",
             "md5": "abc123",
             "filesize": 1234,
         }
+        version.get_builds_api.return_value = []
         mod.get_version_api.return_value = version
         get_mod.return_value = mod
 
@@ -226,8 +362,11 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.get_json()["url"],
-            "https://cdn.example.test/mods/example/2.0.zip",
+            "https://cdn.example.test/mods/example/example-2.0.zip",
         )
+        self.assertEqual(response.get_json()["id"], 4)
+        self.assertEqual(response.get_json()["builds"], [])
+        version.get_builds_api.assert_called_once_with(cid=None, api_key=False)
 
 
 if __name__ == "__main__":

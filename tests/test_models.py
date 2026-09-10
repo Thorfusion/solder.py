@@ -369,6 +369,148 @@ class ModelBehaviorTests(unittest.TestCase):
 
         self.assertEqual(versions, [])
 
+    def test_hidden_pack_direct_lookup_only_enforces_privacy(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = None
+
+        with patch("models.modpack.Database.get_connection", return_value=connection):
+            result = Modpack.get_by_cid_slug_api(None, "hidden-pack")
+
+        self.assertIsNone(result)
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("private = 0", query)
+        self.assertNotIn("hidden = 0", query)
+        self.assertEqual(parameters, ("hidden-pack", None))
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_modpack_listing_is_deterministic_and_client_scoped(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = []
+
+        with patch("models.modpack.Database.get_connection", return_value=connection):
+            result = Modpack.get_by_cid_api("client-id")
+
+        self.assertEqual(result, [])
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("hidden = 0 AND private = 0", query)
+        self.assertIn("ORDER BY id ASC", query)
+        self.assertEqual(parameters, ("client-id",))
+
+    def test_build_api_enforces_publish_and_private_access(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = None
+
+        with patch("models.build.Database.get_connection", return_value=connection):
+            result = Build.get_by_modpack_version_api(
+                SimpleNamespace(id=3),
+                "1.0",
+                cid="client-id",
+                api_key=False,
+            )
+
+        self.assertIsNone(result)
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("builds.is_published = 1", query)
+        self.assertIn("builds.private = 0", query)
+        self.assertIn("c.uuid = %s", query)
+        self.assertEqual(parameters, (3, "1.0", "client-id"))
+
+    def test_api_key_still_cannot_read_unpublished_builds(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = None
+
+        with patch("models.build.Database.get_connection", return_value=connection):
+            result = Build.get_by_modpack_version_api(
+                SimpleNamespace(id=3), "1.0", api_key=True
+            )
+
+        self.assertIsNone(result)
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("builds.is_published = 1", query)
+        self.assertNotIn("builds.private = 0", query)
+        self.assertEqual(parameters, (3, "1.0"))
+
+    def test_build_manifest_mods_use_natural_name_order(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+
+        def modversion_row(identifier, name):
+            return {
+                "id": identifier,
+                "mod_id": identifier,
+                "version": "1.0",
+                "mcversion": "1.21.1",
+                "md5": str(identifier) * 32,
+                "created_at": None,
+                "updated_at": None,
+                "filesize": 1024,
+                "modname": name,
+                "pretty_name": name,
+                "author": "CI",
+                "link": None,
+                "description": None,
+                "optional": 0,
+            }
+
+        cursor.fetchall.return_value = [
+            modversion_row(10, "example10"),
+            modversion_row(2, "Example2"),
+            modversion_row(1, "alpha"),
+        ]
+        build = Build(
+            1, 2, "3", None, None, "1.21.1", None, 1, 0, "21", 4096, 0
+        )
+
+        with patch("models.build.Database.get_connection", return_value=connection):
+            versions = build.get_modversions_api("")
+
+        self.assertEqual(
+            [version.modname for version in versions],
+            ["alpha", "Example2", "example10"],
+        )
+
+    def test_modversion_build_memberships_are_shaped_for_the_read_api(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [
+            {
+                "build_id": 4,
+                "build_version": "2.0",
+                "modpack_id": 3,
+                "modpack_slug": "example-pack",
+                "modpack_name": "Example Pack",
+            }
+        ]
+        version = Modversion(2, 1, "1.0", "1.21.1", "abc", None, None, 1)
+
+        with patch(
+            "models.modversion.Database.get_connection", return_value=connection
+        ):
+            builds = version.get_builds_api(cid="client-id")
+
+        self.assertEqual(
+            builds,
+            [
+                {
+                    "id": 4,
+                    "version": "2.0",
+                    "modpack": {
+                        "id": 3,
+                        "name": "example-pack",
+                        "display_name": "Example Pack",
+                    },
+                }
+            ],
+        )
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("builds.is_published = 1", query)
+        self.assertEqual(parameters, (2, "client-id"))
+
     def test_build_editor_groups_versions_and_excludes_assigned_mods(self):
         connection = Mock()
         cursor = connection.cursor.return_value

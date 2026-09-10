@@ -90,11 +90,41 @@ class Mod:
     def get_by_name_api(cls, name):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM mods WHERE name = %s", (name,))
-        row = cur.fetchone()
-        if row:
-            return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"])
-        return None
+        try:
+            cur.execute("SELECT * FROM mods WHERE name = %s", (name,))
+            row = cur.fetchone()
+            if row:
+                return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"])
+            return None
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def get_all_api(cls):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute("SELECT * FROM mods ORDER BY id ASC")
+            return [
+                cls(
+                    row["id"],
+                    row["name"],
+                    row["description"],
+                    row["author"],
+                    row["link"],
+                    row["created_at"],
+                    row["updated_at"],
+                    row["pretty_name"],
+                    row["side"],
+                    row["modtype"],
+                    row["note"],
+                )
+                for row in cur.fetchall()
+            ]
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def get_all():
@@ -128,20 +158,25 @@ class Mod:
     def get_versions_api(self) -> list:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT version FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
-        rows = cur.fetchall()
-        if rows:
-            return rows
-        return []
+        try:
+            cur.execute("SELECT version FROM modversions WHERE mod_id = %s ORDER BY id ASC", (self.id,))
+            return cur.fetchall()
+        finally:
+            cur.close()
+            conn.close()
 
     def get_version_api(self, version):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modversions WHERE mod_id = %s AND version = %s", (self.id, version))
-        row = cur.fetchone()
-        if row:
-            return Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
-        return None
+        try:
+            cur.execute("SELECT * FROM modversions WHERE mod_id = %s AND version = %s", (self.id, version))
+            row = cur.fetchone()
+            if row:
+                return Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
+            return None
+        finally:
+            cur.close()
+            conn.close()
     
     def extract_jar_from_zip(zip_paths):
         # Get folder where the zip file is located

@@ -4,7 +4,7 @@ from api import api, solderpy_version
 from alogin import alogin
 from asetup import asetup
 from asite import asite
-from flask import Flask, render_template
+from flask import Flask, jsonify, render_template, request
 from models.common import debug, host, port, api_only, management_only, migratetechnic, new_user, DB_IS_UP, reverse_proxy
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -32,7 +32,16 @@ if not api_only:
 
 @app.errorhandler(404)
 def page_not_found(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Not Found"}), 404
     return render_template("404.html", error=e), 404
+
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Method Not Allowed"}), 405
+    return render_template("404.html", error=e), 405
 
 if __name__ == "__main__":
     app.run(debug=debug, use_reloader=False, host=host, port=port)

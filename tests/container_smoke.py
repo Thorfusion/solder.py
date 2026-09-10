@@ -26,7 +26,7 @@ def main(image: str) -> None:
             "--name",
             container,
             "--publish",
-            "127.0.0.1::5000",
+            "127.0.0.1:0:5000",
             "--env",
             "AWS_EC2_METADATA_DISABLED=true",
             "--env",

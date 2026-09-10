@@ -1,4 +1,5 @@
 import datetime
+import re
 
 from flask import flash
 
@@ -122,35 +123,88 @@ class Build:
         return []
     
     @staticmethod
-    def get_by_modpack_api(modpack):
+    def get_by_modpack_api(modpack, cid=None, api_key=False):
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            """SELECT builds.*
-                FROM builds
-                WHERE modpack_id = %s
-                ORDER BY builds.id ASC
-            """, (modpack.id,))
-        builds = cursor.fetchall()
-        if builds:
-            return [Build(**build) for build in builds]
-        return []
+        try:
+            if api_key:
+                cursor.execute(
+                    """SELECT builds.*
+                       FROM builds
+                       WHERE builds.modpack_id = %s
+                         AND builds.is_published = 1
+                       ORDER BY builds.id ASC""",
+                    (modpack.id,),
+                )
+            else:
+                cursor.execute(
+                    """SELECT builds.*
+                       FROM builds
+                       INNER JOIN modpacks ON builds.modpack_id = modpacks.id
+                       WHERE builds.modpack_id = %s
+                         AND builds.is_published = 1
+                         AND (
+                              (modpacks.private = 0 AND builds.private = 0)
+                              OR EXISTS (
+                                  SELECT 1
+                                  FROM client_modpack cm
+                                  INNER JOIN clients c ON cm.client_id = c.id
+                                  WHERE cm.modpack_id = builds.modpack_id
+                                    AND c.uuid = %s
+                              )
+                         )
+                       ORDER BY builds.id ASC""",
+                    (modpack.id, cid),
+                )
+            return [Build(**build) for build in cursor.fetchall()]
+        finally:
+            cursor.close()
+            conn.close()
 
     @staticmethod
     def get_by_modpack_cid(modpack, cid):
+        return Build.get_by_modpack_api(modpack, cid=cid)
+
+    @classmethod
+    def get_by_modpack_version_api(cls, modpack, version, cid=None, api_key=False):
+        """Return a published build only when the API caller may access it."""
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            """SELECT builds.*
-                FROM builds
-                WHERE modpack_id = %s
-                AND is_published = 1 AND (private = 0 OR modpack_id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))
-                ORDER BY builds.id ASC
-            """, (modpack.id, cid))
-        builds = cursor.fetchall()
-        if builds:
-            return [Build(**build) for build in builds]
-        return []
+        try:
+            if api_key:
+                cursor.execute(
+                    """SELECT builds.*
+                       FROM builds
+                       WHERE builds.modpack_id = %s
+                         AND builds.version = %s
+                         AND builds.is_published = 1""",
+                    (modpack.id, version),
+                )
+            else:
+                cursor.execute(
+                    """SELECT builds.*
+                       FROM builds
+                       INNER JOIN modpacks ON builds.modpack_id = modpacks.id
+                       WHERE builds.modpack_id = %s
+                         AND builds.version = %s
+                         AND builds.is_published = 1
+                         AND (
+                              (modpacks.private = 0 AND builds.private = 0)
+                              OR EXISTS (
+                                  SELECT 1
+                                  FROM client_modpack cm
+                                  INNER JOIN clients c ON cm.client_id = c.id
+                                  WHERE cm.modpack_id = builds.modpack_id
+                                    AND c.uuid = %s
+                              )
+                         )""",
+                    (modpack.id, version, cid),
+                )
+            build = cursor.fetchone()
+            return cls(**build) if build else None
+        finally:
+            cursor.close()
+            conn.close()
 
     @classmethod
     def get_by_modpack_version(cls, modpack, version):
@@ -198,8 +252,8 @@ class Build:
                 INNER JOIN build_modversion ON modversions.id = build_modversion.modversion_id JOIN mods ON modversions.mod_id = mods.id 
                 WHERE build_modversion.build_id = %s AND build_modversion.optional = 0 AND mods.side IN ('CLIENT','BOTH')
                 """, (self.id,))
-        modversions = cursor.fetchall()
-        if modversions:
+        try:
+            modversions = cursor.fetchall()
             versions = []
             for mv in modversions:
                 v = Modversion(mv["id"], mv["mod_id"], mv["version"], mv["mcversion"], mv["md5"], mv["created_at"], mv["updated_at"], mv["filesize"], mv["optional"])
@@ -209,5 +263,14 @@ class Build:
                 v.link = mv["link"]
                 v.description = mv["description"]
                 versions.append(v)
-            return versions
-        return []
+
+            def natural_name_key(modversion):
+                parts = re.split(r"(\d+)", modversion.modname.casefold())
+                return tuple(
+                    int(part) if part.isdigit() else part for part in parts
+                ), modversion.id
+
+            return sorted(versions, key=natural_name_key)
+        finally:
+            cursor.close()
+            conn.close()
