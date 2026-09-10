@@ -6,6 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from mysql.connector import IntegrityError, errorcode
+
 from tests.environment import configure_test_environment
 
 
@@ -15,7 +17,7 @@ from models.build import Build  # noqa: E402
 from models.build_modversion import Build_modversion  # noqa: E402
 from models.common import common  # noqa: E402
 from models.database import Database  # noqa: E402
-from models.mod import Mod  # noqa: E402
+from models.mod import DuplicateModError, Mod  # noqa: E402
 from models.modpack import Modpack  # noqa: E402
 from models.modversion import Modversion  # noqa: E402
 from models.passhasher import Passhasher  # noqa: E402
@@ -100,6 +102,57 @@ class ModelSerializationTests(unittest.TestCase):
 
 
 class ModelBehaviorTests(unittest.TestCase):
+    def test_new_mod_uses_the_insert_id_and_closes_the_connection(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.lastrowid = 42
+
+        with patch("models.mod.Database.get_connection", return_value=connection):
+            mod = Mod.new(
+                "new-mod",
+                "Description",
+                "Author",
+                "https://example.test/mod",
+                "New Mod",
+                "BOTH",
+                "MOD",
+                "Note",
+            )
+
+        self.assertEqual(mod.id, 42)
+        self.assertEqual(cursor.execute.call_count, 1)
+        connection.commit.assert_called_once_with()
+        connection.rollback.assert_not_called()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_duplicate_mod_rolls_back_and_raises_a_specific_error(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.execute.side_effect = IntegrityError(
+            msg="Duplicate entry", errno=errorcode.ER_DUP_ENTRY
+        )
+
+        with (
+            patch("models.mod.Database.get_connection", return_value=connection),
+            self.assertRaises(DuplicateModError),
+        ):
+            Mod.new(
+                "existing-mod",
+                "Description",
+                "Author",
+                "https://example.test/mod",
+                "Existing Mod",
+                "BOTH",
+                "MOD",
+                "Note",
+            )
+
+        connection.commit.assert_not_called()
+        connection.rollback.assert_called_once_with()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
     def test_failed_database_probe_is_safe_outside_a_request(self):
         with patch(
             "models.database.connector.connect",

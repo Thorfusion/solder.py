@@ -288,6 +288,33 @@ def exercise_synthetic_user_login(base_url: str) -> None:
         if response.status != 200 or b"CI Example Mod" not in build_editor:
             raise AssertionError("The authenticated build editor did not render")
 
+    duplicate_request = urllib.request.Request(
+        f"{base_url}/newmod",
+        data=urllib.parse.urlencode(
+            {
+                "pretty_name": "Duplicate CI Mod",
+                "name": "ci-example-mod",
+                "author": "CI",
+                "description": "Duplicate handling test",
+                "link": "https://example.invalid/duplicate-mod",
+                "flexRadioDefault": "BOTH",
+                "type": "MOD",
+                "internal_note": "Synthetic duplicate",
+            }
+        ).encode(),
+        method="POST",
+    )
+    try:
+        opener.open(duplicate_request, timeout=5)
+    except urllib.error.HTTPError as error:
+        duplicate_response = error.read()
+        if error.code != 409 or b"already exists" not in duplicate_response:
+            raise AssertionError(
+                "Duplicate mod submission did not return a useful conflict error"
+            ) from error
+    else:
+        raise AssertionError("Duplicate mod submission unexpectedly succeeded")
+
 
 def test_fixture(image: str, fixture: Path, migrate: bool) -> None:
     suffix = uuid.uuid4().hex

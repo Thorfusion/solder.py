@@ -10,7 +10,7 @@ from models.client import Client
 from models.client_modpack import Client_modpack
 from models.database import Database
 from models.key import Key
-from models.mod import Mod
+from models.mod import DuplicateModError, Mod
 from models.modpack import Modpack
 from models.modversion import Modversion
 from models.session import Session
@@ -168,7 +168,14 @@ def newmod():
     if request.method == "POST":
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
-        Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
+        try:
+            Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
+        except DuplicateModError:
+            flash(
+                f'A mod with the slug "{request.form["name"]}" already exists.',
+                "error",
+            )
+            return render_template("newmod.html"), 409
         flash("added mod", "success")
         return redirect(url_for('asite.modlibrary'))
 

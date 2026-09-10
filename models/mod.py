@@ -1,11 +1,16 @@
 import datetime
 
 from flask import flash
+from mysql.connector import IntegrityError, errorcode
 
 from .database import Database
 from .modversion import Modversion
 import zipfile
 import os
+
+
+class DuplicateModError(ValueError):
+    """Raised when a mod slug is already present in the database."""
 
 
 class Mod:
@@ -27,11 +32,18 @@ class Mod:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, modtype, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, modtype, note))
-        conn.commit()
-        cur.execute("SELECT LAST_INSERT_ID() AS id")
-        id = cur.fetchone()["id"]
-        return cls(id, name, description, author, link, now, now, pretty_name, side, modtype, note)
+        try:
+            cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, modtype, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, modtype, note))
+            conn.commit()
+            return cls(cur.lastrowid, name, description, author, link, now, now, pretty_name, side, modtype, note)
+        except IntegrityError as error:
+            conn.rollback()
+            if error.errno == errorcode.ER_DUP_ENTRY:
+                raise DuplicateModError(name) from error
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def update(id, name, description, author, link, pretty_name, side, modtype, note):
