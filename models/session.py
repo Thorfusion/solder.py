@@ -84,7 +84,7 @@ class Session:
             conn = Database.get_connection()
             cur = conn.cursor()
             print("deleting sessions")
-            cur.execute("DELETE FROM sessions WHERE expiry < NOW()")
+            cur.execute("DELETE FROM `sessions` WHERE expiry < NOW()")
             conn.commit()
             conn.close()
             time.sleep(3600)

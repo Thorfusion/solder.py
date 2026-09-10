@@ -1,0 +1,62 @@
+name: Update Python dependencies
+
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-python-dependencies
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Update, test, and open pull request
+    runs-on: self-hosted
+    timeout-minutes: 45
+    env:
+      PIPENV_DONT_LOAD_ENV: "1"
+      PIPENV_NOSPIN: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: Pipfile
+          cache: pipenv
+
+      - name: Install Pipenv
+        run: python -m pip install --upgrade pip pipenv
+
+      - name: Update lock file and environment
+        run: pipenv update --clear
+
+      - name: Verify updated dependencies
+        run: |
+          pipenv verify
+          pipenv run python -m pip check
+          pipenv run python -m unittest discover -s tests -v
+
+      - name: Open or refresh dependency pull request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          # An automation token makes the resulting pull_request event run the
+          # required checks. GitHub suppresses events created by GITHUB_TOKEN.
+          token: ${{ secrets.DEPENDENCY_UPDATE_TOKEN }}
+          branch: automation/python-dependency-updates
+          delete-branch: true
+          add-paths: Pipfile.lock
+          commit-message: "chore: update Python dependencies"
+          title: "chore: update Python dependencies"
+          body: |
+            Automated weekly update of the Python dependency lock file.
+
+            The updated dependency set passed `pip check` and the solder.py test suite.

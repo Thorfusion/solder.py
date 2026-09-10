@@ -1,7 +1,16 @@
 import datetime
 
+from flask import flash
+from mysql.connector import IntegrityError, errorcode
+
 from .database import Database
 from .modversion import Modversion
+import zipfile
+import os
+
+
+class DuplicateModError(ValueError):
+    """Raised when a mod slug is already present in the database."""
 
 
 class Mod:
@@ -23,11 +32,18 @@ class Mod:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, modtype, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, modtype, note))
-        conn.commit()
-        cur.execute("SELECT LAST_INSERT_ID() AS id")
-        id = cur.fetchone()["id"]
-        return cls(id, name, description, author, link, now, now, pretty_name, side, modtype, note)
+        try:
+            cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, modtype, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, modtype, note))
+            conn.commit()
+            return cls(cur.lastrowid, name, description, author, link, now, now, pretty_name, side, modtype, note)
+        except IntegrityError as error:
+            conn.rollback()
+            if error.errno == errorcode.ER_DUP_ENTRY:
+                raise DuplicateModError(name) from error
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def update(id, name, description, author, link, pretty_name, side, modtype, note):
@@ -122,6 +138,30 @@ class Mod:
         if row:
             return Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
         return None
+    
+    def extract_jar_from_zip(zip_paths):
+        # Get folder where the zip file is located
+        base_dir = os.path.dirname(zip_paths)
+
+        with zipfile.ZipFile(zip_paths, 'r') as zip_ref:
+            # Find jar file inside mods/ folder
+            jar_files = [f for f in zip_ref.namelist() if f.startswith("mods/") and f.endswith(".jar")]
+
+            if not jar_files:
+                flash("failed to extract jarfile", "error")
+
+            jar_inside_zip = jar_files[0]  # Take the first match
+            jar_name = os.path.basename(jar_inside_zip)
+
+            # Full path where the JAR will be extracted
+            output_path = os.path.join(base_dir, jar_name)
+
+            # Extract the jar file only
+            with zip_ref.open(jar_inside_zip) as source, open(output_path, 'wb') as target:
+                target.write(source.read())
+
+            return jar_name
+
 
     def to_json(self):
         return {

@@ -2,7 +2,7 @@ from os import getenv
 import os
 
 from dotenv import load_dotenv
-from flask import flash
+from flask import flash, has_request_context
 from mysql import connector
 
 from .errorPrinter import ErrorPrinter
@@ -34,7 +34,11 @@ class Database:
                 database=db_name,
             )
         except Exception as e:
-            print("Error connecting to database", e)
+            ErrorPrinter.message("Error connecting to database", e)
+            # Connections are also checked while the application is importing,
+            # before Flask has established a request context.
+            if has_request_context():
+                flash("Error connecting to database", "error")
             return None
         return conn
 
@@ -42,22 +46,21 @@ class Database:
     def is_setup() -> int:
         if DISABLE_is_setup == True:
             return 1
-        if Database.get_connection() is None:
-            return 2
         conn = Database.get_connection()
-        cur = conn.cursor()
-        sql = "SHOW TABLES"
-        table_name = "Tables_in_" + db_name
+        if conn is None:
+            return 2
         try:
-            cur.execute(sql)
+            cur = conn.cursor()
+            cur.execute("SHOW TABLES")
+            tables_found = cur.fetchall()
         except Exception as e:
             ErrorPrinter.message("An error occurred whilst trying to check database setup", e)
+            if has_request_context():
+                flash("An error occurred whilst trying to check database setup", "error")
             return 2
-        table = cur.fetchall()
-        conn.close()
-        if table == None:
-            return 0
-        if not table:
+        finally:
+            conn.close()
+        if not tables_found:
             return 0
         return 1
 
@@ -125,7 +128,8 @@ class Database:
                         jarmd5 VARCHAR(255),
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        filesize INT
+                        filesize INT,
+                        INDEX idx_modversions_mod_mcversion (mod_id, mcversion)
                         )"""
             )
             cur.execute(
@@ -135,7 +139,8 @@ class Database:
                         build_id INT NOT NULL,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        optional TINYINT(1) NOT NULL DEFAULT(0)
+                        optional TINYINT(1) NOT NULL DEFAULT(0),
+                        INDEX idx_build_modversion_build_version (build_id, modversion_id)
                         )"""
             )
             cur.execute(
@@ -222,111 +227,163 @@ class Database:
             con.close()
         except Exception as e:
             ErrorPrinter.message("Error creating tables", e)
+            flash("Error creating tables", "error")
 
     @staticmethod
     def migratetechnic_tables() -> bool:
+        timestamp_migrations = (
+            """ALTER TABLE modpacks
+               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
+            """ALTER TABLE mods
+               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
+            """ALTER TABLE modversions
+               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
+            """ALTER TABLE build_modversion
+               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
+            """ALTER TABLE builds
+               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
+            """ALTER TABLE client_modpack
+               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
+            """ALTER TABLE clients
+               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
+            """ALTER TABLE `keys`
+               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
+            """ALTER TABLE user_permissions
+               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
+            """ALTER TABLE users
+               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
+        )
+        column_migrations = (
+            (
+                "modpacks",
+                "user_id",
+                "ALTER TABLE modpacks ADD COLUMN user_id INT NOT NULL DEFAULT 1 AFTER slug",
+            ),
+            (
+                "modpacks",
+                "pinned",
+                "ALTER TABLE modpacks ADD COLUMN pinned TINYINT(1) NOT NULL DEFAULT 0",
+            ),
+            (
+                "modpacks",
+                "enable_optionals",
+                "ALTER TABLE modpacks ADD COLUMN enable_optionals BOOLEAN DEFAULT 0",
+            ),
+            (
+                "modpacks",
+                "enable_server",
+                "ALTER TABLE modpacks ADD COLUMN enable_server BOOLEAN DEFAULT 0",
+            ),
+            (
+                "mods",
+                "side",
+                "ALTER TABLE mods ADD COLUMN side ENUM('CLIENT', 'SERVER', 'BOTH') DEFAULT 'BOTH'",
+            ),
+            (
+                "mods",
+                "modtype",
+                "ALTER TABLE mods ADD COLUMN modtype ENUM('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'MOD'",
+            ),
+            (
+                "mods",
+                "note",
+                "ALTER TABLE mods ADD COLUMN note VARCHAR(255) DEFAULT ''",
+            ),
+            (
+                "builds",
+                "minecraft",
+                "ALTER TABLE builds ADD COLUMN minecraft VARCHAR(255) NOT NULL DEFAULT ''",
+            ),
+            (
+                "builds",
+                "forge",
+                "ALTER TABLE builds ADD COLUMN forge VARCHAR(255)",
+            ),
+            (
+                "builds",
+                "marked",
+                "ALTER TABLE builds ADD COLUMN marked TINYINT(1) NOT NULL DEFAULT 0",
+            ),
+            (
+                "build_modversion",
+                "optional",
+                "ALTER TABLE build_modversion ADD COLUMN optional TINYINT(1) NOT NULL DEFAULT 0",
+            ),
+            (
+                "modversions",
+                "jarmd5",
+                "ALTER TABLE modversions ADD COLUMN jarmd5 VARCHAR(255) AFTER md5",
+            ),
+            (
+                "modversions",
+                "mcversion",
+                "ALTER TABLE modversions ADD COLUMN mcversion VARCHAR(255) AFTER version",
+            ),
+            (
+                "user_permissions",
+                "solder_env",
+                "ALTER TABLE user_permissions ADD COLUMN solder_env BOOLEAN DEFAULT 0",
+            ),
+        )
+        index_migrations = (
+            (
+                "build_modversion",
+                "idx_build_modversion_build_version",
+                "ALTER TABLE build_modversion "
+                "ADD INDEX idx_build_modversion_build_version (build_id, modversion_id)",
+            ),
+            (
+                "modversions",
+                "idx_modversions_mod_mcversion",
+                "ALTER TABLE modversions "
+                "ADD INDEX idx_modversions_mod_mcversion (mod_id, mcversion)",
+            ),
+        )
+
+        con = Database.get_connection()
+        if con is None:
+            return False
+
         try:
-            con = Database.get_connection()
             cur = con.cursor()
-            cur.execute(
-                """ALTER TABLE modpacks
-                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                """
-            )
-            cur.execute(
-                """ALTER TABLE mods
-                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                """
-            )
-            cur.execute(
-                """ALTER TABLE modversions
-                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                """
-            )
-            cur.execute(
-                """ALTER TABLE build_modversion
-                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                """
-            )
-            cur.execute(
-                """ALTER TABLE builds
-                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                """
-            )
-            cur.execute(
-                """ALTER TABLE clients
-                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                """
-            )
-            cur.execute(
-                """ALTER TABLE `keys`
-                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                """
-            )
-            cur.execute(
-                """ALTER TABLE builds
-                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                """
-            )
-            cur.execute(
-                """ALTER TABLE user_permissions
-                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                """
-            )
-            cur.execute(
-                """ALTER TABLE users
-                    MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                """
-            )
-            con.commit()
-            cur.execute(
-                """ALTER TABLE modpacks
-                    ADD COLUMN user_id INT NOT NULL AFTER slug,
-                    ADD COLUMN pinned TINYINT(1) NOT NULL DEFAULT(0),
-                    ADD COLUMN enable_optionals BOOLEAN DEFAULT(0),
-                    ADD COLUMN enable_server BOOLEAN DEFAULT(0)
-                """
-            )
-            cur.execute(
-                """ALTER TABLE mods
-                    ADD COLUMN side enum('CLIENT', 'SERVER', 'BOTH') DEFAULT 'BOTH',
-                    ADD COLUMN modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'MOD',
-                    ADD COLUMN note VARCHAR(255) DEFAULT('')
-                """
-            )
-            cur.execute(
-                """ALTER TABLE builds
-                    ADD COLUMN minecraft VARCHAR(255) NOT NULL DEFAULT(''),
-                    ADD COLUMN forge VARCHAR(255),
-                    ADD COLUMN marked TINYINT(1) NOT NULL DEFAULT(0)
-                """
-            )
-            cur.execute(
-                """ALTER TABLE build_modversion
-                    ADD COLUMN optional TINYINT(1) NOT NULL DEFAULT(0)
-                """
-            )
-            cur.execute(
-                """ALTER TABLE modversions
-                    ADD COLUMN jarmd5 VARCHAR(255) AFTER md5,
-                    ADD COLUMN mcversion VARCHAR(255) AFTER version
-                """
-            )
-            cur.execute(
-                """ALTER TABLE user_permissions
-                    ADD COLUMN solder_env BOOLEAN DEFAULT(0)
-                """
-            )
+            for query in timestamp_migrations:
+                cur.execute(query)
+
+            for table, column, query in column_migrations:
+                cur.execute(
+                    """SELECT 1
+                       FROM information_schema.COLUMNS
+                       WHERE TABLE_SCHEMA = %s
+                         AND TABLE_NAME = %s
+                         AND COLUMN_NAME = %s""",
+                    (db_name, table, column),
+                )
+                if cur.fetchone() is None:
+                    cur.execute(query)
+
+            for table, index, query in index_migrations:
+                cur.execute(
+                    """SELECT 1
+                       FROM information_schema.STATISTICS
+                       WHERE TABLE_SCHEMA = %s
+                         AND TABLE_NAME = %s
+                         AND INDEX_NAME = %s
+                       LIMIT 1""",
+                    (db_name, table, index),
+                )
+                if cur.fetchone() is None:
+                    cur.execute(query)
+
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -345,10 +402,15 @@ class Database:
                 )"""
             )
             con.commit()
-            con.close()
             print("technic database migrated!")
-        except Exception:
-            ErrorPrinter.message("Error migration technic tables", Exception)
+            return True
+        except Exception as error:
+            ErrorPrinter.message("Error migrating Technic Solder tables", error)
+            if has_request_context():
+                flash("Error migrating Technic Solder tables", "error")
+            return False
+        finally:
+            con.close()
 
     @staticmethod
     def create_session_table() -> bool:
@@ -367,3 +429,4 @@ class Database:
             con.close()
         except Exception:
             print.message("Error making session table", Exception)
+            flash("Error making session table", "error")

@@ -1,7 +1,6 @@
 import os
 import threading
 import boto3
-import concurrent
 
 from api import solderpy_version
 from flask import Blueprint, app, flash, redirect, render_template, request, session, url_for
@@ -11,7 +10,7 @@ from models.client import Client
 from models.client_modpack import Client_modpack
 from models.database import Database
 from models.key import Key
-from models.mod import Mod
+from models.mod import DuplicateModError, Mod
 from models.modpack import Modpack
 from models.modversion import Modversion
 from models.session import Session
@@ -20,6 +19,7 @@ from mysql import connector
 from werkzeug.utils import secure_filename
 from models.common import public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl
 from models.user_modpack import User_modpack
+from models.errorPrinter import ErrorPrinter
 
 __version__ = solderpy_version
 
@@ -168,7 +168,14 @@ def newmod():
     if request.method == "POST":
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
-        Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
+        try:
+            Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
+        except DuplicateModError:
+            flash(
+                f'A mod with the slug "{request.form["name"]}" already exists.',
+                "error",
+            )
+            return render_template("newmod.html"), 409
         flash("added mod", "success")
         return redirect(url_for('asite.modlibrary'))
 
@@ -454,25 +461,6 @@ def modpackbuild(id):
     if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(id)) == False:
         return redirect(request.referrer)
 
-    if request.method == "GET":
-        try:
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                threadlistmod = executor.submit(Mod.get_all_pretty_names)
-                threadpackbuild = executor.submit(Build.get_by_id, id)
-                threadlistmodversions = executor.submit(Modversion.get_all)
-                threadbuildlist = executor.submit(Build_modversion.get_modpack_build, id)
-                threadpackbuildname = executor.submit(Build.get_modpackname_by_id, id)
-                listmod = threadlistmod.result()
-                packbuild = threadpackbuild.result()
-                listmodversions = threadlistmodversions.result()
-                buildlist = threadbuildlist.result()
-                packbuildname = threadpackbuildname.result()
-        except connector.ProgrammingError as _:
-            flash("failed to build modpackbuild", "error")
-            raise _
-            Database.create_tables()
-            mod_version_combo = []
-
     if request.method == "POST":
         if "form-submit" in request.form:
             publish = "0"
@@ -518,7 +506,24 @@ def modpackbuild(id):
             flash("added modversion to marked build", "success")
             return redirect(url_for("asite.modpackbuild", id=id))
 
-    return render_template("modpackbuild.html", listmod=listmod, packbuild=packbuild, packbuildname=packbuildname, listmodversions=listmodversions, buildlist=buildlist)
+    try:
+        editor = Build_modversion.get_build_editor_data(id)
+    except connector.ProgrammingError:
+        flash("failed to build modpackbuild", "error")
+        raise
+
+    if editor is None:
+        flash("unable to find build", "error")
+        return redirect(url_for("asite.modpacklibrary"))
+
+    return render_template(
+        "modpackbuild.html",
+        listmod=editor.listmod,
+        packbuild=editor.packbuild,
+        packbuildname=editor.packbuildname,
+        listmodversions=editor.listmodversions,
+        buildlist=editor.buildlist,
+    )
 
 
 @asite.route("/modlibrary", methods=["GET"])
@@ -574,19 +579,18 @@ def modlibrary_post():
                 keyname = "mods/" + request.form["mod"] + "/" + filename
                 try:
                     R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + filename, R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
-                except:
+                except Exception as e:
+                    ErrorPrinter.message("failed to upload zipfile to buckets", e)
                     flash("failed to upload zipfile to bucket", "error")
-            jarfilew = request.files['jarfile']
-            if jarfilew and allowed_file(jarfilew.filename):
-                jarfilename = secure_filename(jarfilew.filename)
+            if request.form["jarmd5"] != "0":
                 print("saving jar")
-                createFolder(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/")
-                jarfilew.save(os.path.join(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/", jarfilename))
+                jarfilename = Mod.extract_jar_from_zip(UPLOAD_FOLDER + request.form["mod"] + "/" + filename)
                 if R2_BUCKET != None:
                     jarkeyname = "mods/" + request.form["mod"] + "/" + jarfilename
                     try:
-                        R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/zip'})
-                    except:
+                        R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/jar'})
+                    except Exception as e:
+                        ErrorPrinter.message("failed to upload jarfile to buckets", e)
                         flash("failed to upload jarfile to bucket", "error")
             flash("added modversion", "success")
             return redirect(url_for('asite.modlibrary'))

@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from models.database import Database
 
 ## Solderpy version
-solderpy_version = "1.7.2"
+solderpy_version = "1.7.4"
 
 load_dotenv(".env")
 
@@ -73,9 +73,26 @@ else:
 
 class common:
 
+    _UPDATE_QUERIES = {
+        ("builds", "is_published"): "UPDATE builds SET is_published = %s WHERE id = %s",
+        ("builds", "private"): "UPDATE builds SET private = %s WHERE id = %s",
+        ("modpacks", "enable_optionals"): "UPDATE modpacks SET enable_optionals = %s WHERE id = %s",
+        ("modpacks", "enable_server"): "UPDATE modpacks SET enable_server = %s WHERE id = %s",
+        ("modpacks", "hidden"): "UPDATE modpacks SET hidden = %s WHERE id = %s",
+        ("modpacks", "latest"): "UPDATE modpacks SET latest = %s WHERE id = %s",
+        ("modpacks", "pinned"): "UPDATE modpacks SET pinned = %s WHERE id = %s",
+        ("modpacks", "private"): "UPDATE modpacks SET private = %s WHERE id = %s",
+        ("modpacks", "recommended"): "UPDATE modpacks SET recommended = %s WHERE id = %s",
+    }
+
     @staticmethod
     def update_checkbox(where_id, value, column, table):
+        try:
+            query = common._UPDATE_QUERIES[(table, column)]
+        except KeyError as error:
+            raise ValueError(f"Unsupported update target: {table}.{column}") from error
+
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("UPDATE {} SET {} = %s WHERE id = %s".format(table, column), (value, where_id))
+        cur.execute(query, (value, where_id))
         conn.commit()

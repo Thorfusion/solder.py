@@ -134,6 +134,7 @@ dmypy.json
 
 # Database dumps
 *.sql
+!tests/fixtures/*.sql
 
 # Private files
 .env

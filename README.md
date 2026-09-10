@@ -331,3 +331,67 @@ python -m pipenv run app
 
 python -m pipenv lock
 ```
+
+## Tests
+
+The test suite uses Python's standard library and does not need a live MySQL
+database or object-storage account. Install the locked application dependencies,
+then run all tests:
+
+```bash
+python -m pip install pipenv
+python -m pipenv sync
+python -m pipenv run python -m unittest discover -s tests -v
+```
+
+The production container and both MySQL fixtures can be tested locally with:
+
+```bash
+docker build --tag solderpy:database-test .
+python -m pipenv run python tests/database_container_smoke.py solderpy:database-test
+```
+
+The checked-in SQL fixtures contain only table definitions and synthetic `ci-*`
+records. The original populated dumps remain ignored and must not be committed.
+
+GitHub Actions also verifies the lock file, imports/compiles the Python sources,
+checks the installed dependency set, and runs the same suite on every pull
+request and trusted branch push.
+
+The weekly dependency updater needs a repository secret named
+`DEPENDENCY_UPDATE_TOKEN`. Use a fine-grained token from an automation account
+with access only to this repository and only **Contents: read/write** and
+**Pull requests: read/write**. This separate token ensures the updater's pull
+request triggers the required checks; the workflow never approves or merges it.
+
+To prevent an untested pull request from being merged, add a branch rule for
+`main`, enable **Require status checks to pass before merging**, and select the
+`solder.py tests` check. The workflow also supports GitHub's merge queue.
+
+## Security checks
+
+Pull requests and trusted branch pushes run several complementary checks:
+
+- CodeQL scans the Python and JavaScript sources with extended security queries.
+- Bandit checks Python-specific security problems.
+- pip-audit checks every locked production dependency for known vulnerabilities.
+- Trivy checks the built production image for fixable high and critical operating
+  system and Python-package vulnerabilities, and publishes SARIF results to the
+  repository Security tab. The same workflow boots the image and verifies the
+  `/api/` health endpoint before the scan.
+- Container integration tests restore sanitized, synthetic versions of both a
+  Technic Solder backup and the current solder.py backup. They verify the
+  Technic migration twice for idempotency, then exercise API keys, clients,
+  modpacks, builds, and mod versions against a real MySQL server.
+- GitHub dependency review checks dependency changes made by pull requests.
+
+Run the Python checks locally with:
+
+```bash
+python -m pipenv sync --dev
+python -m pipenv run python audit_dependencies.py
+python -m pipenv run bandit --recursive app.py api.py alogin.py asetup.py asite.py models --severity-level medium --confidence-level medium
+```
+
+The `Python security` and `Container security` checks can also be selected as
+required status checks in the `main` branch rule.

@@ -138,7 +138,8 @@ class Modversion:
 
     def rehash(self, rehash_url):
         with requests.Session() as s:
-            h = hashlib.md5()
+            # Technic/Solder manifests require MD5 as a file checksum. It is not used for passwords, signatures, or another security purpose.
+            h = hashlib.md5(usedforsecurity=False)
             resp = s.get(rehash_url, stream=True)
             for chunk in resp.iter_content(chunk_size=8192):
                 h.update(chunk)

@@ -1,6 +1,20 @@
+FROM python:3.13-alpine AS dependencies
+
+WORKDIR /build
+COPY /Pipfile /build/
+COPY /Pipfile.lock /build/
+
+RUN python -m pip install --no-cache-dir pipenv \
+    && PIPENV_DONT_LOAD_ENV=1 pipenv requirements --hash > requirements.txt \
+    && python -m pip install --no-cache-dir --ignore-installed --prefix=/install --require-hashes --requirement requirements.txt
+
 FROM python:3.13-alpine
 
+RUN apk upgrade --no-cache \
+    && python -m pip uninstall --yes pip
+
 WORKDIR /app
+COPY --from=dependencies /install /usr/local
 COPY /models/ /app/models/
 COPY /static/ /app/static/
 COPY /templates/ /app/templates/
@@ -21,10 +35,7 @@ ENV APP_HOST=0.0.0.0
 ENV APP_PORT=5000
 ENV APP_DEBUG=false
 EXPOSE 5000
-RUN python -m pip install --upgrade pip
-RUN pip install gunicorn
-RUN pip install pipenv
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --quiet --tries=1 --output-document=- http://127.0.0.1:5000/api/ | grep --quiet '"api":"solder.py"' || exit 1
 
-RUN pipenv install --system --deploy --ignore-pipfile
-
-CMD pipenv run gunicorn -w 1 --threads 8 -b 0.0.0.0:5000 --forwarded-allow-ips=$PROXY_IP app:app
+CMD ["sh", "-c", "exec gunicorn -w 1 --threads 8 -b 0.0.0.0:5000 --forwarded-allow-ips=\"${PROXY_IP:-127.0.0.1}\" app:app"]

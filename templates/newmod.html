@@ -6,41 +6,41 @@
     <form method="post" action="" enctype="multipart/form-data">
         <div class="mb-3">
             <label for="pretty_name" class="form-label">Mod Name</label>
-            <input type="text" class="form-control" name="pretty_name" id="pretty_name" required onkeyup="toslug('name', 'pretty_name')">
+            <input type="text" class="form-control" name="pretty_name" id="pretty_name" value="{{request.form.get('pretty_name', '')}}" required onkeyup="toslug('name', 'pretty_name')">
         </div>
         <div class="mb-3">
             <label for="name" class="form-label">Mod Slug</label>
-            <input type="text" class="form-control" name="name" id="name" required readonly>
+            <input type="text" class="form-control" name="name" id="name" value="{{request.form.get('name', '')}}" required readonly>
         </div>
         <div class="mb-3">
             <label for="author" class="form-label">Author</label>
-            <input type="text" class="form-control" name="author" id="author" required>
+            <input type="text" class="form-control" name="author" id="author" value="{{request.form.get('author', '')}}" required>
         </div>
         <div class="mb-3">
             <label for="description" class="form-label">Description</label>
-            <textarea name="description" id="description" class="form-control" rows="5" required></textarea>
+            <textarea name="description" id="description" class="form-control" rows="5" required>{{request.form.get('description', '')}}</textarea>
         </div>
         <div class="mb-3">
             <label for="link" class="form-label">Mod Website</label>
-            <input type="text" class="form-control" name="link" id="link" required>
+            <input type="text" class="form-control" name="link" id="link" value="{{request.form.get('link', '')}}" required>
         </div>
         <div class="mb-3 gridswrapper">
             <div class="mb-3 grid1">
                 <label>Select side</label>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="CLIENT">
+                    <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault1" value="CLIENT" {%if request.form.get('flexRadioDefault') == 'CLIENT'%}checked{%endif%}>
                     <label class="form-check-label" for="flexRadioDefault1">
                         Client
                     </label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="SERVER">
+                    <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault2" value="SERVER" {%if request.form.get('flexRadioDefault') == 'SERVER'%}checked{%endif%}>
                     <label class="form-check-label" for="flexRadioDefault2">
                         Server
                     </label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" value="BOTH" checked>
+                    <input class="form-check-input" type="radio" name="flexRadioDefault" id="flexRadioDefault3" value="BOTH" {%if request.form.get('flexRadioDefault', 'BOTH') == 'BOTH'%}checked{%endif%}>
                     <label class="form-check-label" for="flexRadioDefault3">
                         Both
                     </label>
@@ -49,37 +49,37 @@
             <div class="mb-3 grid2">
                 <label>Select Type</label>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="type" id="type_MOD" value="MOD" required checked>
+                    <input class="form-check-input" type="radio" name="type" id="type_MOD" value="MOD" required {%if request.form.get('type', 'MOD') == 'MOD'%}checked{%endif%}>
                     <label class="form-check-label" for="type_MOD">
                         MOD
                     </label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="type" id="type_LAUNCHER" value="LAUNCHER" required>
+                    <input class="form-check-input" type="radio" name="type" id="type_LAUNCHER" value="LAUNCHER" required {%if request.form.get('type') == 'LAUNCHER'%}checked{%endif%}>
                     <label class="form-check-label" for="type_LAUNCHER">
                         LAUNCHER
                     </label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="type" id="type_RES" value="RES" required>
+                    <input class="form-check-input" type="radio" name="type" id="type_RES" value="RES" required {%if request.form.get('type') == 'RES'%}checked{%endif%}>
                     <label class="form-check-label" for="type_RES">
                         RESOURCE PACK
                     </label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="type" id="type_CONFIG" value="CONFIG" required>
+                    <input class="form-check-input" type="radio" name="type" id="type_CONFIG" value="CONFIG" required {%if request.form.get('type') == 'CONFIG'%}checked{%endif%}>
                     <label class="form-check-label" for="type_CONFIG">
                         CONFIG
                     </label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="type" id="type_MCIL" value="MCIL" required>
+                    <input class="form-check-input" type="radio" name="type" id="type_MCIL" value="MCIL" required {%if request.form.get('type') == 'MCIL'%}checked{%endif%}>
                     <label class="form-check-label" for="type_MCIL">
                         MCIL
                     </label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="type" id="type_NONE" value="NONE" required>
+                    <input class="form-check-input" type="radio" name="type" id="type_NONE" value="NONE" required {%if request.form.get('type') == 'NONE'%}checked{%endif%}>
                     <label class="form-check-label" for="type_NONE">
                         NONE
                     </label>
@@ -88,7 +88,7 @@
         </div>
         <div class="mb-3">
             <label for="internal_note" class="form-label">Internal note</label>
-            <textarea name="internal_note" id="internal_note" class="form-control" rows="5"></textarea>
+            <textarea name="internal_note" id="internal_note" class="form-control" rows="5">{{request.form.get('internal_note', '')}}</textarea>
         </div>
         <input class="btn btn-success" type="submit" value="Add Mod">
     </form>

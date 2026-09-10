@@ -1,0 +1,115 @@
+"""Create deterministic, synthetic SQL fixtures from the two private dumps.
+
+The source dumps contain production-like data and remain ignored. This script
+keeps their table definitions, removes every data row, normalizes table counters,
+and inserts a tiny set of clearly synthetic records.
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = ROOT / "tests" / "fixtures"
+TECHNIC_OBJECT = (
+    "47709427f96e85865bcc4d0c5fbfbeab1b79ffe4:docu/solder.sql"
+)
+PASSWORD_HASH = (
+    "59e423d8ee3b20da4266e8d80366b6b610975cfd405a75bfb05cf0b1850247f"
+    "df767cd96a6eb70ef18c496d83fdb21e6b1df0c1b846540a76de31baee15eaebc"
+)
+TIMESTAMP = "2024-01-01 00:00:00"
+
+
+COMMON_SEED = f"""
+INSERT INTO `users` (`id`, `username`, `email`, `password`, `created_ip`, `last_ip`, `created_at`, `updated_at`, `remember_token`, `updated_by_ip`, `created_by_user_id`, `updated_by_user_id`) VALUES
+(1, 'ci-user', 'ci-user@example.invalid', '{PASSWORD_HASH}', '127.0.0.1', '127.0.0.1', '{TIMESTAMP}', '{TIMESTAMP}', '', '127.0.0.1', 1, 1);
+INSERT INTO `user_permissions` (`id`, `user_id`, `solder_full`, `solder_users`, `mods_create`, `mods_manage`, `mods_delete`, `modpacks`, `created_at`, `updated_at`, `solder_keys`, `solder_clients`, `modpacks_create`, `modpacks_manage`, `modpacks_delete`) VALUES
+(1, 1, 1, 1, 1, 1, 1, '1', '{TIMESTAMP}', '{TIMESTAMP}', 1, 1, 1, 1, 1);
+INSERT INTO `keys` (`id`, `name`, `api_key`, `created_at`, `updated_at`) VALUES
+(1, 'CI key', 'ci-api-key-not-a-secret', '{TIMESTAMP}', '{TIMESTAMP}');
+INSERT INTO `clients` (`id`, `name`, `uuid`, `created_at`, `updated_at`) VALUES
+(1, 'CI client', 'ci-client-id-not-a-secret', '{TIMESTAMP}', '{TIMESTAMP}');
+INSERT INTO `builds` (`id`, `modpack_id`, `version`, `created_at`, `updated_at`, `minecraft`, `forge`, `is_published`, `private`, `min_java`, `min_memory`) VALUES
+(1, 1, '1.0', '{TIMESTAMP}', '{TIMESTAMP}', '1.21.1', NULL, 1, 0, '21', 4096);
+INSERT INTO `client_modpack` (`id`, `client_id`, `modpack_id`, `created_at`, `updated_at`) VALUES
+(1, 1, 1, '{TIMESTAMP}', '{TIMESTAMP}');
+INSERT INTO `mods` (`id`, `name`, `description`, `author`, `link`, `created_at`, `updated_at`, `pretty_name`) VALUES
+(1, 'ci-example-mod', 'Synthetic integration-test mod', 'CI', 'https://example.invalid/mod', '{TIMESTAMP}', '{TIMESTAMP}', 'CI Example Mod');
+INSERT INTO `modversions` (`id`, `mod_id`, `version`, `md5`, `created_at`, `updated_at`, `filesize`) VALUES
+(1, 1, '1.0', '00000000000000000000000000000000', '{TIMESTAMP}', '{TIMESTAMP}', 1024);
+INSERT INTO `build_modversion` (`id`, `modversion_id`, `build_id`, `created_at`, `updated_at`) VALUES
+(1, 1, 1, '{TIMESTAMP}', '{TIMESTAMP}');
+"""
+
+
+TECHNIC_SEED = f"""
+-- Synthetic CI records. These values are deliberately non-production.
+INSERT INTO `modpacks` (`id`, `name`, `slug`, `recommended`, `latest`, `url`, `created_at`, `updated_at`, `order`, `hidden`, `private`) VALUES
+(1, 'CI Example Pack', 'ci-example-pack', '1.0', '1.0', 'https://example.invalid/pack', '{TIMESTAMP}', '{TIMESTAMP}', 0, 0, 0);
+""" + COMMON_SEED
+
+
+SOLDERPY_SEED = f"""
+-- Synthetic CI records. These values are deliberately non-production.
+INSERT INTO `modpacks` (`id`, `name`, `slug`, `user_id`, `recommended`, `latest`, `url`, `created_at`, `updated_at`, `order`, `hidden`, `private`, `pinned`, `enable_optionals`, `enable_server`) VALUES
+(1, 'CI Example Pack', 'ci-example-pack', 1, '1.0', '1.0', 'https://example.invalid/pack', '{TIMESTAMP}', '{TIMESTAMP}', 0, 0, 0, 0, 0, 0);
+""" + COMMON_SEED + f"""
+UPDATE `mods` SET `side` = 'BOTH', `modtype` = 'MOD' WHERE `id` = 1;
+UPDATE `modversions` SET `mcversion` = '1.21.1' WHERE `id` = 1;
+INSERT INTO `sessions` (`token`, `ip`, `expiry`, `user_id`) VALUES
+('ci-session-token-not-a-secret', '127.0.0.1', '2030-01-01 00:00:00', 1);
+INSERT INTO `user_modpack` (`id`, `user_id`, `modpack_id`, `created_at`, `updated_at`) VALUES
+(1, 1, 1, '{TIMESTAMP}', '{TIMESTAMP}');
+"""
+
+
+def read_git_object(specification: str) -> str:
+    return subprocess.run(
+        ["git", "show", specification],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    ).stdout
+
+
+def sanitize(source: str, seed: str, provenance: str) -> str:
+    lines = source.splitlines()
+    original_inserts = sum(line.startswith("INSERT INTO ") for line in lines)
+    if original_inserts == 0:
+        raise ValueError(f"Expected populated dump at {provenance}")
+
+    schema_lines = [line for line in lines if not line.startswith("INSERT INTO ")]
+    schema = "\n".join(schema_lines)
+    schema = re.sub(r" AUTO_INCREMENT=\d+", " AUTO_INCREMENT=1", schema)
+    if "INSERT INTO " in schema:
+        raise ValueError(f"Failed to remove all source rows from {provenance}")
+
+    banner = (
+        "-- SANITIZED TEST FIXTURE: contains no source data or credentials.\n"
+        f"-- Schema provenance: {provenance}\n"
+        "-- Generated by tools/build_sql_fixtures.py.\n\n"
+    )
+    return banner + schema.rstrip() + "\n\n" + seed.strip() + "\n"
+
+
+def main() -> None:
+    current_dump = (ROOT / "solder.sql").read_text(encoding="utf-8")
+    technic_dump = read_git_object(TECHNIC_OBJECT)
+    FIXTURES.mkdir(parents=True, exist_ok=True)
+    (FIXTURES / "technic_solder.sql").write_text(
+        sanitize(technic_dump, TECHNIC_SEED, TECHNIC_OBJECT), encoding="utf-8"
+    )
+    (FIXTURES / "solderpy.sql").write_text(
+        sanitize(current_dump, SOLDERPY_SEED, "local ignored solder.sql"),
+        encoding="utf-8",
+    )
+
+
+if __name__ == "__main__":
+    main()
