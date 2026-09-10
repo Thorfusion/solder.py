@@ -70,7 +70,7 @@ class Modpack:
         rows = cur.fetchall()
         if rows:
             return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"]) for row in rows]
-        return None
+        return []
     
     @staticmethod
     def get_all_api():
@@ -80,7 +80,7 @@ class Modpack:
         rows = cur.fetchall()
         if rows:
             return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"]) for row in rows]
-        return None
+        return []
 
     @classmethod
     def get_by_cid_slug_api(cls, cid, slug):

@@ -10,8 +10,11 @@ mysql-connector-python = "*"
 requests = "*"
 boto3 = "*"
 cachetools = "*"
+gunicorn = "*"
 
 [dev-packages]
+bandit = "*"
+pip-audit = "*"
 
 [scripts]
 app = "python app.py"

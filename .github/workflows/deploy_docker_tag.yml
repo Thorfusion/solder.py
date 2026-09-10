@@ -1,4 +1,4 @@
-name: Docker Image CI
+name: Deploy tagged image
 
 on:
   push:
@@ -7,20 +7,23 @@ on:
 
 jobs:
   push_to_registry:
-    name: push docker image to hub
+    name: Push tagged image to Docker Hub
     runs-on: self-hosted
+    timeout-minutes: 45
+    permissions:
+      contents: read
     steps:
-      - name: check repository
-        uses: actions/checkout@v4
+      - name: Check out repository
+        uses: actions/checkout@v7
 
-      - name: login to docker registry
-        uses: docker/login-action@v3
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
         with:
           username: ${{secrets.DOCKERHUB_USERNAME}}
           password: ${{secrets.DOCKERHUB_TOKEN}}
 
-      - name: build and push docker image to registry
-        uses: docker/build-push-action@v5
+      - name: Build and push image
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true

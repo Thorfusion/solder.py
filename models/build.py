@@ -210,4 +210,4 @@ class Build:
                 v.description = mv["description"]
                 versions.append(v)
             return versions
-        return None
+        return []
