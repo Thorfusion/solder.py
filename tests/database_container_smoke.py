@@ -476,6 +476,17 @@ def exercise_database_api(base_url: str) -> None:
         raise AssertionError(
             f"Server/optional filtering was incorrect: {server_query}"
         )
+    server_only = next(
+        mod
+        for mod in server_query["mods"]
+        if mod["name"] == "ci-server-only"
+    )
+    if server_only.get("modtype") != "MOD":
+        raise AssertionError(f"Mod type was missing from manifest: {server_only}")
+    if [dependency["name"] for dependency in server_only.get("dependencies", [])] != [
+        "ci-example-mod"
+    ]:
+        raise AssertionError(f"Dependencies were missing from manifest: {server_only}")
 
     comparison = request_json(
         f"{variant_url}/latest?target=server&from=previous"
@@ -496,6 +507,22 @@ def exercise_database_api(base_url: str) -> None:
     mods = request_json(f"{base_url}/api/mod")
     if mods.get("mods", {}).get("ci-example-mod") != "CI Example Mod":
         raise AssertionError(f"Mod catalogue was not readable: {mods}")
+
+    server_mod = request_json(f"{base_url}/api/mod/ci-server-only")
+    if server_mod.get("side") != "SERVER" or server_mod.get("modtype") != "MOD":
+        raise AssertionError(f"Mod extension metadata was missing: {server_mod}")
+    if [dependency["id"] for dependency in server_mod.get("dependencies", [])] != [1]:
+        raise AssertionError(f"Mod dependencies were missing: {server_mod}")
+
+    optional_server_version = request_json(
+        f"{base_url}/api/mod/ci-optional-server/1.0"
+    )
+    optional_memberships = optional_server_version.get("builds", [])
+    if len(optional_memberships) != 1 or not optional_memberships[0].get("optional"):
+        raise AssertionError(
+            "Build-specific optional status was missing: "
+            f"{optional_server_version}"
+        )
 
     mod_version = request_json(f"{base_url}/api/mod/ci-example-mod/1.0")
     expected_url = "https://example.invalid/mods/ci-example-mod/ci-example-mod-1.0.zip"
@@ -704,6 +731,11 @@ def test_fixture(image: str, fixture: Path, migrate: bool) -> None:
         )
         if dependency_table_count != "1":
             raise AssertionError("Application startup did not create mod_dependencies")
+        mysql(
+            database_container,
+            "INSERT INTO mod_dependencies (mod_id, dependency_mod_id) "
+            "VALUES (21, 1);",
+        )
         exercise_database_api(base_url)
         exercise_synthetic_user_login(base_url, database_container)
         failed = False

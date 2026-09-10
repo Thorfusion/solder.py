@@ -18,6 +18,13 @@ class ApiTests(unittest.TestCase):
         application.config.update(TESTING=True)
         application.register_blueprint(api_module.api)
         self.client = application.test_client()
+        self.get_build_dependencies = patch.object(
+            api_module.ModDependency, "get_for_build_api", return_value={}
+        ).start()
+        self.get_mod_dependencies = patch.object(
+            api_module.ModDependency, "get_by_mod_api", return_value=[]
+        ).start()
+        self.addCleanup(patch.stopall)
 
         # cachetools caches route responses at module scope. Clearing between
         # tests prevents one mocked data set from leaking into another test.
@@ -208,6 +215,7 @@ class ApiTests(unittest.TestCase):
         build.get_modversions_api.return_value = [
             SimpleNamespace(
                 id=9,
+                mod_id=3,
                 modname="example",
                 version="2.0",
                 md5="abc123",
@@ -261,6 +269,7 @@ class ApiTests(unittest.TestCase):
         build.get_modversions_api.return_value = [
             SimpleNamespace(
                 id=9,
+                mod_id=3,
                 modname="example",
                 version="2.0",
                 md5="abc123",
@@ -269,8 +278,22 @@ class ApiTests(unittest.TestCase):
                 author="Example Author",
                 description="Example description",
                 link="https://example.test/mod",
+                side="BOTH",
+                modtype="MOD",
+                optional=1,
             )
         ]
+        self.get_build_dependencies.return_value = {
+            3: [
+                {
+                    "id": 4,
+                    "name": "library",
+                    "pretty_name": "Library",
+                    "side": "BOTH",
+                    "modtype": "MOD",
+                }
+            ]
+        }
         modpack.get_build_api.side_effect = [None, build]
         get_modpack.return_value = modpack
 
@@ -281,6 +304,13 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["mods"][0]["pretty_name"], "Example Mod")
         self.assertEqual(response.get_json()["mods"][0]["author"], "Example Author")
+        self.assertEqual(response.get_json()["mods"][0]["side"], "BOTH")
+        self.assertEqual(response.get_json()["mods"][0]["modtype"], "MOD")
+        self.assertTrue(response.get_json()["mods"][0]["optional"])
+        self.assertEqual(
+            response.get_json()["mods"][0]["dependencies"][0]["name"],
+            "library",
+        )
         self.assertEqual(
             modpack.get_build_api.call_args_list,
             [
@@ -340,6 +370,7 @@ class ApiTests(unittest.TestCase):
         build.get_modversions_api.return_value = [
             SimpleNamespace(
                 id=9,
+                mod_id=3,
                 modname="example",
                 version="2.0",
                 md5="abc123",
@@ -349,6 +380,17 @@ class ApiTests(unittest.TestCase):
                 optional=0,
             )
         ]
+        self.get_build_dependencies.return_value = {
+            3: [
+                {
+                    "id": 4,
+                    "name": "library",
+                    "pretty_name": "Library",
+                    "side": "BOTH",
+                    "modtype": "MOD",
+                }
+            ]
+        }
         modpack.get_build_api.return_value = build
         get_modpack.return_value = modpack
 
@@ -363,7 +405,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(payload["target"], "server")
         self.assertTrue(payload["optional"])
         self.assertEqual(payload["mods"][0]["side"], "BOTH")
+        self.assertEqual(payload["mods"][0]["modtype"], "MOD")
         self.assertFalse(payload["mods"][0]["optional"])
+        self.assertEqual(payload["mods"][0]["dependencies"][0]["id"], 4)
         self.assertEqual(len(payload["manifest_hash"]), 64)
         self.assertEqual(
             response.headers["ETag"], f'"{payload["manifest_hash"]}"'
@@ -433,6 +477,7 @@ class ApiTests(unittest.TestCase):
         def version(identifier, name, release, checksum):
             return SimpleNamespace(
                 id=identifier,
+                mod_id=identifier,
                 modname=name,
                 version=release,
                 md5=checksum,
@@ -519,11 +564,22 @@ class ApiTests(unittest.TestCase):
             {"version": "2.0"},
         ]
         get_mod.return_value = mod
+        self.get_mod_dependencies.return_value = [
+            {
+                "id": 4,
+                "name": "library",
+                "pretty_name": "Library",
+                "side": "BOTH",
+                "modtype": "MOD",
+            }
+        ]
 
         response = self.client.get("/api/mod/example")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["versions"], ["1.0", "2.0"])
+        self.assertEqual(response.get_json()["dependencies"][0]["name"], "library")
+        self.get_mod_dependencies.assert_called_once_with(3)
 
     @patch.object(api_module.Mod, "get_by_name_api", return_value=None)
     def test_missing_mod_returns_404(self, _get_mod):
@@ -534,7 +590,7 @@ class ApiTests(unittest.TestCase):
 
     @patch.object(api_module.Mod, "get_by_name_api")
     def test_mod_version_has_download_url(self, get_mod):
-        mod = Mock()
+        mod = Mock(id=1, side="BOTH", modtype="MOD")
         version = Mock(id=4, version="2.0")
         version.to_json.return_value = {
             "mod_id": 1,
@@ -545,6 +601,15 @@ class ApiTests(unittest.TestCase):
         version.get_builds_api.return_value = []
         mod.get_version_api.return_value = version
         get_mod.return_value = mod
+        self.get_mod_dependencies.return_value = [
+            {
+                "id": 4,
+                "name": "library",
+                "pretty_name": "Library",
+                "side": "BOTH",
+                "modtype": "MOD",
+            }
+        ]
 
         response = self.client.get("/api/mod/example/2.0")
 
@@ -555,6 +620,10 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(response.get_json()["id"], 4)
         self.assertEqual(response.get_json()["builds"], [])
+        self.assertEqual(response.get_json()["side"], "BOTH")
+        self.assertEqual(response.get_json()["modtype"], "MOD")
+        self.assertEqual(response.get_json()["dependencies"][0]["id"], 4)
+        self.get_mod_dependencies.assert_called_once_with(1)
         version.get_builds_api.assert_called_once_with(cid=None, api_key=False)
 
 

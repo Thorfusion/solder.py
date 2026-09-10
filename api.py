@@ -8,6 +8,7 @@ from flask import Blueprint, jsonify, request
 from models.common import cache_size, cache_ttl, public_repo_url, solderpy_version
 from models.key import Key
 from models.mod import Mod
+from models.mod_dependency import ModDependency
 from models.modpack import Modpack
 
 api = Blueprint("api", __name__)
@@ -120,7 +121,9 @@ def _mod_download_url(mod_name, version):
     return f"{public_repo_url}{mod_name}/{mod_name}-{version}.zip"
 
 
-def _mod_manifest_entry(modversion, expanded=False, extended=False):
+def _mod_manifest_entry(
+    modversion, expanded=False, extended=False, dependencies=None
+):
     entry = {
         "id": modversion.id,
         "name": modversion.modname,
@@ -138,15 +141,32 @@ def _mod_manifest_entry(modversion, expanded=False, extended=False):
                 "link": modversion.link,
             }
         )
-    if extended:
+    if expanded or extended:
         entry.update(
             {
                 "side": getattr(modversion, "side", "BOTH"),
                 "type": getattr(modversion, "modtype", "MOD"),
-                "optional": bool(modversion.optional),
+                "modtype": getattr(modversion, "modtype", "MOD"),
+                "optional": bool(getattr(modversion, "optional", 0)),
+                "dependencies": dependencies or [],
             }
         )
     return entry
+
+
+def _mod_manifest_entries(modversions, build_id, expanded=False, extended=False):
+    dependencies = {}
+    if expanded or extended:
+        dependencies = ModDependency.get_for_build_api(build_id)
+    return [
+        _mod_manifest_entry(
+            modversion,
+            expanded=expanded,
+            extended=extended,
+            dependencies=dependencies.get(getattr(modversion, "mod_id", None), []),
+        )
+        for modversion in modversions
+    ]
 
 
 def _manifest_changes(previous, current, from_version, to_version):
@@ -300,10 +320,9 @@ def modpack_slug_build(slugstring: str, buildstring: str):
     modversions = build.get_modversions_api(
         target=target, include_optional=include_optional
     )
-    moddata = [
-        _mod_manifest_entry(mv, expanded=expanded, extended=extended)
-        for mv in modversions
-    ]
+    moddata = _mod_manifest_entries(
+        modversions, build.id, expanded=expanded, extended=extended
+    )
     manifest = {
         "id": build.id,
         "minecraft": build.minecraft,
@@ -334,10 +353,12 @@ def modpack_slug_build(slugstring: str, buildstring: str):
         previous_versions = previous_build.get_modversions_api(
             target=target, include_optional=include_optional
         )
-        previous_data = [
-            _mod_manifest_entry(mv, expanded=expanded, extended=True)
-            for mv in previous_versions
-        ]
+        previous_data = _mod_manifest_entries(
+            previous_versions,
+            previous_build.id,
+            expanded=expanded,
+            extended=True,
+        )
         manifest["changes"] = _manifest_changes(
             previous_data, moddata, previous_build.version, build.version
         )
@@ -372,6 +393,7 @@ def mod_name(name: str):
     res = mods.to_json()
     res["id"] = mods.id
     res["versions"] = [version["version"] for version in versions]
+    res["dependencies"] = ModDependency.get_by_mod_api(mods.id)
     return jsonify(res)
 
 
@@ -388,6 +410,10 @@ def mod_name_version(name: str, version: str):
     res = modversion.to_json()
     res["id"] = modversion.id
     res["url"] = _mod_download_url(name, modversion.version)
+    res["side"] = mod.side
+    res["type"] = mod.modtype
+    res["modtype"] = mod.modtype
+    res["dependencies"] = ModDependency.get_by_mod_api(mod.id)
     res["builds"] = modversion.get_builds_api(
         cid=request.args.get("cid"), api_key=_has_valid_api_key()
     )

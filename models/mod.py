@@ -211,4 +211,5 @@ class Mod:
             "link": self.link,
             "side": self.side,
             "type": self.modtype,
+            "modtype": self.modtype,
         }

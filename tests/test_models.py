@@ -67,6 +67,7 @@ class ModelSerializationTests(unittest.TestCase):
                 "link": "https://example.test",
                 "side": "BOTH",
                 "type": "MOD",
+                "modtype": "MOD",
             },
         )
 
@@ -107,6 +108,68 @@ class ModelSerializationTests(unittest.TestCase):
 
 
 class ModelBehaviorTests(unittest.TestCase):
+    def test_dependency_read_api_exposes_public_mod_metadata(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [
+            {
+                "dependency_mod_id": 2,
+                "name": "library",
+                "pretty_name": "Library",
+                "side": "BOTH",
+                "modtype": "MOD",
+            }
+        ]
+
+        with patch(
+            "models.mod_dependency.Database.get_connection",
+            return_value=connection,
+        ):
+            dependencies = ModDependency.get_by_mod_api(1)
+
+        self.assertEqual(
+            dependencies,
+            [
+                {
+                    "id": 2,
+                    "name": "library",
+                    "pretty_name": "Library",
+                    "side": "BOTH",
+                    "modtype": "MOD",
+                }
+            ],
+        )
+        self.assertEqual(cursor.execute.call_args.args[1], (1,))
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_build_dependency_read_api_groups_dependencies_by_mod(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [
+            {
+                "mod_id": 1,
+                "dependency_mod_id": 2,
+                "name": "library",
+                "pretty_name": "Library",
+                "side": "SERVER",
+                "modtype": "CONFIG",
+            }
+        ]
+
+        with patch(
+            "models.mod_dependency.Database.get_connection",
+            return_value=connection,
+        ):
+            dependencies = ModDependency.get_for_build_api(9)
+
+        self.assertEqual(dependencies[1][0]["id"], 2)
+        self.assertEqual(dependencies[1][0]["side"], "SERVER")
+        self.assertEqual(dependencies[1][0]["modtype"], "CONFIG")
+        self.assertEqual(cursor.execute.call_args.args[1], (9,))
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
     def test_dependency_management_lists_configured_and_available_mods(self):
         connection = Mock()
         cursor = connection.cursor.return_value
@@ -530,6 +593,7 @@ class ModelBehaviorTests(unittest.TestCase):
                 "modpack_id": 3,
                 "modpack_slug": "example-pack",
                 "modpack_name": "Example Pack",
+                "optional": 0,
             }
         ]
         version = Modversion(2, 1, "1.0", "1.21.1", "abc", None, None, 1)
@@ -545,6 +609,7 @@ class ModelBehaviorTests(unittest.TestCase):
                 {
                     "id": 4,
                     "version": "2.0",
+                    "optional": False,
                     "modpack": {
                         "id": 3,
                         "name": "example-pack",

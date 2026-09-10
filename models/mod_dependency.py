@@ -21,6 +21,77 @@ class UnknownDependencyModError(DependencyError):
 
 class ModDependency:
     @staticmethod
+    def _to_api_dependency(row):
+        return {
+            "id": row["dependency_mod_id"],
+            "name": row["name"],
+            "pretty_name": row["pretty_name"],
+            "side": row["side"],
+            "modtype": row["modtype"],
+        }
+
+    @classmethod
+    def get_by_mod_api(cls, mod_id):
+        """Return the declared dependencies for one mod."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT mod_dependencies.dependency_mod_id,
+                          mods.name, mods.pretty_name, mods.side, mods.modtype
+                   FROM mod_dependencies
+                   INNER JOIN mods
+                       ON mod_dependencies.dependency_mod_id = mods.id
+                   WHERE mod_dependencies.mod_id = %s
+                   ORDER BY mods.name ASC, mods.id ASC""",
+                (mod_id,),
+            )
+            return [cls._to_api_dependency(row) for row in cur.fetchall()]
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def get_for_build_api(cls, build_id):
+        """Return dependencies keyed by each mod present in a build."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT DISTINCT mod_dependencies.mod_id,
+                          mod_dependencies.dependency_mod_id,
+                          dependency.name, dependency.pretty_name,
+                          dependency.side, dependency.modtype
+                   FROM build_modversion
+                   INNER JOIN modversions
+                       ON build_modversion.modversion_id = modversions.id
+                   INNER JOIN mod_dependencies
+                       ON modversions.mod_id = mod_dependencies.mod_id
+                   INNER JOIN mods AS dependency
+                       ON mod_dependencies.dependency_mod_id = dependency.id
+                   WHERE build_modversion.build_id = %s
+                   ORDER BY mod_dependencies.mod_id ASC,
+                            dependency.name ASC,
+                            mod_dependencies.dependency_mod_id ASC""",
+                (build_id,),
+            )
+            dependencies = {}
+            for row in cur.fetchall():
+                dependencies.setdefault(row["mod_id"], []).append(
+                    {
+                        "id": row["dependency_mod_id"],
+                        "name": row["name"],
+                        "pretty_name": row["pretty_name"],
+                        "side": row["side"],
+                        "modtype": row["modtype"],
+                    }
+                )
+            return dependencies
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
     def get_management_data(mod_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)

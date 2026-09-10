@@ -98,7 +98,8 @@ suffixes remain supported as aliases.
 
 Server updaters can use `recommended` or `latest` in place of a build version.
 Extended manifests report the resolved version, target, optional mode and a
-stable SHA-256 manifest hash:
+stable SHA-256 manifest hash. Their mod entries also report `side`, `modtype`,
+build-specific optional status and declared dependencies:
 
 ```text
 GET /api/modpack/example-pack/recommended?target=server

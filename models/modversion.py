@@ -255,7 +255,8 @@ class Modversion:
                               builds.version AS build_version,
                               modpacks.id AS modpack_id,
                               modpacks.slug AS modpack_slug,
-                              modpacks.name AS modpack_name
+                              modpacks.name AS modpack_name,
+                              build_modversion.optional
                        FROM build_modversion
                        INNER JOIN builds
                            ON build_modversion.build_id = builds.id
@@ -273,7 +274,8 @@ class Modversion:
                               builds.version AS build_version,
                               modpacks.id AS modpack_id,
                               modpacks.slug AS modpack_slug,
-                              modpacks.name AS modpack_name
+                              modpacks.name AS modpack_name,
+                              build_modversion.optional
                        FROM build_modversion
                        INNER JOIN builds
                            ON build_modversion.build_id = builds.id
@@ -298,6 +300,7 @@ class Modversion:
                 {
                     "id": row["build_id"],
                     "version": row["build_version"],
+                    "optional": bool(row["optional"]),
                     "modpack": {
                         "id": row["modpack_id"],
                         "name": row["modpack_slug"],
