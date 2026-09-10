@@ -12,6 +12,10 @@
 
 solder.py is solder written in python with major features over technic's solder.
 
+The complete read API, including Technic-compatible routes and solder.py server
+and optional-manifest extensions, is documented in the
+[API reference](docs/api.md).
+
 + **Easy install with docker**
 
 + **Efficient user experience**
