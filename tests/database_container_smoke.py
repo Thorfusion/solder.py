@@ -182,10 +182,12 @@ def verify_migrated_schema(database_container: str) -> None:
         database_container,
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
-        "AND TABLE_NAME IN ('sessions', 'user_modpack');",
+        "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies');",
     )
-    if int(table_count) != 2:
-        raise AssertionError("Migration did not create sessions and user_modpack")
+    if int(table_count) != 3:
+        raise AssertionError(
+            "Migration did not create sessions, user_modpack, and mod_dependencies"
+        )
 
     expected_indexes = (
         ("build_modversion", "idx_build_modversion_build_version"),
@@ -205,6 +207,37 @@ def verify_migrated_schema(database_container: str) -> None:
         raise AssertionError(
             f"Migration created {index_count}/{len(expected_indexes)} performance indexes"
         )
+
+
+def seed_dependency_scenario(database_container: str) -> None:
+    mysql(
+        database_container,
+        """INSERT INTO mods
+               (id, name, description, author, link, created_at, updated_at,
+                pretty_name, side, modtype)
+           VALUES
+               (2, 'ci-required-library', 'Synthetic required dependency', 'CI',
+                'https://example.invalid/required', '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00', 'CI Required Library', 'BOTH', 'MOD'),
+               (3, 'ci-parent-mod', 'Synthetic mod with a dependency', 'CI',
+                'https://example.invalid/parent', '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00', 'CI Parent Mod', 'BOTH', 'MOD');
+           INSERT INTO modversions
+               (id, mod_id, version, mcversion, md5, created_at, updated_at, filesize)
+           VALUES
+               (2, 2, '1.21.1-1.0', '1.21.1',
+                '11111111111111111111111111111111', '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00', 1024),
+               (3, 3, '1.21.1-1.0', '1.21.1',
+                '22222222222222222222222222222222', '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00', 1024),
+               (4, 2, '1.21.1-2.0', '1.21.1',
+                '33333333333333333333333333333333', '2024-01-02 00:00:00',
+                '2024-01-02 00:00:00', 2048),
+               (5, 2, 'universal-3.0', NULL,
+                '44444444444444444444444444444444', '2024-01-03 00:00:00',
+                '2024-01-03 00:00:00', 4096);""",
+    )
 
 
 def request_json(endpoint: str) -> dict:
@@ -257,7 +290,7 @@ def exercise_database_api(base_url: str) -> None:
         raise AssertionError(f"Mod-version fixture was not readable: {manifest}")
 
 
-def exercise_synthetic_user_login(base_url: str) -> None:
+def exercise_synthetic_user_login(base_url: str, database_container: str) -> None:
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, request, file_pointer, code, message, headers, url):
             return None
@@ -282,6 +315,66 @@ def exercise_synthetic_user_login(base_url: str) -> None:
             ) from error
     else:
         raise AssertionError("Synthetic user login did not redirect after success")
+
+    dependency_request = urllib.request.Request(
+        f"{base_url}/modversion/3",
+        data=urllib.parse.urlencode(
+            {"dependency_mod_id": "2", "adddependency_submit": "1"}
+        ).encode(),
+        method="POST",
+    )
+    try:
+        opener.open(dependency_request, timeout=5)
+    except urllib.error.HTTPError as error:
+        if error.code != 302 or error.headers.get("Location") != "/modversion/3":
+            raise AssertionError(
+                f"Adding a required dependency returned an unexpected response: {error}"
+            ) from error
+    else:
+        raise AssertionError("Adding a required dependency did not redirect")
+
+    with opener.open(f"{base_url}/modversion/3", timeout=5) as response:
+        dependency_page = response.read()
+        if response.status != 200 or b"CI Required Library" not in dependency_page:
+            raise AssertionError("The configured dependency was not shown on the mod page")
+
+    add_parent_request = urllib.request.Request(
+        f"{base_url}/modpackbuild/1",
+        data=urllib.parse.urlencode(
+            {
+                "modversion": "3",
+                "modnames": "3",
+                "add_mod_submit": "1",
+            }
+        ).encode(),
+        method="POST",
+    )
+    try:
+        opener.open(add_parent_request, timeout=5)
+    except urllib.error.HTTPError as error:
+        if error.code != 302 or error.headers.get("Location") != "/modpackbuild/1":
+            raise AssertionError(
+                f"Adding a mod with dependencies returned an unexpected response: {error}"
+            ) from error
+    else:
+        raise AssertionError("Adding a mod with dependencies did not redirect")
+
+    selected_build_mods = mysql(
+        database_container,
+        """SELECT GROUP_CONCAT(
+                      CONCAT(modversions.mod_id, ':', modversions.id, ':',
+                             build_modversion.optional)
+                      ORDER BY modversions.mod_id SEPARATOR ',')
+           FROM build_modversion
+           INNER JOIN modversions
+               ON build_modversion.modversion_id = modversions.id
+           WHERE build_modversion.build_id = 1;""",
+    )
+    if selected_build_mods != "1:1:0,2:4:0,3:3:0":
+        raise AssertionError(
+            "Management did not add the parent and newest matching required "
+            f"dependency to the build: {selected_build_mods}"
+        )
 
     with opener.open(f"{base_url}/modpackbuild/1", timeout=5) as response:
         build_editor = response.read()
@@ -352,6 +445,8 @@ def test_fixture(image: str, fixture: Path, migrate: bool) -> None:
             migrate_technic_schema(image, network)
             verify_migrated_schema(database_container)
 
+        seed_dependency_scenario(database_container)
+
         docker(
             "run",
             "--detach",
@@ -370,8 +465,16 @@ def test_fixture(image: str, fixture: Path, migrate: bool) -> None:
         ).strip()
         base_url = f"http://127.0.0.1:{port_mapping.rsplit(':', 1)[1]}"
         wait_for_application(application_container, f"{base_url}/api/")
+        dependency_table_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.TABLES "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+            "AND TABLE_NAME = 'mod_dependencies';",
+        )
+        if dependency_table_count != "1":
+            raise AssertionError("Application startup did not create mod_dependencies")
         exercise_database_api(base_url)
-        exercise_synthetic_user_login(base_url)
+        exercise_synthetic_user_login(base_url, database_container)
         failed = False
         print(f"Database image test passed: {fixture.name}")
     finally:

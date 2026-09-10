@@ -19,10 +19,20 @@ DISABLE_is_setup = False
 if os.getenv("DISABLE_is_setup"):
     DISABLE_is_setup = os.getenv("DISABLE_is_setup").lower() in ["true", "t", "1", "yes", "y"]
 
-tables = ("modpacks", "builds", "mods", "modversions", "build_modversions", "users", "user_permissions", "clients", "client_modpacks", "keys")
+tables = ("modpacks", "builds", "mods", "modversions", "build_modversions", "mod_dependencies", "users", "user_permissions", "clients", "client_modpacks", "keys")
 
 
 class Database:
+    MOD_DEPENDENCIES_TABLE_SQL = """CREATE TABLE IF NOT EXISTS mod_dependencies (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        mod_id INT NOT NULL,
+        dependency_mod_id INT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_mod_dependencies_pair (mod_id, dependency_mod_id),
+        INDEX idx_mod_dependencies_dependency (dependency_mod_id)
+    )"""
+
     @staticmethod
     def get_connection() -> connector.connection:
         try:
@@ -143,6 +153,7 @@ class Database:
                         INDEX idx_build_modversion_build_version (build_id, modversion_id)
                         )"""
             )
+            cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS users (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -384,6 +395,8 @@ class Database:
                 if cur.fetchone() is None:
                     cur.execute(query)
 
+            cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
+
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
                     token VARCHAR(80) NOT NULL PRIMARY KEY,
@@ -410,6 +423,30 @@ class Database:
                 flash("Error migrating Technic Solder tables", "error")
             return False
         finally:
+            con.close()
+
+    @staticmethod
+    def ensure_runtime_schema() -> bool:
+        """Create additive tables needed when an existing installation upgrades."""
+        if DISABLE_is_setup:
+            return True
+
+        con = Database.get_connection()
+        if con is None:
+            return False
+
+        cur = None
+        try:
+            cur = con.cursor()
+            cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
+            con.commit()
+            return True
+        except Exception as error:
+            ErrorPrinter.message("Error updating solder.py database schema", error)
+            return False
+        finally:
+            if cur is not None:
+                cur.close()
             con.close()
 
     @staticmethod

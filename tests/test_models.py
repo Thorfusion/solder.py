@@ -18,8 +18,9 @@ from models.build_modversion import Build_modversion  # noqa: E402
 from models.common import common  # noqa: E402
 from models.database import Database  # noqa: E402
 from models.mod import DuplicateModError, Mod  # noqa: E402
+from models.mod_dependency import CircularDependencyError, ModDependency  # noqa: E402
 from models.modpack import Modpack  # noqa: E402
-from models.modversion import Modversion  # noqa: E402
+from models.modversion import MissingDependencyVersionError, Modversion  # noqa: E402
 from models.passhasher import Passhasher  # noqa: E402
 from models.session import Session  # noqa: E402
 
@@ -102,6 +103,145 @@ class ModelSerializationTests(unittest.TestCase):
 
 
 class ModelBehaviorTests(unittest.TestCase):
+    def test_dependency_management_lists_configured_and_available_mods(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.side_effect = [
+            [
+                {
+                    "id": 9,
+                    "dependency_mod_id": 2,
+                    "name": "library",
+                    "pretty_name": "Library",
+                }
+            ],
+            [{"id": 3, "name": "other", "pretty_name": "Other"}],
+        ]
+
+        with patch(
+            "models.mod_dependency.Database.get_connection",
+            return_value=connection,
+        ):
+            dependencies, available = ModDependency.get_management_data(1)
+
+        self.assertEqual(dependencies[0]["dependency_mod_id"], 2)
+        self.assertEqual(available[0]["id"], 3)
+        self.assertEqual(cursor.execute.call_count, 2)
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_dependency_cycle_is_rejected(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.side_effect = [
+            [{"id": 1}, {"id": 2}],
+            [{"mod_id": 2, "dependency_mod_id": 1}],
+        ]
+
+        with (
+            patch(
+                "models.mod_dependency.Database.get_connection",
+                return_value=connection,
+            ),
+            self.assertRaises(CircularDependencyError),
+        ):
+            ModDependency.add(1, 2)
+
+        connection.commit.assert_not_called()
+        connection.rollback.assert_called_once_with()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_required_dependencies_are_added_recursively_without_replacing_existing(self):
+        cursor = Mock()
+        cursor.fetchall.side_effect = [
+            [
+                {
+                    "mod_id": 1,
+                    "dependency_mod_id": 2,
+                    "dependency_name": "Library A",
+                },
+                {
+                    "mod_id": 2,
+                    "dependency_mod_id": 3,
+                    "dependency_name": "Library B",
+                },
+            ],
+            [{"mod_id": 1}, {"mod_id": 3}],
+        ]
+        cursor.fetchone.return_value = {"id": 202}
+
+        added = Modversion._add_required_dependencies(cursor, 10, "1.21.1", 1)
+
+        self.assertEqual(added, ["Library A"])
+        version_queries = [
+            call
+            for call in cursor.execute.call_args_list
+            if "FROM modversions" in call.args[0]
+            and "mcversion" in call.args[0]
+        ]
+        self.assertEqual(len(version_queries), 1)
+        self.assertEqual(version_queries[0].args[1], (2, "1.21.1", "1.21.1"))
+        cursor.execute.assert_any_call(
+            """INSERT INTO build_modversion
+                          (modversion_id, build_id, optional)
+                   VALUES (%s, %s, 0)""",
+            (202, 10),
+        )
+
+    def test_missing_required_dependency_version_blocks_the_addition(self):
+        cursor = Mock()
+        cursor.fetchall.side_effect = [
+            [
+                {
+                    "mod_id": 1,
+                    "dependency_mod_id": 2,
+                    "dependency_name": "Missing Library",
+                }
+            ],
+            [{"mod_id": 1}],
+        ]
+        cursor.fetchone.return_value = None
+
+        with self.assertRaisesRegex(
+            MissingDependencyVersionError,
+            "Missing Library has no version compatible with Minecraft 1.21.1",
+        ):
+            Modversion._add_required_dependencies(cursor, 10, "1.21.1", 1)
+
+    def test_missing_dependency_rolls_back_the_parent_build_change(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.side_effect = [
+            {"mod_id": 1, "minecraft": "1.21.1"},
+            None,
+            None,
+        ]
+        cursor.fetchall.side_effect = [
+            [
+                {
+                    "mod_id": 1,
+                    "dependency_mod_id": 2,
+                    "dependency_name": "Missing Library",
+                }
+            ],
+            [{"mod_id": 1}],
+        ]
+
+        with (
+            patch(
+                "models.modversion.Database.get_connection",
+                return_value=connection,
+            ),
+            self.assertRaises(MissingDependencyVersionError),
+        ):
+            Modversion.add_modversion_to_selected_build(101, 1, 10, "0", "0")
+
+        connection.commit.assert_not_called()
+        connection.rollback.assert_called_once_with()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
     def test_new_mod_uses_the_insert_id_and_closes_the_connection(self):
         connection = Mock()
         cursor = connection.cursor.return_value

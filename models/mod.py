@@ -67,6 +67,10 @@ class Mod:
         if modversions:
             for mv in modversions:
                 cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s", (mv["id"],))
+        cur.execute(
+            "DELETE FROM mod_dependencies WHERE mod_id = %s OR dependency_mod_id = %s",
+            (id, id),
+        )
         cur.execute("DELETE FROM modversions WHERE mod_id = %s", (id,))
         cur.execute("DELETE FROM mods WHERE id=%s", (id,))
         conn.commit()

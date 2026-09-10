@@ -1,3 +1,4 @@
+from collections import deque
 import datetime
 import hashlib
 import threading
@@ -5,6 +6,15 @@ import threading
 import requests
 
 from .database import Database
+
+
+class MissingDependencyVersionError(ValueError):
+    def __init__(self, dependency_name, minecraft):
+        self.dependency_name = dependency_name
+        self.minecraft = minecraft
+        super().__init__(
+            f'{dependency_name} has no version compatible with Minecraft {minecraft}.'
+        )
 
 
 class Modversion:
@@ -43,33 +53,150 @@ class Modversion:
     def add_modversion_to_selected_build(modver_id, mod_id, build_id, marked, optional):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        if marked == "1":
-            cur.execute("SELECT id FROM builds WHERE marked = 1")
-            build_id = cur.fetchone()["id"]
-            conn.commit()
-        # when new modversion is added to build, old modversion gets deleted, quite tricky as both values are unique each time and you need to get all modversion and delete them on said build.
-        cur.execute(
-            """SELECT build_modversion.id 
-                FROM build_modversion 
-                INNER JOIN modversions ON build_modversion.modversion_id = modversions.id 
-                WHERE build_id = %s AND modversions.mod_id = %s
-            """, (build_id, mod_id))
         try:
-            build_modid = cur.fetchone()["id"]
-        except:
-            build_modid = None
-        if build_modid is not None:
-            cur.execute("UPDATE build_modversion SET modversion_id = %s WHERE id = %s", (modver_id, build_modid))
+            if marked == "1":
+                cur.execute(
+                    """SELECT id
+                       FROM builds
+                       WHERE marked = 1
+                       ORDER BY id
+                       LIMIT 1
+                       FOR UPDATE"""
+                )
+                marked_build = cur.fetchone()
+                if marked_build is None:
+                    raise ValueError("No build is currently marked.")
+                build_id = marked_build["id"]
+
+            cur.execute(
+                """SELECT modversions.mod_id, builds.minecraft
+                   FROM modversions
+                   INNER JOIN builds ON builds.id = %s
+                   WHERE modversions.id = %s
+                   FOR UPDATE""",
+                (build_id, modver_id),
+            )
+            selected = cur.fetchone()
+            if selected is None:
+                raise ValueError("The selected build or mod version no longer exists.")
+            if int(mod_id) != selected["mod_id"]:
+                raise ValueError("The selected version does not belong to that mod.")
+
+            cur.execute(
+                """SELECT build_modversion.id
+                   FROM build_modversion
+                   INNER JOIN modversions
+                       ON build_modversion.modversion_id = modversions.id
+                   WHERE build_modversion.build_id = %s
+                     AND modversions.mod_id = %s
+                   ORDER BY build_modversion.id
+                   LIMIT 1""",
+                (build_id, selected["mod_id"]),
+            )
+            existing = cur.fetchone()
+            if existing is None:
+                cur.execute(
+                    """INSERT INTO build_modversion
+                              (modversion_id, build_id, optional)
+                       VALUES (%s, %s, %s)""",
+                    (modver_id, build_id, optional),
+                )
+            else:
+                cur.execute(
+                    """UPDATE build_modversion
+                       SET modversion_id = %s
+                       WHERE id = %s""",
+                    (modver_id, existing["id"]),
+                )
+
+            added_dependencies = Modversion._add_required_dependencies(
+                cur,
+                build_id,
+                selected["minecraft"],
+                selected["mod_id"],
+            )
             conn.commit()
-            return None
-        cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (mod_id,))
-        modversions = cur.fetchall()
-        if modversions:
-            for mv in modversions:
-                cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s AND build_id = %s", (mv["id"], build_id))
-        cur.execute("INSERT INTO build_modversion (modversion_id, build_id, optional) VALUES (%s, %s, %s)", (modver_id, build_id, optional))
-        conn.commit()
-        return None
+            return added_dependencies
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
+    def _add_required_dependencies(cur, build_id, minecraft, root_mod_id):
+        cur.execute(
+            """SELECT mod_dependencies.mod_id,
+                      mod_dependencies.dependency_mod_id,
+                      COALESCE(mods.pretty_name, mods.name) AS dependency_name
+               FROM mod_dependencies
+               LEFT JOIN mods
+                   ON mod_dependencies.dependency_mod_id = mods.id
+               ORDER BY mod_dependencies.mod_id, mod_dependencies.dependency_mod_id"""
+        )
+        dependencies_by_mod = {}
+        dependency_names = {}
+        for relationship in cur.fetchall() or []:
+            dependency_mod_id = relationship["dependency_mod_id"]
+            dependencies_by_mod.setdefault(relationship["mod_id"], []).append(
+                dependency_mod_id
+            )
+            dependency_names[dependency_mod_id] = (
+                relationship["dependency_name"] or f"Mod #{dependency_mod_id}"
+            )
+
+        cur.execute(
+            """SELECT DISTINCT modversions.mod_id
+               FROM build_modversion
+               INNER JOIN modversions
+                   ON build_modversion.modversion_id = modversions.id
+               WHERE build_modversion.build_id = %s""",
+            (build_id,),
+        )
+        present_mod_ids = {row["mod_id"] for row in (cur.fetchall() or [])}
+
+        pending = deque(dependencies_by_mod.get(root_mod_id, ()))
+        visited = {root_mod_id}
+        added_dependencies = []
+        while pending:
+            dependency_mod_id = pending.popleft()
+            if dependency_mod_id in visited:
+                continue
+            visited.add(dependency_mod_id)
+            pending.extend(dependencies_by_mod.get(dependency_mod_id, ()))
+
+            if dependency_mod_id in present_mod_ids:
+                continue
+
+            cur.execute(
+                """SELECT id
+                   FROM modversions
+                   WHERE mod_id = %s
+                     AND (mcversion = %s OR mcversion IS NULL)
+                   ORDER BY CASE WHEN mcversion = %s THEN 0 ELSE 1 END, id DESC
+                   LIMIT 1""",
+                (dependency_mod_id, minecraft, minecraft),
+            )
+            dependency_version = cur.fetchone()
+            if dependency_version is None:
+                raise MissingDependencyVersionError(
+                    dependency_names.get(
+                        dependency_mod_id, f"Mod #{dependency_mod_id}"
+                    ),
+                    minecraft,
+                )
+
+            cur.execute(
+                """INSERT INTO build_modversion
+                          (modversion_id, build_id, optional)
+                   VALUES (%s, %s, 0)""",
+                (dependency_version["id"], build_id),
+            )
+            present_mod_ids.add(dependency_mod_id)
+            added_dependencies.append(dependency_names[dependency_mod_id])
+
+        return added_dependencies
 
     @staticmethod
     def update_modversion_in_build(oldmodver_id, modver_id, build_id):

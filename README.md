@@ -30,6 +30,12 @@ solder.py is solder written in python with major features over technic's solder.
 
   + **S3 bucket compatbility**
 
+  + **Required mod dependencies**
+
+    Configure one or more dependencies on a mod's version page. Adding that mod
+    to a build also adds the newest matching dependency version, including
+    transitive dependencies, while preserving versions already in the build.
+
 + **API only mode**
 
   Host a public api with only read permission to database and have another instance with manegement in your local network

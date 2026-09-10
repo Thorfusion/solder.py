@@ -11,8 +11,9 @@ from models.client_modpack import Client_modpack
 from models.database import Database
 from models.key import Key
 from models.mod import DuplicateModError, Mod
+from models.mod_dependency import DependencyError, ModDependency
 from models.modpack import Modpack
-from models.modversion import Modversion
+from models.modversion import MissingDependencyVersionError, Modversion
 from models.session import Session
 from models.user import User
 from mysql import connector
@@ -86,12 +87,23 @@ def modversion(id):
 
     try:
         modversions = mod.get_versions()
+        dependencies, available_dependencies = ModDependency.get_management_data(id)
     except connector.ProgrammingError as e:
         Database.create_tables()
         modversions = []
+        dependencies = []
+        available_dependencies = []
         flash("unable to get modversions", "error")
 
-    return render_template("modversion.html", modSlug=mod.name, modversions=modversions, mod=mod, mirror_url=public_repo_url)
+    return render_template(
+        "modversion.html",
+        modSlug=mod.name,
+        modversions=modversions,
+        mod=mod,
+        mirror_url=public_repo_url,
+        dependencies=dependencies,
+        available_dependencies=available_dependencies,
+    )
 
 
 @asite.route("/modversion/<id>", methods=["POST"])
@@ -102,6 +114,26 @@ def newmodversion(id):
     
     if User.get_permission_token(session["token"], "mods_manage") == 0:
                 return redirect(request.referrer)
+
+    if "adddependency_submit" in request.form:
+        if "dependency_mod_id" not in request.form:
+            return redirect(url_for("asite.modversion", id=id))
+        try:
+            ModDependency.add(id, request.form["dependency_mod_id"])
+        except DependencyError as error:
+            flash(str(error), "error")
+        else:
+            flash("added required dependency", "success")
+        return redirect(url_for("asite.modversion", id=id))
+
+    if "deletedependency_submit" in request.form:
+        if "dependency_id" not in request.form:
+            return redirect(url_for("asite.modversion", id=id))
+        if ModDependency.delete(request.form["dependency_id"], id):
+            flash("removed required dependency", "success")
+        else:
+            flash("required dependency was not found", "error")
+        return redirect(url_for("asite.modversion", id=id))
     
     if "form-submit" in request.form:
         mod_side = request.form['flexRadioDefault']
@@ -122,8 +154,15 @@ def newmodversion(id):
                 return redirect(request.referrer)
         if "addtoselbuild_id" not in request.form:
             return redirect(url_for("asite.modversion", id=id))
-        Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id, "0", "1", "0")
-        flash("added to marked build" + id, "success")
+        try:
+            added_dependencies = Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id, "0", "1", "0")
+        except MissingDependencyVersionError as error:
+            flash(str(error), "error")
+            return redirect(url_for("asite.modversion", id=id))
+        message = "added to marked build " + id
+        if added_dependencies:
+            message += " with required dependencies: " + ", ".join(added_dependencies)
+        flash(message, "success")
         return redirect(url_for("asite.modversion", id=id))
     if "deletemod_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_delete") == 0:
@@ -502,8 +541,15 @@ def modpackbuild(id):
             newoptional = "0"
             if "newoptional" in request.form:
                 newoptional = request.form['newoptional']
-            Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", newoptional)
-            flash("added modversion to marked build", "success")
+            try:
+                added_dependencies = Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", newoptional)
+            except MissingDependencyVersionError as error:
+                flash(str(error), "error")
+                return redirect(url_for("asite.modpackbuild", id=id))
+            message = "added modversion to build"
+            if added_dependencies:
+                message += " with required dependencies: " + ", ".join(added_dependencies)
+            flash(message, "success")
             return redirect(url_for("asite.modpackbuild", id=id))
 
     try:
