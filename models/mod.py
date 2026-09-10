@@ -87,28 +87,10 @@ class Mod:
         return []
 
     @staticmethod
-    def get_all_pretty_names_build(id):
+    def get_all_pretty_names():
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute(
-            """SELECT *
-                FROM
-                (
-                    SELECT id, pretty_name FROM mods 
-                ) AS build1
-                LEFT OUTER JOIN 
-                (
-                    SELECT build_modversion.id AS mid, modversions.mod_id AS modid
-                    FROM build_modversion
-                    INNER JOIN modversions ON build_modversion.modversion_id = modversions.id
-                    WHERE build_id = %s
-                ) AS build2
-                ON build1.id = build2.modid
-                WHERE build2.mid is NULL
-                ORDER BY build1.pretty_name
-                
-            """, (id,))
-        cur.execute("")
+        cur.execute("SELECT id, pretty_name FROM mods ORDER BY name")
         rows = cur.fetchall()
         if rows:
             return rows
