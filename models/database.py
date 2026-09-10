@@ -19,7 +19,18 @@ DISABLE_is_setup = False
 if os.getenv("DISABLE_is_setup"):
     DISABLE_is_setup = os.getenv("DISABLE_is_setup").lower() in ["true", "t", "1", "yes", "y"]
 
-tables = ("modpacks", "builds", "mods", "modversions", "build_modversions", "mod_dependencies", "users", "user_permissions", "clients", "client_modpacks", "keys")
+CORE_TABLES = {
+    "modpacks",
+    "builds",
+    "mods",
+    "modversions",
+    "build_modversion",
+    "users",
+    "user_permissions",
+    "clients",
+    "client_modpack",
+    "keys",
+}
 
 
 class Database:
@@ -36,48 +47,111 @@ class Database:
     API_INDEX_MIGRATIONS = (
         (
             "build_modversion",
-            "idx_build_modversion_build_version",
+            ("build_id", "modversion_id"),
             "ALTER TABLE build_modversion "
             "ADD INDEX idx_build_modversion_build_version (build_id, modversion_id)",
         ),
         (
             "build_modversion",
-            "idx_build_modversion_version_build",
+            ("modversion_id", "build_id"),
             "ALTER TABLE build_modversion "
             "ADD INDEX idx_build_modversion_version_build (modversion_id, build_id)",
         ),
         (
             "builds",
-            "idx_builds_modpack_version_access",
+            ("modpack_id", "version", "is_published", "private"),
             "ALTER TABLE builds "
             "ADD INDEX idx_builds_modpack_version_access "
             "(modpack_id, version, is_published, private)",
         ),
         (
             "client_modpack",
-            "idx_client_modpack_modpack_client",
+            ("modpack_id", "client_id"),
             "ALTER TABLE client_modpack "
             "ADD INDEX idx_client_modpack_modpack_client (modpack_id, client_id)",
         ),
         (
             "client_modpack",
-            "idx_client_modpack_client_modpack",
+            ("client_id", "modpack_id"),
             "ALTER TABLE client_modpack "
             "ADD INDEX idx_client_modpack_client_modpack (client_id, modpack_id)",
         ),
         (
             "modversions",
-            "idx_modversions_mod_mcversion",
+            ("mod_id", "mcversion"),
             "ALTER TABLE modversions "
             "ADD INDEX idx_modversions_mod_mcversion (mod_id, mcversion)",
         ),
         (
             "modversions",
-            "idx_modversions_mod_version",
+            ("mod_id", "version"),
             "ALTER TABLE modversions "
             "ADD INDEX idx_modversions_mod_version (mod_id, version)",
         ),
+        (
+            "user_permissions",
+            ("user_id",),
+            "ALTER TABLE user_permissions "
+            "ADD INDEX idx_user_permissions_user (user_id)",
+        ),
+        (
+            "clients",
+            ("uuid",),
+            "ALTER TABLE clients ADD INDEX idx_clients_uuid (uuid)",
+        ),
+        (
+            "keys",
+            ("api_key",),
+            "ALTER TABLE `keys` ADD INDEX idx_keys_api_key (api_key)",
+        ),
     )
+
+    @staticmethod
+    def index_covers_columns(cur, table: str, columns: tuple[str, ...]) -> bool:
+        """Return whether an index starts with the requested columns."""
+        cur.execute(
+            """SELECT INDEX_NAME, COLUMN_NAME
+               FROM information_schema.STATISTICS
+               WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s
+               ORDER BY INDEX_NAME, SEQ_IN_INDEX""",
+            (db_name, table),
+        )
+        indexes = {}
+        for index, column in cur.fetchall():
+            indexes.setdefault(index, []).append(column)
+        return any(
+            tuple(index_columns[:len(columns)]) == columns
+            for index_columns in indexes.values()
+        )
+
+    @staticmethod
+    def normalize_legacy_timestamps(cur) -> None:
+        """Replace only obsolete zero-date defaults left by older databases.
+
+        Current Technic Solder timestamps are nullable, so valid NULL values are
+        deliberately preserved. Older zero-date definitions are restored to the
+        automatic solder.py timestamp defaults before MySQL 8 adds indexes.
+        """
+        cur.execute(
+            """SELECT TABLE_NAME, COLUMN_NAME, COLUMN_DEFAULT
+               FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = %s
+                 AND COLUMN_NAME IN ('created_at', 'updated_at')""",
+            (db_name,),
+        )
+        legacy_columns = {}
+        for table, column, default in cur.fetchall():
+            if table not in CORE_TABLES or not str(default).startswith("0000-00-00"):
+                continue
+            legacy_columns.setdefault(table, []).append(column)
+
+        for table, columns in legacy_columns.items():
+            definitions = ", ".join(
+                f"MODIFY `{column}` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"
+                + (" ON UPDATE CURRENT_TIMESTAMP" if column == "updated_at" else "")
+                for column in columns
+            )
+            cur.execute(f"ALTER TABLE `{table}` {definitions}")
 
     @staticmethod
     def get_connection() -> connector.connection:
@@ -118,12 +192,17 @@ class Database:
             conn.close()
         if not tables_found:
             return 0
+        if not CORE_TABLES.issubset({table[0] for table in tables_found}):
+            return 0
         return 1
 
     @staticmethod
     def create_tables() -> bool:
+        con = Database.get_connection()
+        if con is None:
+            return False
+        cur = None
         try:
-            con = Database.get_connection()
             cur = con.cursor()
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS modpacks (
@@ -237,7 +316,8 @@ class Database:
                         modpacks_create BOOLEAN DEFAULT(0),
                         modpacks_manage BOOLEAN DEFAULT(0),
                         modpacks_delete BOOLEAN DEFAULT(0),
-                        modpacks VARCHAR(255)
+                        modpacks VARCHAR(255),
+                        INDEX user_permissions_user_id_index (user_id)
                         )"""
             )
             cur.execute(
@@ -287,50 +367,24 @@ class Database:
                 )"""
             )
             con.commit()
+            return True
+        except Exception as error:
+            ErrorPrinter.message("Error creating tables", error)
+            if has_request_context():
+                flash("Error creating tables", "error")
+            return False
+        finally:
+            if cur is not None:
+                cur.close()
             con.close()
-        except Exception as e:
-            ErrorPrinter.message("Error creating tables", e)
-            flash("Error creating tables", "error")
 
     @staticmethod
     def migratetechnic_tables() -> bool:
-        timestamp_migrations = (
-            """ALTER TABLE modpacks
-               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
-            """ALTER TABLE mods
-               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
-            """ALTER TABLE modversions
-               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
-            """ALTER TABLE build_modversion
-               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
-            """ALTER TABLE builds
-               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
-            """ALTER TABLE client_modpack
-               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
-            """ALTER TABLE clients
-               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
-            """ALTER TABLE `keys`
-               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
-            """ALTER TABLE user_permissions
-               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
-            """ALTER TABLE users
-               MODIFY created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-               MODIFY updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP""",
-        )
         column_migrations = (
             (
                 "modpacks",
                 "user_id",
-                "ALTER TABLE modpacks ADD COLUMN user_id INT NOT NULL DEFAULT 1 AFTER slug",
+                "ALTER TABLE modpacks ADD COLUMN user_id INT NULL AFTER slug",
             ),
             (
                 "modpacks",
@@ -360,7 +414,7 @@ class Database:
             (
                 "mods",
                 "note",
-                "ALTER TABLE mods ADD COLUMN note VARCHAR(255) DEFAULT ''",
+                "ALTER TABLE mods ADD COLUMN note TEXT NULL",
             ),
             (
                 "builds",
@@ -402,11 +456,10 @@ class Database:
         if con is None:
             return False
 
+        cur = None
         try:
             cur = con.cursor()
-            for query in timestamp_migrations:
-                cur.execute(query)
-
+            Database.normalize_legacy_timestamps(cur)
             for table, column, query in column_migrations:
                 cur.execute(
                     """SELECT 1
@@ -419,17 +472,11 @@ class Database:
                 if cur.fetchone() is None:
                     cur.execute(query)
 
-            for table, index, query in Database.API_INDEX_MIGRATIONS:
-                cur.execute(
-                    """SELECT 1
-                       FROM information_schema.STATISTICS
-                       WHERE TABLE_SCHEMA = %s
-                         AND TABLE_NAME = %s
-                         AND INDEX_NAME = %s
-                       LIMIT 1""",
-                    (db_name, table, index),
-                )
-                if cur.fetchone() is None:
+            cur.execute("UPDATE modpacks SET user_id = 1 WHERE user_id IS NULL")
+            cur.execute("ALTER TABLE modpacks MODIFY user_id INT NOT NULL")
+
+            for table, columns, query in Database.API_INDEX_MIGRATIONS:
+                if not Database.index_covers_columns(cur, table, columns):
                     cur.execute(query)
 
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
@@ -460,6 +507,8 @@ class Database:
                 flash("Error migrating Technic Solder tables", "error")
             return False
         finally:
+            if cur is not None:
+                cur.close()
             con.close()
 
     @staticmethod
@@ -475,9 +524,10 @@ class Database:
         cur = None
         try:
             cur = con.cursor()
+            Database.normalize_legacy_timestamps(cur)
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
 
-            for table, index, query in Database.API_INDEX_MIGRATIONS:
+            for table, columns, query in Database.API_INDEX_MIGRATIONS:
                 cur.execute(
                     """SELECT 1
                        FROM information_schema.TABLES
@@ -489,16 +539,7 @@ class Database:
                 if cur.fetchone() is None:
                     continue
 
-                cur.execute(
-                    """SELECT 1
-                       FROM information_schema.STATISTICS
-                       WHERE TABLE_SCHEMA = %s
-                         AND TABLE_NAME = %s
-                         AND INDEX_NAME = %s
-                       LIMIT 1""",
-                    (db_name, table, index),
-                )
-                if cur.fetchone() is None:
+                if not Database.index_covers_columns(cur, table, columns):
                     cur.execute(query)
             con.commit()
             return True
@@ -512,8 +553,11 @@ class Database:
 
     @staticmethod
     def create_session_table() -> bool:
+        con = Database.get_connection()
+        if con is None:
+            return False
+        cur = None
         try:
-            con = Database.get_connection()
             cur = con.cursor()
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
@@ -524,7 +568,13 @@ class Database:
                 )"""
             )
             con.commit()
+            return True
+        except Exception as error:
+            ErrorPrinter.message("Error making session table", error)
+            if has_request_context():
+                flash("Error making session table", "error")
+            return False
+        finally:
+            if cur is not None:
+                cur.close()
             con.close()
-        except Exception:
-            print.message("Error making session table", Exception)
-            flash("Error making session table", "error")

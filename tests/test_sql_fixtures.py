@@ -7,6 +7,15 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class SanitizedSqlFixtureTests(unittest.TestCase):
+    def test_technic_fixture_comes_from_current_official_migrations(self):
+        contents = (FIXTURES / "technic_solder.sql").read_text(encoding="utf-8")
+
+        self.assertIn("TechnicPack/TechnicSolder v1.3.1", contents)
+        self.assertIn(
+            "Generated from the official migrations against MySQL 8.4", contents
+        )
+        self.assertNotIn("47709427f96e85865bcc4d0c5fbfbeab1b79ffe4", contents)
+
     def test_fixtures_contain_only_synthetic_data_rows(self):
         expected_insert_counts = {
             "technic_solder.sql": 10,

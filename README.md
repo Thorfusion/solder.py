@@ -316,7 +316,10 @@ Enables the /setup page if the database already exists and you need to add a new
 
 #### Upgrading technic solder database to solder.py, keeps compability to technic solder
 
-If new user is enabled, you can enable this migration tool for technic solder database, to migrate it to solder.py, mainly fixes mysql database bugs and adds columns and is reverse compatible with original technic solder
+Enable this while starting a management instance against a Technic Solder
+database. The current Technic schema is detected and the solder.py columns and
+tables are added without removing or rewriting Technic fields. Migration runs
+once during application startup; `/setup` no longer performs database changes.
 
 ```bash
 -e TECHNIC_MIGRATION=True
@@ -361,7 +364,9 @@ NOTE: The docker image does not and will not support https, therefore it is requ
 
 ### docker container installed, setup on website
 
-Remember to set NEW_USER and TECHNIC_MIGRATION if using existing technic database, if clean install leave both.
+Set `NEW_USER=True` and `TECHNIC_MIGRATION=True` for an existing Technic
+database. Wait for startup migration to complete before starting a separate
+read-only API instance. For a clean installation, leave both disabled.
 
 #### Step 1 Login screen
 
@@ -433,11 +438,12 @@ Pull requests and trusted branch pushes run several complementary checks:
   repository Security tab. The same workflow boots the image and verifies the
   `/api/` health endpoint before the scan.
 - Container integration tests restore sanitized, synthetic versions of both a
-  Technic Solder backup and the current solder.py backup. They verify the
-  Technic migration twice for idempotency, then exercise API keys, clients,
-  modpacks, builds, and mod versions against a real MySQL server. The API checks
-  cover public, hidden, private, unpublished, optional, server, and hyphenated
-  build cases.
+  Technic Solder v1.3.1 database and a solder.py 1.7.4 database. They verify the
+  Technic migration twice for idempotency, create a fresh database, and prove
+  API-only startup works with read-only database credentials. They then exercise
+  API keys, clients, modpacks, builds, and mod versions against a real MySQL
+  server. The API checks cover public, hidden, private, unpublished, optional,
+  server, and hyphenated build cases.
 - GitHub dependency review checks dependency changes made by pull requests.
 
 Run the Python checks locally with:

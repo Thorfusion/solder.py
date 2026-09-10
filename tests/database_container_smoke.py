@@ -31,18 +31,24 @@ def docker(*arguments: str, **kwargs) -> subprocess.CompletedProcess[str]:
     return run("docker", *arguments, **kwargs)
 
 
-def database_environment(host: str) -> list[str]:
+def database_environment(
+    host: str,
+    *,
+    api_only: bool = False,
+    user: str = DATABASE_USER,
+    password: str = DATABASE_PASSWORD,
+) -> list[str]:
     values = {
         "APP_PORT": "5000",
-        "API_ONLY": "false",
+        "API_ONLY": str(api_only).lower(),
         "AWS_EC2_METADATA_DISABLED": "true",
         "CACHE_SIZE": "100",
         "CACHE_TTL": "300",
         "DB_DATABASE": DATABASE,
         "DB_HOST": host,
-        "DB_PASSWORD": DATABASE_PASSWORD,
+        "DB_PASSWORD": password,
         "DB_PORT": "3306",
-        "DB_USER": DATABASE_USER,
+        "DB_USER": user,
         "MD5_REPO_LOCATION": "https://example.invalid/mods/",
         "PUBLIC_REPO_LOCATION": "https://example.invalid/mods/",
         "R2_ACCESS_KEY": "smoke-test",
@@ -149,20 +155,131 @@ def migrate_technic_schema(image: str, network: str) -> None:
             )
 
 
-def verify_migrated_schema(database_container: str) -> None:
+def create_fresh_schema(image: str, network: str) -> None:
+    command = (
+        "from models.database import Database; "
+        "raise SystemExit(0 if Database.create_tables() else 1)"
+    )
+    result = subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            network,
+            *database_environment("mysql"),
+            image,
+            "python",
+            "-c",
+            command,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Fresh database setup failed:\n"
+            f"{result.stdout.strip()}\n{result.stderr.strip()}"
+        )
+
+
+def verify_read_only_api_startup(image: str, network: str, database_container: str) -> None:
+    mysql(
+        database_container,
+        "CREATE USER 'solder-readonly'@'%' IDENTIFIED BY 'readonly-password'; "
+        "GRANT SELECT ON solder.* TO 'solder-readonly'@'%';",
+    )
+    command = (
+        "from models.common import DB_IS_UP; "
+        "raise SystemExit(0 if DB_IS_UP == 1 else 1)"
+    )
+    result = subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            network,
+            *database_environment(
+                "mysql",
+                api_only=True,
+                user="solder-readonly",
+                password="readonly-password",
+            ),
+            image,
+            "python",
+            "-c",
+            command,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(
+            "API-only startup did not work with read-only database access:\n"
+            f"{result.stdout.strip()}\n{result.stderr.strip()}"
+        )
+
+
+def verify_performance_indexes(database_container: str) -> None:
+    expected_indexes = (
+        ("build_modversion", "build_id,modversion_id"),
+        ("build_modversion", "modversion_id,build_id"),
+        ("builds", "modpack_id,version,is_published,private"),
+        ("client_modpack", "modpack_id,client_id"),
+        ("client_modpack", "client_id,modpack_id"),
+        ("modversions", "mod_id,mcversion"),
+        ("modversions", "mod_id,version"),
+        ("user_permissions", "user_id"),
+        ("clients", "uuid"),
+        ("keys", "api_key"),
+    )
+    for table, columns in expected_indexes:
+        index_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM ("
+            "SELECT INDEX_NAME, GROUP_CONCAT(COLUMN_NAME ORDER BY SEQ_IN_INDEX) columns "
+            "FROM information_schema.STATISTICS "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME = '{table}' "
+            "GROUP BY INDEX_NAME"
+            ") indexes_by_column "
+            f"WHERE columns = '{columns}' OR columns LIKE '{columns},%';",
+        )
+        if int(index_count) < 1:
+            raise AssertionError(f"No index on {table} covers the columns {columns}")
+
+
+def verify_technic_migration(database_container: str) -> None:
     expected_columns = (
         ("build_modversion", "optional"),
         ("builds", "marked"),
         ("mods", "modtype"),
         ("mods", "note"),
+        ("mods", "notes"),
         ("mods", "side"),
         ("modpacks", "enable_optionals"),
         ("modpacks", "enable_server"),
         ("modpacks", "pinned"),
         ("modpacks", "user_id"),
+        ("modpacks", "url"),
+        ("modpacks", "icon_md5"),
+        ("modpacks", "logo_md5"),
+        ("modpacks", "background_md5"),
+        ("modpacks", "icon"),
+        ("modpacks", "logo"),
+        ("modpacks", "background"),
+        ("modpacks", "icon_url"),
+        ("modpacks", "logo_url"),
+        ("modpacks", "background_url"),
         ("modversions", "jarmd5"),
         ("modversions", "mcversion"),
+        ("modversions", "notes"),
         ("user_permissions", "solder_env"),
+        ("users", "two_factor_confirmed_at"),
+        ("users", "two_factor_recovery_codes"),
+        ("users", "two_factor_secret"),
     )
     conditions = " OR ".join(
         f"(TABLE_NAME = '{table}' AND COLUMN_NAME = '{column}')"
@@ -182,36 +299,184 @@ def verify_migrated_schema(database_container: str) -> None:
         database_container,
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
-        "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies');",
+        "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies', "
+        "'personal_access_tokens', 'password_reset_tokens');",
     )
-    if int(table_count) != 3:
+    if int(table_count) != 5:
         raise AssertionError(
-            "Migration did not create sessions, user_modpack, and mod_dependencies"
+            "Migration did not preserve the current Technic tables and create "
+            "the solder.py tables"
         )
 
-    expected_indexes = (
-        ("build_modversion", "idx_build_modversion_build_version"),
-        ("build_modversion", "idx_build_modversion_version_build"),
-        ("builds", "idx_builds_modpack_version_access"),
-        ("client_modpack", "idx_client_modpack_modpack_client"),
-        ("client_modpack", "idx_client_modpack_client_modpack"),
-        ("modversions", "idx_modversions_mod_mcversion"),
-        ("modversions", "idx_modversions_mod_version"),
-    )
-    index_conditions = " OR ".join(
-        f"(TABLE_NAME = '{table}' AND INDEX_NAME = '{index}')"
-        for table, index in expected_indexes
-    )
-    index_count = mysql(
+    nullable_timestamps = mysql(
         database_container,
-        "SELECT COUNT(DISTINCT TABLE_NAME, INDEX_NAME) "
-        "FROM information_schema.STATISTICS "
-        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ({index_conditions});",
+        "SELECT COUNT(*) FROM modpacks "
+        "WHERE id = 1 AND created_at IS NULL AND updated_at IS NULL;",
     )
-    if int(index_count) != len(expected_indexes):
+    if nullable_timestamps != "1":
+        raise AssertionError("Migration changed valid nullable Technic timestamps")
+
+    modpack_state = mysql(
+        database_container,
+        "SELECT user_id, url FROM modpacks WHERE id = 1;",
+    )
+    if modpack_state != "1\thttps://example.invalid/pack":
+        raise AssertionError(f"Migration did not preserve Technic data: {modpack_state}")
+
+    user_id_definition = mysql(
+        database_container,
+        "SELECT CONCAT(IS_NULLABLE, ':', IF(COLUMN_DEFAULT IS NULL, 'NULL', "
+        "COLUMN_DEFAULT)) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME = 'modpacks' "
+        "AND COLUMN_NAME = 'user_id';",
+    )
+    if user_id_definition != "NO:NULL":
+        raise AssertionError(f"Unexpected user_id definition: {user_id_definition}")
+
+    verify_performance_indexes(database_container)
+
+
+def verify_fresh_schema(database_container: str) -> None:
+    unwanted_columns = (
+        ("modpacks", "url"),
+        ("modpacks", "icon_md5"),
+        ("modpacks", "logo_md5"),
+        ("modpacks", "background_md5"),
+        ("modpacks", "icon"),
+        ("modpacks", "logo"),
+        ("modpacks", "background"),
+        ("modpacks", "icon_url"),
+        ("modpacks", "logo_url"),
+        ("modpacks", "background_url"),
+        ("mods", "notes"),
+        ("modversions", "notes"),
+        ("users", "two_factor_secret"),
+        ("users", "two_factor_recovery_codes"),
+        ("users", "two_factor_confirmed_at"),
+    )
+    conditions = " OR ".join(
+        f"(TABLE_NAME = '{table}' AND COLUMN_NAME = '{column}')"
+        for table, column in unwanted_columns
+    )
+    unwanted_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ({conditions});",
+    )
+    if unwanted_count != "0":
+        raise AssertionError(f"Fresh schema added {unwanted_count} unused columns")
+
+    unwanted_table_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME IN ('personal_access_tokens', 'password_reset_tokens');",
+    )
+    if unwanted_table_count != "0":
+        raise AssertionError("Fresh schema added unused Technic authentication tables")
+
+    user_id_definition = mysql(
+        database_container,
+        "SELECT CONCAT(IS_NULLABLE, ':', IF(COLUMN_DEFAULT IS NULL, 'NULL', "
+        "COLUMN_DEFAULT)) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME = 'modpacks' "
+        "AND COLUMN_NAME = 'user_id';",
+    )
+    if user_id_definition != "NO:NULL":
+        raise AssertionError(f"Unexpected fresh user_id definition: {user_id_definition}")
+
+    automatic_timestamps = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME IN ('modpacks', 'builds', 'mods', 'modversions', "
+        "'build_modversion', 'users', 'user_permissions', 'clients', "
+        "'client_modpack', 'keys') "
+        "AND COLUMN_NAME IN ('created_at', 'updated_at') "
+        "AND IS_NULLABLE = 'NO' "
+        "AND UPPER(COLUMN_DEFAULT) LIKE 'CURRENT_TIMESTAMP%';",
+    )
+    if automatic_timestamps != "20":
         raise AssertionError(
-            f"Migration created {index_count}/{len(expected_indexes)} performance indexes"
+            f"Fresh schema has {automatic_timestamps}/20 automatic timestamps"
         )
+
+    verify_performance_indexes(database_container)
+
+
+def seed_fresh_database(database_container: str) -> None:
+    mysql(
+        database_container,
+        """INSERT INTO modpacks
+               (id, name, slug, user_id, recommended, latest, `order`, hidden,
+                private, pinned, enable_optionals, enable_server)
+           VALUES
+               (1, 'CI Example Pack', 'ci-example-pack', 1, '1.0', '1.0',
+                0, 0, 0, 0, 0, 0);
+           INSERT INTO users
+               (id, username, email, password, created_ip, last_ip,
+                created_at, updated_at, remember_token, updated_by_ip,
+                created_by_user_id, updated_by_user_id)
+           VALUES
+               (1, 'ci-user', 'ci-user@example.invalid',
+                '59e423d8ee3b20da4266e8d80366b6b610975cfd405a75bfb05cf0b1850247fdf767cd96a6eb70ef18c496d83fdb21e6b1df0c1b846540a76de31baee15eaebc',
+                '127.0.0.1', '127.0.0.1', '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00', '', '127.0.0.1', 1, 1);
+           INSERT INTO user_permissions
+               (id, user_id, solder_full, solder_users, mods_create,
+                mods_manage, mods_delete, modpacks, created_at, updated_at,
+                solder_keys, solder_clients, modpacks_create, modpacks_manage,
+                modpacks_delete)
+           VALUES
+               (1, 1, 1, 1, 1, 1, 1, '1', '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00', 1, 1, 1, 1, 1);
+           INSERT INTO `keys` (id, name, api_key, created_at, updated_at)
+           VALUES
+               (1, 'CI key', 'ci-api-key-not-a-secret',
+                '2024-01-01 00:00:00', '2024-01-01 00:00:00');
+           INSERT INTO clients (id, name, uuid, created_at, updated_at)
+           VALUES
+               (1, 'CI client', 'ci-client-id-not-a-secret',
+                '2024-01-01 00:00:00', '2024-01-01 00:00:00');
+           INSERT INTO builds
+               (id, modpack_id, version, created_at, updated_at, minecraft,
+                forge, is_published, private, min_java, min_memory)
+           VALUES
+               (1, 1, '1.0', '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00', '1.21.1', NULL, 1, 0, '21', 4096);
+           INSERT INTO client_modpack
+               (id, client_id, modpack_id, created_at, updated_at)
+           VALUES
+               (1, 1, 1, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
+           INSERT INTO mods
+               (id, name, description, author, link, created_at, updated_at,
+                pretty_name, side, modtype)
+           VALUES
+               (1, 'ci-example-mod', 'Synthetic integration-test mod', 'CI',
+                'https://example.invalid/mod', '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00', 'CI Example Mod', 'BOTH', 'MOD');
+           INSERT INTO modversions
+               (id, mod_id, version, mcversion, md5, created_at, updated_at,
+                filesize)
+           VALUES
+               (1, 1, '1.0', '1.21.1',
+                '00000000000000000000000000000000', '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00', 1024);
+           INSERT INTO build_modversion
+               (id, modversion_id, build_id, created_at, updated_at, optional)
+           VALUES
+               (1, 1, 1, '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00', 0);
+           INSERT INTO sessions (token, ip, expiry, user_id)
+           VALUES
+               ('ci-session-token-not-a-secret', '127.0.0.1',
+                '2030-01-01 00:00:00', 1);
+           INSERT INTO user_modpack
+               (id, user_id, modpack_id, created_at, updated_at)
+           VALUES
+               (1, 1, 1, '2024-01-01 00:00:00',
+                '2024-01-01 00:00:00');""",
+    )
 
 
 def seed_dependency_scenario(database_container: str) -> None:
@@ -666,7 +931,7 @@ def exercise_synthetic_user_login(base_url: str, database_container: str) -> Non
         raise AssertionError("Duplicate mod submission unexpectedly succeeded")
 
 
-def test_fixture(image: str, fixture: Path, migrate: bool) -> None:
+def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
     suffix = uuid.uuid4().hex
     network = f"solderpy-db-test-{suffix}"
     database_container = f"solderpy-mysql-{suffix}"
@@ -696,11 +961,18 @@ def test_fixture(image: str, fixture: Path, migrate: bool) -> None:
             capture_output=True,
         )
         wait_for_mysql(database_container)
-        mysql(database_container, fixture.read_text(encoding="utf-8"))
+        if fixture is None:
+            create_fresh_schema(image, network)
+            verify_fresh_schema(database_container)
+            seed_fresh_database(database_container)
+        else:
+            mysql(database_container, fixture.read_text(encoding="utf-8"))
 
         if migrate:
             migrate_technic_schema(image, network)
-            verify_migrated_schema(database_container)
+            verify_technic_migration(database_container)
+
+        verify_read_only_api_startup(image, network, database_container)
 
         seed_dependency_scenario(database_container)
         seed_api_access_scenario(database_container)
@@ -739,7 +1011,8 @@ def test_fixture(image: str, fixture: Path, migrate: bool) -> None:
         exercise_database_api(base_url)
         exercise_synthetic_user_login(base_url, database_container)
         failed = False
-        print(f"Database image test passed: {fixture.name}")
+        fixture_name = fixture.name if fixture is not None else "fresh database"
+        print(f"Database image test passed: {fixture_name}")
     finally:
         if failed:
             for container in (application_container, database_container):
@@ -788,12 +1061,16 @@ def main(image: str, selection: str = "all") -> None:
             ROOT / "tests" / "fixtures" / "solderpy.sql",
             migrate=False,
         )
+    if selection in ("all", "fresh"):
+        test_fixture(image, None, migrate=False)
 
 
 if __name__ == "__main__":
     if len(sys.argv) not in (2, 3):
-        raise SystemExit(f"Usage: {sys.argv[0]} IMAGE [all|technic|solderpy]")
+        raise SystemExit(
+            f"Usage: {sys.argv[0]} IMAGE [all|technic|solderpy|fresh]"
+        )
     selected_fixture = sys.argv[2] if len(sys.argv) == 3 else "all"
-    if selected_fixture not in ("all", "technic", "solderpy"):
+    if selected_fixture not in ("all", "technic", "solderpy", "fresh"):
         raise SystemExit(f"Unknown fixture selection: {selected_fixture}")
     main(sys.argv[1], selected_fixture)

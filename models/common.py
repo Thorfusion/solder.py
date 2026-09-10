@@ -58,8 +58,13 @@ R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
 R2_BUCKET = os.getenv("R2_BUCKET")
 
 DB_IS_UP = Database.is_setup()
-if DB_IS_UP == 1:
-    Database.ensure_runtime_schema()
+if DB_IS_UP == 1 and not api_only:
+    if migratetechnic:
+        schema_ready = Database.migratetechnic_tables()
+    else:
+        schema_ready = Database.ensure_runtime_schema()
+    if not schema_ready:
+        DB_IS_UP = 2
 
 if (os.getenv("CACHE_SIZE")):
     cache_size = int(os.getenv("CACHE_SIZE"))
