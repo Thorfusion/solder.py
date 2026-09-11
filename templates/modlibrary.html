@@ -33,7 +33,7 @@
         <td>
           <div class="maxcont">
             {%if mod.integration_provider%}
-            <button type="button" class="btn btn-secondary buttonwidth" disabled title="Select a provider version from a build">Managed</button>
+            <button type="button" class="btn btn-secondary buttonwidth" disabled title="Select a provider version from a build">Select</button>
             {%else%}
             <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('modid', '{{mod.id}}'); buttonpress('mod', '{{mod.name}}'); zipfile_mods('mod', 'mcversion', 'version', 'file', '0');">Select</button>
             {%endif%}

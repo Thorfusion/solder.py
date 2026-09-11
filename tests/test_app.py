@@ -86,6 +86,8 @@ class ApplicationSmokeTests(unittest.TestCase):
             '<select class="form-select" name="dependency_mod_id"',
             version_source,
         )
+        self.assertIn("Create MCIL JAR", version_source)
+        self.assertIn('id="createmciljar_submit"', version_source)
         self.assertNotIn('id="table"', version_source)
 
         build_source = (template_root / "modpackbuild.html").read_text(
@@ -130,6 +132,35 @@ class ApplicationSmokeTests(unittest.TestCase):
             "example-pack-2.0.mcinstance",
             response.headers["Content-Disposition"],
         )
+
+    def test_authenticated_user_can_create_legacy_mcil_jar(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        mod = SimpleNamespace(id=9, name="example-mod", modtype="MOD")
+        version = SimpleNamespace(id=12, mod_id=9, version="1.0", jarmd5=None)
+        jar_md5 = "d41d8cd98f00b204e9800998ecf8427e"
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Mod.get_by_id", return_value=mod),
+            patch("asite.Modversion.get_by_id", return_value=version),
+            patch("asite.MCInstanceJar.create", return_value=jar_md5) as create,
+        ):
+            response = self.client.post(
+                "/modversion/9",
+                data={
+                    "createmciljar_submit": "1",
+                    "createmciljar_id": "12",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        arguments = create.call_args.args
+        self.assertIs(arguments[0], mod)
+        self.assertIs(arguments[1], version)
+        self.assertEqual(arguments[2], "https://cdn.example.test/mods/")
+        self.assertEqual(arguments[3], "./mods/")
 
     def test_unknown_route_uses_the_solder_404_page(self):
         response = self.client.get("/this-route-does-not-exist")

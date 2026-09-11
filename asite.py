@@ -13,7 +13,11 @@ from models.client_modpack import Client_modpack
 from models.compatibility import InvalidModloaderError
 from models.database import Database
 from models.key import Key
-from models.mcinstance import MCInstanceExport, MCInstanceExportError
+from models.mcinstance import (
+    MCInstanceExport,
+    MCInstanceExportError,
+    MCInstanceJar,
+)
 from models.integration import (
     CURSEFORGE,
     MODRINTH,
@@ -138,6 +142,8 @@ def modversion(id):
 
     try:
         modversions = mod.get_versions()
+        for version in modversions:
+            version["mcil_ready"] = MCInstanceJar.is_ready(version.get("jarmd5"))
         dependencies, available_dependencies = ModDependency.get_management_data(id)
     except connector.ProgrammingError as e:
         Database.create_tables()
@@ -193,6 +199,30 @@ def newmodversion(id):
         mod_type = request.form['type']
         Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form.get("notes", request.form.get("internal_note", "")))
         flash("updated " + id, "success")
+        return redirect(url_for("asite.modversion", id=id))
+    if "createmciljar_submit" in request.form:
+        version_id = request.form.get("createmciljar_id", "").strip()
+        mod = Mod.get_by_id(id)
+        version = Modversion.get_by_id(version_id) if version_id else None
+        try:
+            jar_md5 = MCInstanceJar.create(
+                mod,
+                version,
+                md5_repo_url,
+                UPLOAD_FOLDER,
+                R2,
+                R2_BUCKET,
+            )
+        except MCInstanceExportError as error:
+            flash(str(error), "error")
+        except Exception as error:
+            ErrorPrinter.message("failed to create MCInstanceLoader JAR", error)
+            flash("Failed to store the MCInstanceLoader JAR.", "error")
+        else:
+            flash(
+                f"Created and verified the MCInstanceLoader JAR ({jar_md5}).",
+                "success",
+            )
         return redirect(url_for("asite.modversion", id=id))
     if "deleteversion_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_delete") == 0:

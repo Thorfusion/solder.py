@@ -65,6 +65,13 @@
                 <td>
                     <div class="maxcont">
                         <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('rehash_url', '{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip'); copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
+                        {%if mod.modtype == "MOD"%}
+                        {%if versions.mcil_ready%}
+                        <span class="badge text-bg-success align-self-center">MCIL ready</span>
+                        {%else%}
+                        <button type="button" class="btn btn-info" onclick="submitbuttonpress('createmciljar_id', '{{versions.id}}', 'createmciljar_submit')">Create MCIL JAR</button>
+                        {%endif%}
+                        {%endif%}
                         <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'deleteversion_submit')">Delete</button>
                         <button type="button" class="btn btn-secondary" onclick="submitbuttonpress('addtoselbuild_id', '{{versions.id}}', 'addtoselbuild_submit')">AddToMarked</button>
                     </div>
@@ -115,6 +122,10 @@
                 <button class="btn btn-success" type="submit" name="adddependency_submit" id="adddependency_submit" value="1" disabled>Add dependency</button>
             </form>
             {%endif%}
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="createmciljar_id" id="createmciljar_id" readonly>
+        <input class="btn btn-info invisible" type="submit" name="createmciljar_submit" id="createmciljar_submit" value="Create MCIL JAR">
+    </form>
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>
         <input class="btn btn-danger invisible" type="submit" name="deleteversion_submit" id="deleteversion_submit" value="Delete">

@@ -3,10 +3,12 @@
 from dataclasses import dataclass
 import hashlib
 import io
+import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
 import stat
+import tempfile
 from urllib.parse import quote
 import zipfile
 
@@ -14,6 +16,8 @@ import requests
 
 from .compatibility import normalize_modloader, version_is_compatible
 from .database import Database
+from .mod import Mod, UploadVerificationError
+from .modversion import Modversion
 
 
 _MD5_RE = re.compile(r"^[0-9a-fA-F]{32}$")
@@ -27,6 +31,10 @@ class MCInstanceExportError(ValueError):
 
 class MCInstanceBuildNotFound(MCInstanceExportError):
     """Raised when an export was requested for a missing build."""
+
+
+class MCInstanceJarError(MCInstanceExportError):
+    """Raised when a legacy Solder package cannot provide an MCIL JAR."""
 
 
 @dataclass(frozen=True)
@@ -55,6 +63,132 @@ class MCInstancePackage:
     optional: bool
     modloader: str | None = None
     minecraft: str | None = None
+
+
+class MCInstanceJar:
+    """Create the raw JAR artifact needed by MCIL from a legacy Solder ZIP."""
+
+    @staticmethod
+    def is_ready(jarmd5):
+        return bool(_MD5_RE.fullmatch(str(jarmd5 or "").strip()))
+
+    @classmethod
+    def create(
+        cls,
+        mod,
+        version,
+        repository_url,
+        local_repo_root="./mods/",
+        r2_client=None,
+        r2_bucket=None,
+    ):
+        if mod is None or version is None or str(version.mod_id) != str(mod.id):
+            raise MCInstanceJarError("The selected mod version no longer exists.")
+        if str(mod.modtype or "").upper() != "MOD":
+            raise MCInstanceJarError("Only MOD packages can be converted to MCIL JARs.")
+        if cls.is_ready(version.jarmd5):
+            return str(version.jarmd5).strip().lower()
+
+        MCInstanceExport._validate_artifact_component(mod.name, "mod slug")
+        MCInstanceExport._validate_artifact_component(version.version, "mod version")
+        expected_zip_md5 = str(version.md5 or "").strip().lower()
+        if not _MD5_RE.fullmatch(expected_zip_md5):
+            raise MCInstanceJarError(
+                "This version needs a valid ZIP MD5 before its MCIL JAR can be created. "
+                "Rehash the version first."
+            )
+
+        root = Path(local_repo_root).resolve()
+        destination_folder = (root / mod.name).resolve()
+        try:
+            destination_folder.relative_to(root)
+        except ValueError as error:
+            raise MCInstanceJarError("The mod has an invalid repository path.") from error
+        destination_folder.mkdir(parents=True, exist_ok=True)
+
+        zip_filename = f"{mod.name}-{version.version}.zip"
+        jar_filename = f"{mod.name}-{version.version}.jar"
+        source_zip = destination_folder / zip_filename
+        final_jar = destination_folder / jar_filename
+
+        try:
+            with tempfile.TemporaryDirectory(
+                prefix=".solder-mcil-", dir=destination_folder
+            ) as staging_directory:
+                staged_zip = Path(staging_directory, zip_filename)
+                if source_zip.is_file():
+                    if source_zip.stat().st_size > _MAX_PACKAGE_SIZE:
+                        raise MCInstanceJarError(
+                            "The stored ZIP exceeds the 512 MiB conversion limit."
+                        )
+                    shutil.copyfile(source_zip, staged_zip)
+                else:
+                    cls._download_package(
+                        repository_url, mod.name, zip_filename, staged_zip
+                    )
+
+                try:
+                    Mod.verify_file_md5(staged_zip, expected_zip_md5, "the stored ZIP")
+                    Mod.extract_jar_from_zip(
+                        staged_zip,
+                        output_name=jar_filename,
+                    )
+                except UploadVerificationError as error:
+                    raise MCInstanceJarError(str(error)) from error
+
+                staged_jar = Path(staging_directory, jar_filename)
+                jar_md5 = Mod.file_md5(staged_jar)
+                os.replace(staged_jar, final_jar)
+
+            if r2_client is not None and r2_bucket:
+                r2_client.upload_file(
+                    str(final_jar),
+                    r2_bucket,
+                    f"mods/{mod.name}/{jar_filename}",
+                    ExtraArgs={"ContentType": "application/jar"},
+                )
+
+            Modversion.update_modversion_jarmd5(version.id, jar_md5)
+            return jar_md5
+        except MCInstanceJarError:
+            raise
+        except OSError as error:
+            raise MCInstanceJarError("The MCIL JAR could not be stored.") from error
+
+    @staticmethod
+    def _download_package(repository_url, mod_name, filename, destination):
+        if not repository_url:
+            raise MCInstanceJarError(
+                "The ZIP is not stored locally and MD5_REPO_LOCATION is not configured."
+            )
+        url = MCInstanceExport._artifact_url(repository_url, mod_name, filename)
+        try:
+            with requests.get(url, stream=True, timeout=(5, 60)) as response:
+                response.raise_for_status()
+                content_length = int(response.headers.get("content-length", 0))
+                if content_length > _MAX_PACKAGE_SIZE:
+                    raise MCInstanceJarError(
+                        "The stored ZIP exceeds the 512 MiB conversion limit."
+                    )
+                downloaded = 0
+                with open(destination, "wb") as output:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if not chunk:
+                            continue
+                        downloaded += len(chunk)
+                        if downloaded > _MAX_PACKAGE_SIZE:
+                            raise MCInstanceJarError(
+                                "The stored ZIP exceeds the 512 MiB conversion limit."
+                            )
+                        output.write(chunk)
+        except MCInstanceJarError:
+            Path(destination).unlink(missing_ok=True)
+            raise
+        except (OSError, requests.RequestException, ValueError) as error:
+            Path(destination).unlink(missing_ok=True)
+            raise MCInstanceJarError(
+                f'Unable to download the stored package "{filename}".'
+            ) from error
 
 
 class MCInstanceExport:

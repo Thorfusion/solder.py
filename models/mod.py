@@ -280,11 +280,12 @@ class Mod:
     def get_versions(self):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, mod_id, version, mcversion, modloader, md5, filesize FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
-        rows = cur.fetchall()
-        if rows:
-            return rows
-        return []
+        try:
+            cur.execute("SELECT id, mod_id, version, mcversion, modloader, md5, jarmd5, filesize FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
+            return cur.fetchall() or []
+        finally:
+            cur.close()
+            conn.close()
     
     def get_versions_api(self) -> list:
         conn = Database.get_connection()
@@ -303,7 +304,7 @@ class Mod:
             cur.execute("SELECT * FROM modversions WHERE mod_id = %s AND version = %s", (self.id, version))
             row = cur.fetchone()
             if row:
-                return Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"))
+                return Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"), jarmd5=row.get("jarmd5"))
             return None
         finally:
             cur.close()

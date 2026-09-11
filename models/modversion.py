@@ -26,7 +26,7 @@ class IncompatibleModVersionError(ValueError):
 
 
 class Modversion:
-    def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0, modloader=None, integration_version_id=None):
+    def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0, modloader=None, integration_version_id=None, jarmd5=None):
         self.id = id
         self.mod_id = mod_id
         self.version = version
@@ -40,6 +40,7 @@ class Modversion:
         self.integration_version_id = (
             str(integration_version_id) if integration_version_id else None
         )
+        self.jarmd5 = jarmd5
 
     @classmethod
     def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild, url="0", jarmd5="0", modloader=None, integration_version_id=None):
@@ -89,6 +90,7 @@ class Modversion:
             filesize,
             modloader=modloader,
             integration_version_id=integration_version_id,
+            jarmd5=jarmd5,
         )
 
     @staticmethod
@@ -316,9 +318,18 @@ class Modversion:
     def update_modversion_jarmd5(id, jarmd5):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("UPDATE modversions SET jarmd5 = %s WHERE id = %s", (jarmd5, id))
-        conn.commit()
-        return None
+        try:
+            cur.execute(
+                "UPDATE modversions SET jarmd5 = %s WHERE id = %s",
+                (jarmd5, id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def delete_modversion(id):
@@ -337,7 +348,7 @@ class Modversion:
             cur.execute("SELECT * FROM modversions WHERE id = %s", (id,))
             row = cur.fetchone()
             if row:
-                return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"), integration_version_id=row.get("integration_version_id"))
+                return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"), integration_version_id=row.get("integration_version_id"), jarmd5=row.get("jarmd5"))
             return None
         finally:
             cur.close()
@@ -361,6 +372,7 @@ class Modversion:
                 row["md5"], row["created_at"], row["updated_at"],
                 row["filesize"], modloader=row.get("modloader"),
                 integration_version_id=row.get("integration_version_id"),
+                jarmd5=row.get("jarmd5"),
             )
         finally:
             cur.close()

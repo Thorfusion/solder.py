@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import http.cookiejar
+import hashlib
 import io
 import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -909,7 +911,45 @@ def exercise_database_api(base_url: str) -> None:
         )
 
 
-def exercise_synthetic_user_login(base_url: str, database_container: str) -> None:
+def stage_legacy_mcil_package(
+    application_container: str, database_container: str
+) -> str:
+    jar_data = b"legacy Technic Solder JAR"
+    package = io.BytesIO()
+    with zipfile.ZipFile(package, "w") as archive:
+        archive.writestr("mods/upstream-name.jar", jar_data)
+        archive.writestr("config/legacy.cfg", b"enabled=true")
+    package_data = package.getvalue()
+    package_md5 = hashlib.md5(
+        package_data, usedforsecurity=False
+    ).hexdigest()
+    jar_md5 = hashlib.md5(jar_data, usedforsecurity=False).hexdigest()
+
+    destination = "/app/mods/ci-parent-mod"
+    docker("exec", application_container, "mkdir", "-p", destination)
+    with tempfile.TemporaryDirectory() as directory:
+        package_path = Path(directory, "ci-parent-mod-1.21.1-1.0.zip")
+        package_path.write_bytes(package_data)
+        docker(
+            "cp",
+            str(package_path),
+            f"{application_container}:{destination}/{package_path.name}",
+        )
+    mysql(
+        database_container,
+        "UPDATE modversions "
+        f"SET md5 = '{package_md5}', jarmd5 = NULL, filesize = {len(package_data)} "
+        "WHERE id = 3;",
+    )
+    return jar_md5
+
+
+def exercise_synthetic_user_login(
+    base_url: str,
+    database_container: str,
+    application_container: str,
+    expected_legacy_jar_md5: str,
+) -> None:
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, request, file_pointer, code, message, headers, url):
             return None
@@ -934,6 +974,56 @@ def exercise_synthetic_user_login(base_url: str, database_container: str) -> Non
             ) from error
     else:
         raise AssertionError("Synthetic user login did not redirect after success")
+
+    with opener.open(f"{base_url}/modversion/3", timeout=5) as response:
+        version_page = response.read()
+        if (
+            response.status != 200
+            or b">Create MCIL JAR</button>" not in version_page
+        ):
+            raise AssertionError("The legacy MCIL JAR action was not shown")
+
+    mcil_jar_request = urllib.request.Request(
+        f"{base_url}/modversion/3",
+        data=urllib.parse.urlencode(
+            {"createmciljar_id": "3", "createmciljar_submit": "1"}
+        ).encode(),
+        method="POST",
+    )
+    try:
+        opener.open(mcil_jar_request, timeout=10)
+    except urllib.error.HTTPError as error:
+        if error.code != 302 or error.headers.get("Location") != "/modversion/3":
+            raise AssertionError(
+                f"Creating a legacy MCIL JAR returned an unexpected response: {error}"
+            ) from error
+    else:
+        raise AssertionError("Creating a legacy MCIL JAR did not redirect")
+
+    stored_jar_md5 = mysql(
+        database_container,
+        "SELECT jarmd5 FROM modversions WHERE id = 3;",
+    )
+    if stored_jar_md5 != expected_legacy_jar_md5:
+        raise AssertionError(
+            f"The converted MCIL JAR MD5 was not stored: {stored_jar_md5}"
+        )
+    artifact_hash = subprocess.check_output(
+        [
+            "docker",
+            "exec",
+            application_container,
+            "md5sum",
+            "/app/mods/ci-parent-mod/ci-parent-mod-1.21.1-1.0.jar",
+        ],
+        text=True,
+    ).split()[0]
+    if artifact_hash != expected_legacy_jar_md5:
+        raise AssertionError(f"The converted MCIL JAR was incorrect: {artifact_hash}")
+
+    with opener.open(f"{base_url}/modversion/3", timeout=5) as response:
+        if b"MCIL ready" not in response.read():
+            raise AssertionError("The converted version was not shown as MCIL ready")
 
     dependency_request = urllib.request.Request(
         f"{base_url}/modversion/3",
@@ -1174,7 +1264,15 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             "VALUES (21, 1);",
         )
         exercise_database_api(base_url)
-        exercise_synthetic_user_login(base_url, database_container)
+        legacy_jar_md5 = stage_legacy_mcil_package(
+            application_container, database_container
+        )
+        exercise_synthetic_user_login(
+            base_url,
+            database_container,
+            application_container,
+            legacy_jar_md5,
+        )
         failed = False
         fixture_name = fixture.name if fixture is not None else "fresh database"
         print(f"Database image test passed: {fixture_name}")

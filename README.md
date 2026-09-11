@@ -127,6 +127,14 @@ responsive. Before adding the version to the database, solder.py independently
 hashes the received Solder ZIP and its extracted raw JAR and rejects a mismatch.
 It also gives the raw JAR its canonical `<slug>-<version>.jar` repository name.
 
+For versions imported from Technic Solder or created before raw JAR storage was
+available, use **Create MCIL JAR** on the mod's version page. Solder.py verifies
+the existing ZIP against its stored MD5, extracts the single JAR under `mods/`,
+stores the canonical raw JAR locally and in S3/R2 when configured, and records
+the verified JAR MD5. It reads the ZIP from the local repository first and falls
+back to `MD5_REPO_LOCATION`, so remotely hosted legacy repositories can be
+upgraded without re-uploading each mod.
+
 Mod versions can be assigned a modloader in both upload flows. Leaving it blank
 makes the version loader-agnostic, just as a null mod Minecraft version is
 universal. Build management lists and accepts only versions matching both the

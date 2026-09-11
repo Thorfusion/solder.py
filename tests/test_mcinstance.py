@@ -3,8 +3,9 @@ import io
 from dataclasses import replace
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 import zipfile
 
 from tests.environment import configure_test_environment
@@ -16,6 +17,8 @@ from models.mcinstance import (  # noqa: E402
     MCInstanceBuild,
     MCInstanceExport,
     MCInstanceExportError,
+    MCInstanceJar,
+    MCInstanceJarError,
     MCInstancePackage,
 )
 
@@ -243,6 +246,134 @@ class MCInstanceExportTests(unittest.TestCase):
         self.assertEqual(connection.cursor.return_value.execute.call_count, 1)
         connection.cursor.return_value.close.assert_called_once_with()
         connection.close.assert_called_once_with()
+
+
+class MCInstanceJarTests(unittest.TestCase):
+    @staticmethod
+    def legacy_package(jar_data=b"legacy jar"):
+        package = io.BytesIO()
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr("mods/original-name.jar", jar_data)
+            archive.writestr("config/example.cfg", b"enabled=true")
+        return package.getvalue()
+
+    @staticmethod
+    def mod():
+        return SimpleNamespace(id=3, name="example-mod", modtype="MOD")
+
+    @staticmethod
+    def version(package_data):
+        return SimpleNamespace(
+            id=9,
+            mod_id=3,
+            version="1.7.10-1.0",
+            md5=md5(package_data),
+            jarmd5=None,
+        )
+
+    def test_create_legacy_jar_from_local_solder_package(self):
+        jar_data = b"legacy local jar"
+        package_data = self.legacy_package(jar_data)
+        r2 = Mock()
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.zip").write_bytes(
+                package_data
+            )
+            with patch(
+                "models.mcinstance.Modversion.update_modversion_jarmd5"
+            ) as update_hash:
+                jar_hash = MCInstanceJar.create(
+                    self.mod(),
+                    self.version(package_data),
+                    "https://repo.example.test/mods/",
+                    directory,
+                    r2,
+                    "bucket",
+                )
+
+            final_jar = Path(
+                package_dir, "example-mod-1.7.10-1.0.jar"
+            )
+            self.assertEqual(final_jar.read_bytes(), jar_data)
+            self.assertEqual(jar_hash, md5(jar_data))
+            update_hash.assert_called_once_with(9, md5(jar_data))
+            r2.upload_file.assert_called_once_with(
+                str(final_jar),
+                "bucket",
+                "mods/example-mod/example-mod-1.7.10-1.0.jar",
+                ExtraArgs={"ContentType": "application/jar"},
+            )
+
+    def test_create_legacy_jar_downloads_missing_local_package(self):
+        jar_data = b"legacy remote jar"
+        package_data = self.legacy_package(jar_data)
+        response = MagicMock()
+        response.headers = {"content-length": str(len(package_data))}
+        response.iter_content.return_value = [package_data]
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "models.mcinstance.requests.get", return_value=response
+        ) as get, patch(
+            "models.mcinstance.Modversion.update_modversion_jarmd5"
+        ) as update_hash:
+            jar_hash = MCInstanceJar.create(
+                self.mod(),
+                self.version(package_data),
+                "https://repo.example.test/mods/",
+                directory,
+            )
+
+            self.assertEqual(
+                Path(
+                    directory,
+                    "example-mod",
+                    "example-mod-1.7.10-1.0.jar",
+                ).read_bytes(),
+                jar_data,
+            )
+
+        self.assertEqual(jar_hash, md5(jar_data))
+        get.assert_called_once_with(
+            "https://repo.example.test/mods/example-mod/"
+            "example-mod-1.7.10-1.0.zip",
+            stream=True,
+            timeout=(5, 60),
+        )
+        response.raise_for_status.assert_called_once_with()
+        update_hash.assert_called_once_with(9, md5(jar_data))
+
+    def test_create_legacy_jar_rejects_a_changed_package(self):
+        package_data = self.legacy_package()
+        version = self.version(package_data)
+        version.md5 = "a" * 32
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.zip").write_bytes(
+                package_data
+            )
+            with patch(
+                "models.mcinstance.Modversion.update_modversion_jarmd5"
+            ) as update_hash, self.assertRaisesRegex(
+                MCInstanceJarError, "MD5 verification"
+            ):
+                MCInstanceJar.create(
+                    self.mod(),
+                    version,
+                    "https://repo.example.test/mods/",
+                    directory,
+                )
+
+            update_hash.assert_not_called()
+            self.assertFalse(
+                Path(package_dir, "example-mod-1.7.10-1.0.jar").exists()
+            )
 
 
 if __name__ == "__main__":
