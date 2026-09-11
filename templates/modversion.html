@@ -67,9 +67,9 @@
                         <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('rehash_url', '{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip'); copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
                         {%if mod.modtype == "MOD"%}
                         {%if versions.mcil_ready%}
-                        <span class="badge text-bg-success align-self-center">MCIL ready</span>
+                        <span class="btn btn-success align-self-center">JAR ready</span>
                         {%else%}
-                        <button type="button" class="btn btn-info" onclick="submitbuttonpress('createmciljar_id', '{{versions.id}}', 'createmciljar_submit')">Create MCIL JAR</button>
+                        <button type="button" class="btn btn-info" onclick="submitbuttonpress('createmciljar_id', '{{versions.id}}', 'createmciljar_submit')">Create JAR</button>
                         {%endif%}
                         {%endif%}
                         <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'deleteversion_submit')">Delete</button>
