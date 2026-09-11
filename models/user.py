@@ -59,6 +59,7 @@ class User:
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM users WHERE id=%s", (id,))
         cur.execute("DELETE FROM user_permissions WHERE user_id=%s", (id,))
+        cur.execute("DELETE FROM integration_credentials WHERE user_id=%s", (id,))
         conn.commit()
         return None
 

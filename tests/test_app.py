@@ -44,7 +44,12 @@ class ApplicationSmokeTests(unittest.TestCase):
 
         self.assertIn("/login", routes)
         self.assertIn("/modlibrary", routes)
+        self.assertIn("/integrations", routes)
         self.assertIn("/modpackbuild/<int:id>/mcinstance", routes)
+        self.assertIn(
+            "/modpackbuild/<int:build_id>/integration-versions/<int:mod_id>",
+            routes,
+        )
         self.assertIn("/api/modpack/<slugstring>/<buildstring>", routes)
 
     def test_modloader_controls_and_dependency_search_use_existing_ui_styles(self):
@@ -166,6 +171,12 @@ class ApplicationSmokeTests(unittest.TestCase):
             with (
                 patch("asite.Session.verify_session", return_value=True),
                 patch("asite.User.get_permission_token", return_value=1),
+                patch(
+                    "asite.Mod.get_by_id",
+                    return_value=SimpleNamespace(
+                        name="example-mod", integration_provider=None
+                    ),
+                ),
                 patch("asite.Modversion.new") as new_version,
                 patch("asite.UPLOAD_FOLDER", directory),
                 patch("asite.R2_BUCKET", None),
@@ -219,6 +230,12 @@ class ApplicationSmokeTests(unittest.TestCase):
             with (
                 patch("asite.Session.verify_session", return_value=True),
                 patch("asite.User.get_permission_token", return_value=1),
+                patch(
+                    "asite.Mod.get_by_id",
+                    return_value=SimpleNamespace(
+                        name="example-mod", integration_provider=None
+                    ),
+                ),
                 patch("asite.Modversion.new") as new_version,
                 patch("asite.UPLOAD_FOLDER", directory),
                 patch("asite.R2_BUCKET", None),
@@ -248,6 +265,35 @@ class ApplicationSmokeTests(unittest.TestCase):
                     "example-mod-1.7.10-1.0.jar",
                 ).exists()
             )
+
+    def test_provider_managed_mod_rejects_manual_upload(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch(
+                "asite.Mod.get_by_id",
+                return_value=SimpleNamespace(
+                    name="example-mod", integration_provider="MODRINTH"
+                ),
+            ),
+            patch("asite.Modversion.new") as new_version,
+        ):
+            response = self.client.post(
+                "/modlibrary",
+                data={
+                    "form-submit": "1",
+                    "modid": "9",
+                    "mod": "example-mod",
+                    "file": (io.BytesIO(b"unused"), "upload.zip"),
+                },
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(response.status_code, 302)
+        new_version.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

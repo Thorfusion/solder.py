@@ -88,7 +88,8 @@ class Build_modversion:
             cur.execute(
                 """SELECT build_modversion.id, build_modversion.optional,
                           modversions.version, modversions.id AS modverid,
-                          mods.name, mods.pretty_name, mods.id AS modid
+                          mods.name, mods.pretty_name, mods.id AS modid,
+                          mods.integration_provider
                    FROM build_modversion
                    INNER JOIN modversions
                        ON build_modversion.modversion_id = modversions.id
@@ -99,7 +100,10 @@ class Build_modversion:
             )
             build_rows = cur.fetchall() or []
 
-            cur.execute("SELECT id, pretty_name FROM mods ORDER BY name")
+            cur.execute(
+                """SELECT id, name, pretty_name, integration_provider
+                   FROM mods ORDER BY name"""
+            )
             mod_rows = cur.fetchall() or []
 
             cur.execute(

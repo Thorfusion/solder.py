@@ -23,7 +23,22 @@ _MAX_UPLOAD_JAR_SIZE = 512 * 1024 * 1024
 
 
 class Mod:
-    def __init__(self, id, name, description, author, link, created_at, updated_at, pretty_name, side, modtype, notes):
+    def __init__(
+        self,
+        id,
+        name,
+        description,
+        author,
+        link,
+        created_at,
+        updated_at,
+        pretty_name,
+        side,
+        modtype,
+        notes,
+        integration_provider=None,
+        integration_project_id=None,
+    ):
         self.id = id
         self.name = name
         self.description = description
@@ -35,16 +50,68 @@ class Mod:
         self.side = side
         self.modtype = modtype
         self.notes = notes
+        self.integration_provider = (
+            str(integration_provider).upper() if integration_provider else None
+        )
+        self.integration_project_id = (
+            str(integration_project_id) if integration_project_id else None
+        )
 
     @classmethod
-    def new(cls, name, description, author, link, pretty_name, side, modtype, notes):
+    def new(
+        cls,
+        name,
+        description,
+        author,
+        link,
+        pretty_name,
+        side,
+        modtype,
+        notes,
+        integration_provider=None,
+        integration_project_id=None,
+    ):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
         try:
-            cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, modtype, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, modtype, notes))
+            cur.execute(
+                """INSERT INTO mods
+                          (name, description, author, link, created_at,
+                           updated_at, pretty_name, side, modtype, notes,
+                           integration_provider, integration_project_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (
+                    name,
+                    description,
+                    author,
+                    link,
+                    now,
+                    now,
+                    pretty_name,
+                    side,
+                    modtype,
+                    notes,
+                    integration_provider,
+                    integration_project_id,
+                ),
+            )
             conn.commit()
-            return cls(cur.lastrowid, name, description, author, link, now, now, pretty_name, side, modtype, notes)
+            return cls(
+                cur.lastrowid,
+                name,
+                description,
+                author,
+                link,
+                now,
+                now,
+                pretty_name,
+                side,
+                modtype,
+                notes,
+                integration_provider,
+                integration_project_id,
+            )
         except IntegrityError as error:
             conn.rollback()
             if error.errno == errorcode.ER_DUP_ENTRY:
@@ -89,11 +156,15 @@ class Mod:
     def get_by_id(cls, id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM mods WHERE id = %s", (id,))
-        row = cur.fetchone()
-        if row:
-            return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")))
-        return None
+        try:
+            cur.execute("SELECT * FROM mods WHERE id = %s", (id,))
+            row = cur.fetchone()
+            if row:
+                return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")), row.get("integration_provider"), row.get("integration_project_id"))
+            return None
+        finally:
+            cur.close()
+            conn.close()
 
     @classmethod
     def get_by_name_api(cls, name):
@@ -103,7 +174,7 @@ class Mod:
             cur.execute("SELECT * FROM mods WHERE name = %s", (name,))
             row = cur.fetchone()
             if row:
-                return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")))
+                return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")), row.get("integration_provider"), row.get("integration_project_id"))
             return None
         finally:
             cur.close()
@@ -128,6 +199,8 @@ class Mod:
                     row["side"],
                     row["modtype"],
                     row.get("notes", row.get("note")),
+                    row.get("integration_provider"),
+                    row.get("integration_project_id"),
                 )
                 for row in cur.fetchall()
             ]
@@ -139,11 +212,60 @@ class Mod:
     def get_all():
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM mods ORDER BY id DESC")
-        rows = cur.fetchall()
-        if rows:
-            return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note"))) for row in rows]
-        return []
+        try:
+            cur.execute("SELECT * FROM mods ORDER BY id DESC")
+            rows = cur.fetchall()
+            if rows:
+                return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")), row.get("integration_provider"), row.get("integration_project_id")) for row in rows]
+            return []
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def get_by_integration(cls, provider, project_id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT * FROM mods
+                   WHERE integration_provider = %s
+                     AND integration_project_id = %s""",
+                (str(provider).upper(), str(project_id)),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return None
+            return cls(
+                row["id"], row["name"], row["description"], row["author"],
+                row["link"], row["created_at"], row["updated_at"],
+                row["pretty_name"], row["side"], row["modtype"],
+                row.get("notes", row.get("note")),
+                row.get("integration_provider"),
+                row.get("integration_project_id"),
+            )
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
+    def get_integration_project_ids(provider):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT integration_project_id FROM mods
+                   WHERE integration_provider = %s""",
+                (str(provider).upper(),),
+            )
+            return {
+                str(row["integration_project_id"])
+                for row in cur.fetchall()
+                if row["integration_project_id"] is not None
+            }
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def get_all_pretty_names():

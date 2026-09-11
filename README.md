@@ -16,6 +16,9 @@ The complete read API, including Technic-compatible routes and solder.py server
 and optional-manifest extensions, is documented in the
 [API reference](docs/api.md).
 
+Management-side Modrinth and CurseForge imports are documented in the
+[provider integrations guide](docs/integrations.md).
+
 + **Easy install with docker**
 
 + **Efficient user experience**
@@ -39,6 +42,14 @@ and optional-manifest extensions, is documented in the
     Configure one or more dependencies on a mod's version page. Adding that mod
     to a build also adds the newest matching dependency version, including
     transitive dependencies, while preserving versions already in the build.
+
+  + **Modrinth and CurseForge integration**
+
+    Search either provider from the management interface and link a project to
+    the mod library without downloading every release. Selecting a compatible
+    provider version in a build downloads, verifies and packages it on demand.
+    Modrinth needs no key; every management user supplies their own CurseForge
+    API key.
 
 + **API only mode**
 
@@ -72,7 +83,21 @@ and optional-manifest extensions, is documented in the
 # Features to be added in the future
 
 + Maven integration
-+ Modrinth integration
+
+## Modrinth and CurseForge imports
+
+Open **Browse mods** in the management menu to search and add provider-managed
+mods. No project file is downloaded at this stage. In a modpack build, select
+the linked mod and then a compatible provider version. solder.py downloads the
+upstream JAR, verifies the provider hash and file size, packages the JAR as a
+normal Solder ZIP, and records the local version. Re-selecting it reuses the
+stored version.
+
+CurseForge requires an API key. Each management user enters their own key on
+the Browse mods page; there is no shared key bundled with solder.py. Only
+available CurseForge projects whose authors allow third-party distribution can
+be imported. See the [provider integrations guide](docs/integrations.md) for
+storage, permissions and operational details.
 
 ## MCInstanceLoader exports
 

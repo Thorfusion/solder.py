@@ -21,7 +21,7 @@
             <tr>
                 <td class="tablewidth70 tablemaxwidth">{{combo.pretty_name}} ({{combo.name}})</td>
                 <td class="tablewidth20">
-                    <select class="form-select" name="selmodver_{{combo.modid}}" id="selmodver_{{combo.modid}}" onchange="submitoptionpress('selmodver_oldver', '{{combo.modverid}}', 'selmodver_ver', 'selmodver_{{combo.modid}}', 'selmodver_submit');">
+                    <select class="form-select" name="selmodver_{{combo.modid}}" id="selmodver_{{combo.modid}}" {%if combo.integration_provider%}data-integration-url="{{url_for('asite.integration_versions', build_id=packbuild.id, mod_id=combo.modid)}}" onfocus="loadintegrationversions(this.id, this.dataset.integrationUrl);"{%endif%} onchange="submitoptionpress('selmodver_oldver', '{{combo.modverid}}', 'selmodver_ver', 'selmodver_{{combo.modid}}', 'selmodver_submit');">
                         {%for modlist in combo.versions%}
                         <option {%if combo.version==modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}{%if modlist.modloader %} ({{modlist.modloader}}){%endif%}</option>
                         {%endfor%}
@@ -64,7 +64,7 @@
             <select class="form-select" name="modnames" id="modnames" onchange="hideoptions('modnames');" required>
                 <option class="is-invalid" name="modfirst2" hidden="true" selected="selected" value="">Select mod</option>
                 {%for lmod in listmod%}
-                <option value="{{lmod.id}}" required>{{lmod.pretty_name}}</option>
+                <option value="{{lmod.id}}" {%if lmod.integration_provider%}data-integration-url="{{url_for('asite.integration_versions', build_id=packbuild.id, mod_id=lmod.id)}}"{%endif%}>{{lmod.pretty_name}}{%if lmod.integration_provider%} ({{lmod.integration_provider|title}}){%endif%}</option>
                 {%endfor%}
             </select>
         </div>

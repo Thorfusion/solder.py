@@ -44,6 +44,16 @@ class Database:
         INDEX idx_mod_dependencies_dependency (dependency_mod_id)
     )"""
 
+    INTEGRATION_CREDENTIALS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS integration_credentials (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        provider VARCHAR(16) NOT NULL,
+        api_key VARCHAR(512) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_integration_credentials_user_provider (user_id, provider)
+    )"""
+
     MODLOADER_COLUMN_MIGRATIONS = (
         (
             "builds",
@@ -62,6 +72,24 @@ class Database:
             "mods",
             "notes",
             "ALTER TABLE mods ADD COLUMN notes TEXT NULL AFTER link",
+        ),
+    )
+
+    INTEGRATION_COLUMN_MIGRATIONS = (
+        (
+            "mods",
+            "integration_provider",
+            "ALTER TABLE mods ADD COLUMN integration_provider VARCHAR(16) NULL AFTER notes",
+        ),
+        (
+            "mods",
+            "integration_project_id",
+            "ALTER TABLE mods ADD COLUMN integration_project_id VARCHAR(64) NULL AFTER integration_provider",
+        ),
+        (
+            "modversions",
+            "integration_version_id",
+            "ALTER TABLE modversions ADD COLUMN integration_version_id VARCHAR(64) NULL AFTER modloader",
         ),
     )
 
@@ -109,6 +137,18 @@ class Database:
             ("mod_id", "version"),
             "ALTER TABLE modversions "
             "ADD INDEX idx_modversions_mod_version (mod_id, version)",
+        ),
+        (
+            "mods",
+            ("integration_provider", "integration_project_id"),
+            "ALTER TABLE mods ADD UNIQUE INDEX uq_mods_integration_project "
+            "(integration_provider, integration_project_id)",
+        ),
+        (
+            "modversions",
+            ("mod_id", "integration_version_id"),
+            "ALTER TABLE modversions ADD UNIQUE INDEX uq_modversions_integration_version "
+            "(mod_id, integration_version_id)",
         ),
         (
             "user_permissions",
@@ -295,10 +335,14 @@ class Database:
                         author VARCHAR(255),
                         link VARCHAR(255),
                         notes TEXT,
+                        integration_provider VARCHAR(16),
+                        integration_project_id VARCHAR(64),
                         side enum('CLIENT', 'SERVER', 'BOTH') DEFAULT 'BOTH',
                         modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'MOD',
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        UNIQUE INDEX uq_mods_integration_project
+                            (integration_provider, integration_project_id)
                         )"""
             )
             cur.execute(
@@ -308,6 +352,7 @@ class Database:
                         version VARCHAR(255) NOT NULL,
                         mcversion VARCHAR(255),
                         modloader VARCHAR(32),
+                        integration_version_id VARCHAR(64),
                         md5 VARCHAR(255) NOT NULL,
                         jarmd5 VARCHAR(255),
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -315,7 +360,9 @@ class Database:
                         filesize INT,
                         INDEX idx_modversions_mod_compatibility
                             (mod_id, mcversion, modloader),
-                        INDEX idx_modversions_mod_version (mod_id, version)
+                        INDEX idx_modversions_mod_version (mod_id, version),
+                        UNIQUE INDEX uq_modversions_integration_version
+                            (mod_id, integration_version_id)
                         )"""
             )
             cur.execute(
@@ -331,6 +378,7 @@ class Database:
                         )"""
             )
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
+            cur.execute(Database.INTEGRATION_CREDENTIALS_TABLE_SQL)
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS users (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -496,6 +544,7 @@ class Database:
             ),
             *Database.MODLOADER_COLUMN_MIGRATIONS,
             *Database.NOTES_COLUMN_MIGRATIONS,
+            *Database.INTEGRATION_COLUMN_MIGRATIONS,
         )
         con = Database.get_connection()
         if con is None:
@@ -531,6 +580,7 @@ class Database:
                     cur.execute(query)
 
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
+            cur.execute(Database.INTEGRATION_CREDENTIALS_TABLE_SQL)
 
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
@@ -577,10 +627,12 @@ class Database:
             cur = con.cursor()
             Database.normalize_legacy_timestamps(cur)
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
+            cur.execute(Database.INTEGRATION_CREDENTIALS_TABLE_SQL)
 
             for table, column, query in (
                 *Database.MODLOADER_COLUMN_MIGRATIONS,
                 *Database.NOTES_COLUMN_MIGRATIONS,
+                *Database.INTEGRATION_COLUMN_MIGRATIONS,
             ):
                 cur.execute(
                     """SELECT 1

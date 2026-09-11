@@ -23,11 +23,20 @@
       {%for mod in mods%}
       <tr>
         <td class="tablewidthid">{{mod.id}}</td>
-        <td class="tablemaxwidth tablewidth70">{{mod.pretty_name}} ({{mod.name}})</td>
+        <td class="tablemaxwidth tablewidth70">
+          {{mod.pretty_name}} ({{mod.name}})
+          {%if mod.integration_provider%}
+          <span class="badge bg-info text-dark">{{mod.integration_provider|title}}</span>
+          {%endif%}
+        </td>
         <td class="tablemaxwidth tablewidth30">{{mod.author}}</td>
         <td>
           <div class="maxcont">
+            {%if mod.integration_provider%}
+            <button type="button" class="btn btn-secondary buttonwidth" disabled title="Select a provider version from a build">Managed</button>
+            {%else%}
             <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('modid', '{{mod.id}}'); buttonpress('mod', '{{mod.name}}'); zipfile_mods('mod', 'mcversion', 'version', 'file', '0');">Select</button>
+            {%endif%}
             <a href="./modversion/{{mod.id}}"><button type="button" class="btn btn-secondary buttonwidth">Manage</button></a>
           </div>
         </td>

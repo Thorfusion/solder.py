@@ -166,21 +166,86 @@ function string_to_slug(str) {
 }
 
 function hideoptions(optiontoshow) {
-    // gets the value of selected option
-    selected = document.getElementById(optiontoshow).value;
-    // gets all that has the name modlist and makes then hidden
-    let modlist = document.querySelectorAll('[name="' + "modlist" + '"]');
-    modlist.forEach(el => {
-        el.setAttribute('hidden', 'true')
-    })
-    // uses the selected options value to only show matching id's
-    let modversion = document.querySelectorAll('[id="' + "modversion_" + selected + '"]');
-    modversion.forEach(el => {
-        el.removeAttribute("hidden")
-    })
-    // hides select a mod first option as that is an invalid answer
-    document.querySelector('[name="' + "modfirst" + '"]').setAttribute('hidden', 'true');
-    document.querySelector('[name="' + "modfirst" + '"]').selected = true;
+    const modSelect = document.getElementById(optiontoshow);
+    const versionSelect = document.getElementById("modversion");
+    const selected = modSelect.value;
+
+    versionSelect.querySelectorAll('[data-integration-version]').forEach(option => {
+        option.remove();
+    });
+    versionSelect.removeAttribute("data-integration-loaded");
+
+    versionSelect.querySelectorAll('[name="modlist"]').forEach(option => {
+        option.hidden = option.id !== "modversion_" + selected;
+    });
+
+    const placeholder = versionSelect.querySelector('[name="modfirst"]');
+    placeholder.hidden = true;
+    placeholder.selected = true;
+
+    const selectedOption = modSelect.options[modSelect.selectedIndex];
+    if (selectedOption && selectedOption.dataset.integrationUrl) {
+        loadintegrationversions("modversion", selectedOption.dataset.integrationUrl);
+    }
+}
+
+function integrationversionlabel(version) {
+    let label = version.version;
+    if (version.name && version.name !== version.version) {
+        label += " - " + version.name;
+    }
+    if (version.loaders && version.loaders.length) {
+        label += " (" + version.loaders.join(", ") + ")";
+    }
+    return label;
+}
+
+async function loadintegrationversions(selectId, endpoint) {
+    const select = document.getElementById(selectId);
+    if (!select || !endpoint || select.dataset.integrationLoaded === endpoint) {
+        return;
+    }
+    select.querySelectorAll('[data-integration-version="status"]').forEach(option => {
+        option.remove();
+    });
+    select.dataset.integrationLoaded = endpoint;
+
+    const status = document.createElement("option");
+    status.disabled = true;
+    status.textContent = "Loading provider versions...";
+    status.setAttribute("data-integration-version", "status");
+    select.appendChild(status);
+
+    try {
+        const response = await fetch(endpoint, {
+            headers: {"Accept": "application/json"}
+        });
+        const payload = await response.json();
+        status.remove();
+        if (!response.ok) {
+            throw new Error(payload.error || "Unable to load provider versions.");
+        }
+
+        if (!payload.versions.length) {
+            status.textContent = "No additional compatible versions";
+            select.appendChild(status);
+            return;
+        }
+
+        payload.versions.forEach(version => {
+            const option = document.createElement("option");
+            option.value = "integration:" + version.id;
+            option.textContent = integrationversionlabel(version);
+            option.setAttribute("data-integration-version", version.id);
+            select.appendChild(option);
+        });
+    } catch (error) {
+        status.textContent = error.message || "Unable to load provider versions.";
+        if (!status.parentNode) {
+            select.appendChild(status);
+        }
+        select.removeAttribute("data-integration-loaded");
+    }
 }
 
 function undisable(id) {

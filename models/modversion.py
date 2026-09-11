@@ -26,7 +26,7 @@ class IncompatibleModVersionError(ValueError):
 
 
 class Modversion:
-    def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0, modloader=None):
+    def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0, modloader=None, integration_version_id=None):
         self.id = id
         self.mod_id = mod_id
         self.version = version
@@ -37,9 +37,12 @@ class Modversion:
         self.filesize = filesize
         self.optional = optional
         self.modloader = normalize_modloader(modloader)
+        self.integration_version_id = (
+            str(integration_version_id) if integration_version_id else None
+        )
 
     @classmethod
-    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild, url="0", jarmd5="0", modloader=None):
+    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild, url="0", jarmd5="0", modloader=None, integration_version_id=None):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -47,10 +50,11 @@ class Modversion:
         try:
             cur.execute(
                 """INSERT INTO modversions
-                          (mod_id, version, mcversion, modloader, md5, jarmd5,
+                          (mod_id, version, mcversion, modloader,
+                           integration_version_id, md5, jarmd5,
                            created_at, updated_at, filesize)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (mod_id, version, mcversion, modloader, md5, jarmd5, now, now, filesize),
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (mod_id, version, mcversion, modloader, integration_version_id, md5, jarmd5, now, now, filesize),
             )
             id = cur.lastrowid
             conn.commit()
@@ -84,6 +88,7 @@ class Modversion:
             now,
             filesize,
             modloader=modloader,
+            integration_version_id=integration_version_id,
         )
 
     @staticmethod
@@ -328,11 +333,70 @@ class Modversion:
     def get_by_id(cls, id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modversions WHERE id = %s", (id,))
-        row = cur.fetchone()
-        if row:
-            return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"))
-        return None
+        try:
+            cur.execute("SELECT * FROM modversions WHERE id = %s", (id,))
+            row = cur.fetchone()
+            if row:
+                return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"), integration_version_id=row.get("integration_version_id"))
+            return None
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def get_by_integration(cls, mod_id, integration_version_id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT * FROM modversions
+                   WHERE mod_id = %s AND integration_version_id = %s""",
+                (mod_id, str(integration_version_id)),
+            )
+            row = cur.fetchone()
+            if row is None:
+                return None
+            return cls(
+                row["id"], row["mod_id"], row["version"], row["mcversion"],
+                row["md5"], row["created_at"], row["updated_at"],
+                row["filesize"], modloader=row.get("modloader"),
+                integration_version_id=row.get("integration_version_id"),
+            )
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
+    def version_exists(mod_id, version):
+        conn = Database.get_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "SELECT 1 FROM modversions WHERE mod_id = %s AND version = %s LIMIT 1",
+                (mod_id, version),
+            )
+            return cur.fetchone() is not None
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
+    def get_integration_version_ids(mod_id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT integration_version_id FROM modversions
+                   WHERE mod_id = %s AND integration_version_id IS NOT NULL""",
+                (mod_id,),
+            )
+            return {
+                str(row["integration_version_id"])
+                for row in cur.fetchall()
+            }
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def get_all():

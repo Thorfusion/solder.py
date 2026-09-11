@@ -60,6 +60,8 @@ class ModelSerializationTests(unittest.TestCase):
             "BOTH",
             "MOD",
             "internal",
+            "MODRINTH",
+            "AABBCCDD",
         )
 
         self.assertEqual(
@@ -77,6 +79,8 @@ class ModelSerializationTests(unittest.TestCase):
         )
         self.assertEqual(mod.notes, "internal")
         self.assertNotIn("notes", mod.to_json())
+        self.assertNotIn("integration_provider", mod.to_json())
+        self.assertNotIn("integration_project_id", mod.to_json())
 
     def test_modpack_serialization_adds_optional_and_server_builds(self):
         modpack = Modpack(
@@ -106,12 +110,23 @@ class ModelSerializationTests(unittest.TestCase):
         )
 
     def test_modversion_serialization_matches_the_api_contract(self):
-        version = Modversion(2, 1, "3.0", "1.21.1", "abc123", None, None, 4096)
+        version = Modversion(
+            2,
+            1,
+            "3.0",
+            "1.21.1",
+            "abc123",
+            None,
+            None,
+            4096,
+            integration_version_id="VERSION",
+        )
 
         self.assertEqual(
             version.to_json(),
             {"mod_id": 1, "version": "3.0", "md5": "abc123", "filesize": 4096},
         )
+        self.assertNotIn("integration_version_id", version.to_json())
 
 
 class ModelBehaviorTests(unittest.TestCase):
@@ -467,7 +482,7 @@ class ModelBehaviorTests(unittest.TestCase):
         query, parameters = connection.cursor.return_value.execute.call_args.args
         self.assertIn("jarmd5", query)
         self.assertEqual(parameters[3], "FABRIC")
-        self.assertEqual(parameters[5], jar_md5)
+        self.assertEqual(parameters[6], jar_md5)
         self.assertEqual(version.id, 42)
         self.assertEqual(version.modloader, "FABRIC")
         connection.cursor.return_value.close.assert_called_once_with()

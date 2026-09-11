@@ -109,11 +109,15 @@ class Build:
     def get_by_id(cls, id):
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM builds WHERE id = %s", (id,))
-        build = cursor.fetchone()
-        if build is None:
-            return None
-        return cls(**build)
+        try:
+            cursor.execute("SELECT * FROM builds WHERE id = %s", (id,))
+            build = cursor.fetchone()
+            if build is None:
+                return None
+            return cls(**build)
+        finally:
+            cursor.close()
+            conn.close()
 
     @staticmethod
     def get_by_modpack(modpack):

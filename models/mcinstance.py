@@ -197,7 +197,7 @@ class MCInstanceExport:
 
                 raw_hash = cls._normal_hash(package.jarmd5)
                 if modtype == "MOD" and raw_hash:
-                    resource_name = f"{package.name}"
+                    resource_name = f"solder-mod-{package.mod_id}"
                     resources.append(
                         cls._resource(
                             package,

@@ -235,6 +235,8 @@ def verify_performance_indexes(database_container: str) -> None:
         ("modversions", "mod_id,mcversion"),
         ("modversions", "mod_id,mcversion,modloader"),
         ("modversions", "mod_id,version"),
+        ("mods", "integration_provider,integration_project_id"),
+        ("modversions", "mod_id,integration_version_id"),
         ("user_permissions", "user_id"),
         ("clients", "uuid"),
         ("keys", "api_key"),
@@ -262,6 +264,8 @@ def verify_technic_migration(database_container: str) -> None:
         ("mods", "modtype"),
         ("mods", "notes"),
         ("mods", "side"),
+        ("mods", "integration_provider"),
+        ("mods", "integration_project_id"),
         ("modpacks", "enable_optionals"),
         ("modpacks", "enable_server"),
         ("modpacks", "pinned"),
@@ -279,6 +283,7 @@ def verify_technic_migration(database_container: str) -> None:
         ("modversions", "jarmd5"),
         ("modversions", "mcversion"),
         ("modversions", "modloader"),
+        ("modversions", "integration_version_id"),
         ("user_permissions", "solder_env"),
         ("users", "two_factor_confirmed_at"),
         ("users", "two_factor_recovery_codes"),
@@ -312,9 +317,10 @@ def verify_technic_migration(database_container: str) -> None:
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
         "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies', "
+        "'integration_credentials', "
         "'personal_access_tokens', 'password_reset_tokens');",
     )
-    if int(table_count) != 5:
+    if int(table_count) != 6:
         raise AssertionError(
             "Migration did not preserve the current Technic tables and create "
             "the solder.py tables"
@@ -392,6 +398,27 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if notes_column_count != "1":
         raise AssertionError("Fresh schema did not create Technic-compatible notes")
+
+    integration_schema_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ("
+        "(TABLE_NAME = 'mods' AND COLUMN_NAME IN "
+        "('integration_provider', 'integration_project_id')) OR "
+        "(TABLE_NAME = 'modversions' AND COLUMN_NAME = "
+        "'integration_version_id'));",
+    )
+    if integration_schema_count != "3":
+        raise AssertionError("Fresh schema did not create integration columns")
+
+    integration_table_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME = 'integration_credentials';",
+    )
+    if integration_table_count != "1":
+        raise AssertionError("Fresh schema did not create integration credentials")
 
     unwanted_table_count = mysql(
         database_container,
@@ -1118,6 +1145,29 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         )
         if dependency_table_count != "1":
             raise AssertionError("Application startup did not create mod_dependencies")
+        integration_schema_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.COLUMNS "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ("
+            "(TABLE_NAME = 'mods' AND COLUMN_NAME IN "
+            "('integration_provider', 'integration_project_id')) OR "
+            "(TABLE_NAME = 'modversions' AND COLUMN_NAME = "
+            "'integration_version_id'));",
+        )
+        if integration_schema_count != "3":
+            raise AssertionError(
+                "Application startup did not create the integration columns"
+            )
+        integration_table_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.TABLES "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+            "AND TABLE_NAME = 'integration_credentials';",
+        )
+        if integration_table_count != "1":
+            raise AssertionError(
+                "Application startup did not create integration_credentials"
+            )
         mysql(
             database_container,
             "INSERT INTO mod_dependencies (mod_id, dependency_mod_id) "

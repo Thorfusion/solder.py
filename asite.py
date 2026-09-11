@@ -5,7 +5,7 @@ import threading
 import boto3
 
 from api import solderpy_version
-from flask import Blueprint, app, flash, redirect, render_template, request, send_file, session, url_for
+from flask import Blueprint, app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from models.build import Build
 from models.build_modversion import Build_modversion
 from models.client import Client
@@ -14,6 +14,17 @@ from models.compatibility import InvalidModloaderError
 from models.database import Database
 from models.key import Key
 from models.mcinstance import MCInstanceExport, MCInstanceExportError
+from models.integration import (
+    CURSEFORGE,
+    MODRINTH,
+    CurseForgeProvider,
+    IntegrationCredential,
+    IntegrationError,
+    ModIntegration,
+    external_id,
+    normalize_provider,
+    provider_for_user,
+)
 from models.mod import DuplicateModError, Mod, UploadVerificationError
 from models.mod_dependency import DependencyError, ModDependency
 from models.modpack import Modpack
@@ -41,6 +52,42 @@ R2 = boto3.client('s3',
                   endpoint_url=R2_ENDPOINT,
                   aws_access_key_id=R2_ACCESS_KEY,
                   aws_secret_access_key=R2_SECRET_KEY)
+
+
+def _materialize_integration_version(mod_id, build_id, version_id):
+    if User.get_permission_token(session["token"], "mods_manage") == 0:
+        raise IntegrationError(
+            "Mod management permission is required to import a provider version."
+        )
+    mod = Mod.get_by_id(mod_id)
+    build = Build.get_by_id(build_id)
+    if mod is None or build is None:
+        raise IntegrationError("The selected mod or build no longer exists.")
+    try:
+        return ModIntegration.materialize(
+            mod,
+            build,
+            version_id,
+            Session.get_user_id(session["token"]),
+            UPLOAD_FOLDER,
+            r2_client=R2 if R2_BUCKET else None,
+            r2_bucket=R2_BUCKET,
+        )
+    except IntegrationError:
+        raise
+    except Exception as error:
+        ErrorPrinter.message("failed to import provider mod version", error)
+        raise IntegrationError(
+            "The provider version could not be imported. Check the server log."
+        ) from error
+
+
+def _selected_integration_version(value):
+    value = str(value or "")
+    prefix = "integration:"
+    if not value.startswith(prefix):
+        return None
+    return external_id(value[len(prefix):])
 
 def createFolder(dirName):
     os.makedirs(dirName, exist_ok=True)
@@ -190,6 +237,16 @@ def newmodversion(id):
     if "newmodvermanual_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_create") == 0:
                 return redirect(request.referrer)
+        mod = Mod.get_by_id(id)
+        if mod is None:
+            flash("the selected mod no longer exists", "error")
+            return redirect(url_for("asite.modlibrary"))
+        if mod.integration_provider:
+            flash(
+                "Provider-managed mods import versions from the build editor.",
+                "error",
+            )
+            return redirect(url_for("asite.modversion", id=id))
         filesie2 = Modversion.get_file_size(md5_repo_url + request.form["newmodvermanual_url"])
         if request.form["newmodvermanual_md5"] != "":
             try:
@@ -229,6 +286,81 @@ def newmod():
         return redirect(url_for('asite.modlibrary'))
 
     return render_template("newmod.html")
+
+
+@asite.route("/integrations", methods=["GET", "POST"])
+def integrations():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "mods_create") == 0:
+        return redirect(request.referrer or url_for("asite.index"))
+
+    user_id = Session.get_user_id(session["token"])
+    if request.method == "POST":
+        try:
+            if "save_curseforge_key" in request.form:
+                api_key = request.form.get("curseforge_api_key", "").strip()
+                provider = CurseForgeProvider(api_key)
+                if not provider.validate_credentials():
+                    raise IntegrationError("CurseForge rejected the API key.")
+                IntegrationCredential.set(user_id, CURSEFORGE, api_key)
+                flash("saved your CurseForge API key", "success")
+            elif "delete_curseforge_key" in request.form:
+                IntegrationCredential.delete(user_id, CURSEFORGE)
+                flash("removed your CurseForge API key", "success")
+            elif "import_project" in request.form:
+                mod, created = ModIntegration.import_project(
+                    request.form.get("provider"),
+                    request.form.get("project_id"),
+                    user_id,
+                )
+                if created:
+                    flash(f"added {mod.pretty_name} to the mod library", "success")
+                else:
+                    flash(f"{mod.pretty_name} is already in the mod library", "success")
+                return redirect(url_for("asite.modversion", id=mod.id))
+        except IntegrationError as error:
+            flash(str(error), "error")
+        return redirect(
+            url_for(
+                "asite.integrations",
+                provider=request.form.get("provider", MODRINTH).lower(),
+            )
+        )
+
+    try:
+        selected_provider = normalize_provider(
+            request.args.get("provider", MODRINTH)
+        )
+    except IntegrationError:
+        selected_provider = MODRINTH
+    query = request.args.get("q", "").strip()[:100]
+    curseforge_configured = bool(
+        IntegrationCredential.get(user_id, CURSEFORGE)
+    )
+    projects = []
+    if query:
+        try:
+            projects = provider_for_user(selected_provider, user_id).search(query)
+            imported_ids = Mod.get_integration_project_ids(selected_provider)
+            projects = [
+                (project, project.project_id in imported_ids)
+                for project in projects
+            ]
+        except IntegrationError as error:
+            flash(str(error), "error")
+
+    return render_template(
+        "integrations.html",
+        provider=selected_provider,
+        query=query,
+        projects=projects,
+        curseforge_configured=curseforge_configured,
+        modrinth=MODRINTH,
+        curseforge=CURSEFORGE,
+    )
 
 
 @asite.route("/modpack/<id>", methods=["GET", "POST"])
@@ -539,8 +671,26 @@ def modpackbuild(id):
             return redirect(url_for("asite.modpackbuild", id=id))
         if "selmodver_submit" in request.form:
             try:
-                Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], id)
-            except (IncompatibleModVersionError, ValueError) as error:
+                selected_version = request.form["selmodver_ver"]
+                integration_version = _selected_integration_version(
+                    selected_version
+                )
+                if integration_version:
+                    current = Modversion.get_by_id(
+                        request.form["selmodver_oldver"]
+                    )
+                    if current is None:
+                        raise IntegrationError(
+                            "The current mod version no longer exists."
+                        )
+                    materialized = _materialize_integration_version(
+                        current.mod_id, id, integration_version
+                    )
+                    selected_version = materialized.version.id
+                Modversion.update_modversion_in_build(
+                    request.form["selmodver_oldver"], selected_version, id
+                )
+            except (IncompatibleModVersionError, IntegrationError, ValueError) as error:
                 flash(str(error), "error")
                 return redirect(url_for("asite.modpackbuild", id=id))
             flash("updated " + id, "success")
@@ -564,8 +714,28 @@ def modpackbuild(id):
             if "newoptional" in request.form:
                 newoptional = request.form['newoptional']
             try:
-                added_dependencies = Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", newoptional)
-            except (IncompatibleModVersionError, MissingDependencyVersionError) as error:
+                selected_version = request.form["modversion"]
+                integration_version = _selected_integration_version(
+                    selected_version
+                )
+                if integration_version:
+                    materialized = _materialize_integration_version(
+                        request.form["modnames"], id, integration_version
+                    )
+                    selected_version = materialized.version.id
+                added_dependencies = Modversion.add_modversion_to_selected_build(
+                    selected_version,
+                    request.form["modnames"],
+                    id,
+                    "0",
+                    newoptional,
+                )
+            except (
+                IncompatibleModVersionError,
+                IntegrationError,
+                MissingDependencyVersionError,
+                ValueError,
+            ) as error:
                 flash(str(error), "error")
                 return redirect(url_for("asite.modpackbuild", id=id))
             message = "added modversion to build"
@@ -592,6 +762,51 @@ def modpackbuild(id):
         listmodversions=editor.listmodversions,
         buildlist=editor.buildlist,
     )
+
+
+@asite.route(
+    "/modpackbuild/<int:build_id>/integration-versions/<int:mod_id>",
+    methods=["GET"],
+)
+def integration_versions(build_id, mod_id):
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return jsonify({"error": "Authentication required."}), 401
+    if (
+        User.get_permission_token(session["token"], "modpacks_manage") == 0
+        or User.get_permission_token(session["token"], "mods_manage") == 0
+    ):
+        return jsonify({"error": "Permission denied."}), 403
+
+    modpack_id = Build.get_modpackid_by_id(build_id)
+    if not modpack_id or not User_modpack.get_user_modpackpermission(
+        session["token"], modpack_id
+    ):
+        return jsonify({"error": "Permission denied."}), 403
+
+    mod = Mod.get_by_id(mod_id)
+    build = Build.get_by_id(build_id)
+    if mod is None or build is None:
+        return jsonify({"error": "The selected mod or build was not found."}), 404
+    try:
+        versions = ModIntegration.list_versions(
+            mod,
+            build,
+            Session.get_user_id(session["token"]),
+        )
+        imported_ids = Modversion.get_integration_version_ids(mod.id)
+        return jsonify(
+            {
+                "versions": [
+                    version.management_json()
+                    for version in versions
+                    if version.version_id not in imported_ids
+                ]
+            }
+        )
+    except IntegrationError as error:
+        return jsonify({"error": str(error)}), 400
 
 
 @asite.route("/modpackbuild/<int:id>/mcinstance", methods=["GET"])
@@ -672,7 +887,17 @@ def modlibrary_post():
             print('No selected file')
             return redirect(url_for('asite.modlibrary'))
         if filew and allowed_file(filew.filename):
-            mod_name = request.form["mod"]
+            mod = Mod.get_by_id(request.form.get("modid"))
+            mod_name = request.form.get("mod", "")
+            if mod is None or mod.name != mod_name:
+                flash("The selected mod is invalid.", "error")
+                return redirect(url_for("asite.modlibrary"))
+            if mod.integration_provider:
+                flash(
+                    "Provider-managed mods import versions from the build editor.",
+                    "error",
+                )
+                return redirect(url_for("asite.modlibrary"))
             version = request.form["mcversion"] + "-" + request.form["version"]
             filename = f"{mod_name}-{version}.zip"
             jarfilename = f"{mod_name}-{version}.jar"
