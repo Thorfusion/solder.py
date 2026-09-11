@@ -167,10 +167,12 @@ def newmodversion(id):
                 return redirect(request.referrer)
 
     if "adddependency_submit" in request.form:
-        if "dependency_mod_id" not in request.form:
+        dependency_mod_id = request.form.get("dependency_mod_id", "").strip()
+        if not dependency_mod_id:
+            flash("select a required dependency", "error")
             return redirect(url_for("asite.modversion", id=id))
         try:
-            ModDependency.add(id, request.form["dependency_mod_id"])
+            ModDependency.add(id, dependency_mod_id)
         except DependencyError as error:
             flash(str(error), "error")
         else:
@@ -713,19 +715,23 @@ def modpackbuild(id):
             newoptional = "0"
             if "newoptional" in request.form:
                 newoptional = request.form['newoptional']
+            mod_id = request.form.get("modnames", "").strip()
+            selected_version = request.form.get("modversion", "").strip()
+            if not mod_id or not selected_version:
+                flash("select a mod and compatible version", "error")
+                return redirect(url_for("asite.modpackbuild", id=id))
             try:
-                selected_version = request.form["modversion"]
                 integration_version = _selected_integration_version(
                     selected_version
                 )
                 if integration_version:
                     materialized = _materialize_integration_version(
-                        request.form["modnames"], id, integration_version
+                        mod_id, id, integration_version
                     )
                     selected_version = materialized.version.id
                 added_dependencies = Modversion.add_modversion_to_selected_build(
                     selected_version,
-                    request.form["modnames"],
+                    mod_id,
                     id,
                     "0",
                     newoptional,

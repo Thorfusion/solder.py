@@ -70,3 +70,17 @@
 .actionmcil {
   width: 12.4rem;
 }
+
+.searchable-dropdown {
+  position: relative;
+}
+
+.searchable-dropdown-menu {
+  inset: 100% auto auto 0;
+  z-index: 1050;
+}
+
+.searchable-dropdown-options {
+  max-height: 18rem;
+  overflow-y: auto;
+}

@@ -102,7 +102,7 @@ class MCInstanceExportTests(unittest.TestCase):
         self.assertIn("minecraftVersion = 1.7.10", metadata)
         self.assertIn("name = Example Pack", metadata)
         self.assertIn("version = 2.0", metadata)
-        self.assertIn("[solder-mod-11]", resources)
+        self.assertIn("[example-mod]", resources)
         self.assertIn(
             "url = https://cdn.example.test/mods/example-mod/"
             "example-mod-1.7.10-1.0.jar",
@@ -115,7 +115,7 @@ class MCInstanceExportTests(unittest.TestCase):
         self.assertIn("maxchoices = 1", optionals)
         self.assertIn("option1.name = Optional - Mod", optionals)
         self.assertIn("option1.description = Optional client mod", optionals)
-        self.assertIn("option1.resources = solder-mod-12", optionals)
+        self.assertIn("option1.resources = optional-mod", optionals)
 
     def test_empty_build_still_produces_a_valid_archive(self):
         result = MCInstanceExport.render(

@@ -74,11 +74,34 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         self.assertIn('id="dependency_search"', version_source)
         self.assertIn(
-            "dropdownsearches('dependency_search', 'dependency_mod_id');",
+            "filtersearchabledropdown('dependency_search', 'dependency_dropdown_options', 'dependency_no_results');",
             version_source,
         )
-        self.assertIn('id="dependency_mod_id"', version_source)
+        self.assertIn(
+            'type="hidden" name="dependency_mod_id" id="dependency_mod_id"',
+            version_source,
+        )
+        self.assertIn('class="form-select text-start"', version_source)
+        self.assertNotIn(
+            '<select class="form-select" name="dependency_mod_id"',
+            version_source,
+        )
         self.assertNotIn('id="table"', version_source)
+
+        build_source = (template_root / "modpackbuild.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('id="build_mod_search"', build_source)
+        self.assertIn(
+            "filtersearchabledropdown('build_mod_search', 'build_mod_dropdown_options', 'build_mod_no_results');",
+            build_source,
+        )
+        self.assertIn(
+            'type="hidden" name="modnames" id="modnames"', build_source
+        )
+        self.assertNotIn(
+            '<select class="form-select" name="modnames"', build_source
+        )
 
     def test_authenticated_user_can_download_mcinstance_export(self):
         with self.client.session_transaction() as flask_session:

@@ -1016,9 +1016,9 @@ def exercise_synthetic_user_login(base_url: str, database_container: str) -> Non
         metadata = archive.read("metadata.packconfig").decode("utf-8")
         if "ci-mcil-loader" in resources or "solder-mod-26" in resources:
             raise AssertionError("The MCInstanceLoader package exported itself")
-        if "solder-mod-27" not in resources or "optional = true" not in resources:
+        if "[ci-mcil-optional]" not in resources or "optional = true" not in resources:
             raise AssertionError("The optional MCInstance resource was not exported")
-        if "option1.resources = solder-mod-27" not in optionals:
+        if "option1.resources = ci-mcil-optional" not in optionals:
             raise AssertionError("The MCInstance optional menu was not exported")
         if "name = CI Hidden Pack" not in metadata:
             raise AssertionError("The MCInstance metadata did not identify the pack")

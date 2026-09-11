@@ -20,29 +20,114 @@ function tablesearches(column) {
     }
 }
 
-// Filter the choices in a select without replacing the normal dropdown UI.
-function dropdownsearches(inputId, selectId) {
+function closesearchabledropdown(menu) {
+    if (!menu) {
+        return;
+    }
+    menu.hidden = true;
+    menu.classList.remove("show");
+    const toggle = menu.parentElement.querySelector('[aria-expanded="true"]');
+    if (toggle) {
+        toggle.setAttribute("aria-expanded", "false");
+    }
+}
+
+function togglesearchabledropdown(event, menuId, searchId) {
+    event.preventDefault();
+    event.stopPropagation();
+    const menu = document.getElementById(menuId);
+    const search = document.getElementById(searchId);
+    if (!menu || !search) {
+        return;
+    }
+
+    const shouldOpen = menu.hidden;
+    document.querySelectorAll('[data-searchable-menu]').forEach(item => {
+        closesearchabledropdown(item);
+    });
+    if (!shouldOpen) {
+        return;
+    }
+
+    menu.hidden = false;
+    menu.classList.add("show");
+    event.currentTarget.setAttribute("aria-expanded", "true");
+    window.setTimeout(() => {
+        search.focus();
+        search.select();
+    }, 0);
+}
+
+function filtersearchabledropdown(inputId, optionsId, noResultsId) {
     const input = document.getElementById(inputId);
-    const select = document.getElementById(selectId);
-    if (!input || !select) {
+    const options = document.getElementById(optionsId);
+    const noResults = document.getElementById(noResultsId);
+    if (!input || !options || !noResults) {
         return;
     }
 
     const filter = input.value.trim().toUpperCase();
-    for (const option of select.options) {
-        if (!option.value) {
-            option.hidden = false;
-            continue;
-        }
-        const text = option.textContent || option.innerText || "";
+    let matches = 0;
+    options.querySelectorAll('[data-searchable-option]').forEach(option => {
+        const text = option.textContent || "";
         option.hidden = !text.toUpperCase().includes(filter);
-    }
-
-    const selected = select.options[select.selectedIndex];
-    if (selected && selected.hidden) {
-        select.value = "";
-    }
+        if (!option.hidden) {
+            matches += 1;
+        }
+    });
+    noResults.hidden = matches !== 0;
 }
+
+function selectsearchabledropdown(
+    option,
+    valueId,
+    labelId,
+    toggleId,
+    menuId,
+    submitId
+) {
+    const value = document.getElementById(valueId);
+    const label = document.getElementById(labelId);
+    const toggle = document.getElementById(toggleId);
+    const submit = submitId ? document.getElementById(submitId) : null;
+    if (!option || !value || !label || !toggle || (submitId && !submit)) {
+        return false;
+    }
+    value.value = option.dataset.value;
+    label.textContent = option.textContent.trim();
+    option.parentElement.querySelectorAll('[data-searchable-option]').forEach(item => {
+        item.setAttribute("aria-selected", item === option ? "true" : "false");
+    });
+    if (submit) {
+        submit.disabled = false;
+    }
+    closesearchabledropdown(document.getElementById(menuId));
+    toggle.focus();
+    return true;
+}
+
+document.addEventListener("click", event => {
+    document.querySelectorAll('[data-searchable-menu]').forEach(menu => {
+        if (!menu.parentElement.contains(event.target)) {
+            closesearchabledropdown(menu);
+        }
+    });
+});
+
+document.addEventListener("keydown", event => {
+    if (event.key !== "Escape") {
+        return;
+    }
+    document.querySelectorAll('[data-searchable-menu]').forEach(menu => {
+        if (!menu.hidden) {
+            const toggle = menu.parentElement.querySelector("button");
+            closesearchabledropdown(menu);
+            if (toggle) {
+                toggle.focus();
+            }
+        }
+    });
+});
 
 
 // sleep function
@@ -165,10 +250,20 @@ function string_to_slug(str) {
     return str;
 }
 
-function hideoptions(optiontoshow) {
-    const modSelect = document.getElementById(optiontoshow);
+function selectbuildmod(option, valueId, labelId, toggleId, menuId, submitId) {
+    if (!selectsearchabledropdown(
+        option,
+        valueId,
+        labelId,
+        toggleId,
+        menuId,
+        submitId
+    )) {
+        return;
+    }
+
     const versionSelect = document.getElementById("modversion");
-    const selected = modSelect.value;
+    const selected = option.dataset.value;
 
     versionSelect.querySelectorAll('[data-integration-version]').forEach(option => {
         option.remove();
@@ -183,9 +278,8 @@ function hideoptions(optiontoshow) {
     placeholder.hidden = true;
     placeholder.selected = true;
 
-    const selectedOption = modSelect.options[modSelect.selectedIndex];
-    if (selectedOption && selectedOption.dataset.integrationUrl) {
-        loadintegrationversions("modversion", selectedOption.dataset.integrationUrl);
+    if (option.dataset.integrationUrl) {
+        loadintegrationversions("modversion", option.dataset.integrationUrl);
     }
 }
 

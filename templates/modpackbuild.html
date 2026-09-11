@@ -60,13 +60,22 @@
 <div class="">
     <form method="post" action="">
         <div class="mb-3">
-            <label for="modnames" class="form-label">Select Mod</label>
-            <select class="form-select" name="modnames" id="modnames" onchange="hideoptions('modnames');" required>
-                <option class="is-invalid" name="modfirst2" hidden="true" selected="selected" value="">Select mod</option>
-                {%for lmod in listmod%}
-                <option value="{{lmod.id}}" {%if lmod.integration_provider%}data-integration-url="{{url_for('asite.integration_versions', build_id=packbuild.id, mod_id=lmod.id)}}"{%endif%}>{{lmod.pretty_name}}{%if lmod.integration_provider%} ({{lmod.integration_provider|title}}){%endif%}</option>
-                {%endfor%}
-            </select>
+            <label for="build_mod_dropdown_toggle" class="form-label">Select Mod</label>
+            <div class="searchable-dropdown">
+                <button class="form-select text-start" type="button" id="build_mod_dropdown_toggle" aria-haspopup="listbox" aria-expanded="false" onclick="togglesearchabledropdown(event, 'build_mod_dropdown_menu', 'build_mod_search');">
+                    <span id="build_mod_selection">Select mod</span>
+                </button>
+                <div class="dropdown-menu searchable-dropdown-menu w-100 p-2" id="build_mod_dropdown_menu" data-searchable-menu hidden>
+                    <input type="search" class="form-control mb-2" id="build_mod_search" placeholder="Search mods" autocomplete="off" oninput="filtersearchabledropdown('build_mod_search', 'build_mod_dropdown_options', 'build_mod_no_results');" onclick="event.stopPropagation();">
+                    <div class="searchable-dropdown-options" id="build_mod_dropdown_options" role="listbox" aria-labelledby="build_mod_dropdown_toggle">
+                    {%for lmod in listmod%}
+                        <button type="button" class="dropdown-item" role="option" aria-selected="false" data-searchable-option data-value="{{lmod.id}}" {%if lmod.integration_provider%}data-integration-url="{{url_for('asite.integration_versions', build_id=packbuild.id, mod_id=lmod.id)}}"{%endif%} onclick="selectbuildmod(this, 'modnames', 'build_mod_selection', 'build_mod_dropdown_toggle', 'build_mod_dropdown_menu', 'add_mod_submit');">{{lmod.pretty_name}}{%if lmod.integration_provider%} ({{lmod.integration_provider|title}}){%endif%}</button>
+                    {%endfor%}
+                        <p class="dropdown-item-text text-muted mb-0" id="build_mod_no_results" hidden>No matching mods</p>
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" name="modnames" id="modnames" value="">
         </div>
         <div class="mb-3">
             <label for="modversion" class="form-label">Modversion</label>
@@ -81,7 +90,7 @@
             <input class="form-check-input" type="checkbox" value="1" id="newoptional" name="newoptional">
             <label class="form-check-label" for="newoptional">Optional</label>
         </div>
-        <input class="btn btn-success" type="submit" value="Add Mod" name="add_mod_submit">
+        <input class="btn btn-success" type="submit" value="Add Mod" name="add_mod_submit" id="add_mod_submit" disabled>
     </form>
     <div class="divider"></div>
     <form method="post" action="">
