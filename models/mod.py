@@ -23,7 +23,7 @@ _MAX_UPLOAD_JAR_SIZE = 512 * 1024 * 1024
 
 
 class Mod:
-    def __init__(self, id, name, description, author, link, created_at, updated_at, pretty_name, side, modtype, note):
+    def __init__(self, id, name, description, author, link, created_at, updated_at, pretty_name, side, modtype, notes):
         self.id = id
         self.name = name
         self.description = description
@@ -34,17 +34,17 @@ class Mod:
         self.pretty_name = pretty_name
         self.side = side
         self.modtype = modtype
-        self.note = note
+        self.notes = notes
 
     @classmethod
-    def new(cls, name, description, author, link, pretty_name, side, modtype, note):
+    def new(cls, name, description, author, link, pretty_name, side, modtype, notes):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
         try:
-            cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, modtype, note) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, modtype, note))
+            cur.execute("INSERT INTO mods (name, description, author, link, created_at, updated_at, pretty_name, side, modtype, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (name, description, author, link, now, now, pretty_name, side, modtype, notes))
             conn.commit()
-            return cls(cur.lastrowid, name, description, author, link, now, now, pretty_name, side, modtype, note)
+            return cls(cur.lastrowid, name, description, author, link, now, now, pretty_name, side, modtype, notes)
         except IntegrityError as error:
             conn.rollback()
             if error.errno == errorcode.ER_DUP_ENTRY:
@@ -55,13 +55,13 @@ class Mod:
             conn.close()
 
     @staticmethod
-    def update(id, name, description, author, link, pretty_name, side, modtype, note):
+    def update(id, name, description, author, link, pretty_name, side, modtype, notes):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
         cur.execute("""UPDATE mods 
-            SET name = %s, description = %s, author = %s, link = %s, updated_at = %s, pretty_name = %s, side = %s, modtype = %s, note = %s 
-            WHERE id = %s;""", (name, description, author, link, now, pretty_name, side, modtype, note, id))
+            SET name = %s, description = %s, author = %s, link = %s, updated_at = %s, pretty_name = %s, side = %s, modtype = %s, notes = %s
+            WHERE id = %s;""", (name, description, author, link, now, pretty_name, side, modtype, notes, id))
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
@@ -92,7 +92,7 @@ class Mod:
         cur.execute("SELECT * FROM mods WHERE id = %s", (id,))
         row = cur.fetchone()
         if row:
-            return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"])
+            return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")))
         return None
 
     @classmethod
@@ -103,7 +103,7 @@ class Mod:
             cur.execute("SELECT * FROM mods WHERE name = %s", (name,))
             row = cur.fetchone()
             if row:
-                return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"])
+                return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")))
             return None
         finally:
             cur.close()
@@ -127,7 +127,7 @@ class Mod:
                     row["pretty_name"],
                     row["side"],
                     row["modtype"],
-                    row["note"],
+                    row.get("notes", row.get("note")),
                 )
                 for row in cur.fetchall()
             ]
@@ -142,7 +142,7 @@ class Mod:
         cur.execute("SELECT * FROM mods ORDER BY id DESC")
         rows = cur.fetchall()
         if rows:
-            return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row["note"]) for row in rows]
+            return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note"))) for row in rows]
         return []
 
     @staticmethod

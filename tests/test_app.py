@@ -47,6 +47,30 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("/modpackbuild/<int:id>/mcinstance", routes)
         self.assertIn("/api/modpack/<slugstring>/<buildstring>", routes)
 
+    def test_modloader_controls_and_dependency_search_use_existing_ui_styles(self):
+        template_root = Path(__file__).resolve().parents[1] / "templates"
+        loader_templates = (
+            "modlibrary.html",
+            "modpack.html",
+            "modpackbuild.html",
+            "modversion.html",
+        )
+        for template_name in loader_templates:
+            source = (template_root / template_name).read_text(encoding="utf-8")
+            self.assertIn(
+                '<select class="form-select" name="modloader" id="modloader">',
+                source,
+            )
+            self.assertNotIn('<datalist id="modloaders">', source)
+            self.assertNotIn("or 'ANY'", source)
+
+        version_source = (template_root / "modversion.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('id="search"', version_source)
+        self.assertIn('onkeyup="tablesearches(0);"', version_source)
+        self.assertIn('id="table"', version_source)
+
     def test_authenticated_user_can_download_mcinstance_export(self):
         with self.client.session_transaction() as flask_session:
             flask_session["token"] = "valid-test-token"
@@ -105,7 +129,7 @@ class ApplicationSmokeTests(unittest.TestCase):
             "link": "https://example.test/mod",
             "flexRadioDefault": "BOTH",
             "type": "MOD",
-            "internal_note": "Keep this value",
+            "notes": "Keep this value",
         }
         with (
             patch("asite.Session.verify_session", return_value=True),
@@ -168,7 +192,7 @@ class ApplicationSmokeTests(unittest.TestCase):
                 "0",
                 "0",
                 jar_md5,
-                None,
+                modloader=None,
             )
             artifact_dir = Path(directory, "example-mod")
             self.assertEqual(
@@ -220,7 +244,6 @@ class ApplicationSmokeTests(unittest.TestCase):
                     "example-mod-1.7.10-1.0.jar",
                 ).exists()
             )
-
 
 if __name__ == "__main__":
     unittest.main()

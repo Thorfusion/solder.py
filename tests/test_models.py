@@ -75,6 +75,8 @@ class ModelSerializationTests(unittest.TestCase):
                 "modtype": "MOD",
             },
         )
+        self.assertEqual(mod.notes, "internal")
+        self.assertNotIn("notes", mod.to_json())
 
     def test_modpack_serialization_adds_optional_and_server_builds(self):
         modpack = Modpack(
@@ -337,11 +339,31 @@ class ModelBehaviorTests(unittest.TestCase):
             )
 
         self.assertEqual(mod.id, 42)
+        self.assertEqual(mod.notes, "Note")
+        self.assertIn("notes", cursor.execute.call_args.args[0])
         self.assertEqual(cursor.execute.call_count, 1)
         connection.commit.assert_called_once_with()
         connection.rollback.assert_not_called()
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
+
+    def test_legacy_solderpy_mod_note_is_moved_to_technic_notes(self):
+        cursor = Mock()
+        cursor.fetchone.return_value = (1,)
+
+        Database.migrate_legacy_mod_notes(cursor)
+
+        self.assertEqual(cursor.execute.call_count, 3)
+        self.assertIn("COLUMN_NAME = %s", cursor.execute.call_args_list[0].args[0])
+        self.assertEqual(
+            cursor.execute.call_args_list[0].args[1],
+            ("solder_test", "mods", "note"),
+        )
+        self.assertIn("SET notes = note", cursor.execute.call_args_list[1].args[0])
+        self.assertEqual(
+            cursor.execute.call_args_list[2].args[0],
+            "ALTER TABLE mods DROP COLUMN note",
+        )
 
     def test_duplicate_mod_rolls_back_and_raises_a_specific_error(self):
         connection = Mock()

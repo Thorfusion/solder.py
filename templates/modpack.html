@@ -25,7 +25,7 @@
                 <td class="tablewidthid">{{mod.id}}</td>
                 <td>{{mod.version}}</td>
                 <td>{{mod.minecraft}}</td>
-                <td>{{mod.modloader or ('FORGE' if mod.forge else 'ANY')}}</td>
+                <td>{{mod.modloader or ('FORGE' if mod.forge else '')}}</td>
                 <td>{{mod.count}}</td>
                 <td><input class="form-check-input" type="radio" name="flexRadioDefault" value="" id="rec_{{mod.id}}" onclick="submitecheckedpress('modid', '{{mod.version}}', 'check', 'rec_{{mod.id}}', 'recommended_submit')" {% if modpackname.recommended==mod.version %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="radio" name="flexRadioDefault1" value="" id="latest_{{mod.id}}" onclick="submitecheckedpress('modid', '{{mod.version}}', 'check', 'latest_{{mod.id}}', 'latest_submit')" {% if modpackname.latest==mod.version %}checked{% endif %}></td>
@@ -71,16 +71,16 @@
             <input type="text" class="form-control" name="mcversion" id="mcversion" required></input>
         </div>
         <div class="mb-3">
-            <label for="modloader" class="form-label">Modloader (optional for legacy builds)</label>
-            <input type="text" class="form-control" name="modloader" id="modloader" list="modloaders" placeholder="FORGE"></input>
-            <datalist id="modloaders">
-                <option value="FORGE"></option>
-                <option value="NEOFORGE"></option>
-                <option value="FABRIC"></option>
-                <option value="QUILT"></option>
-                <option value="LITELOADER"></option>
-                <option value="VANILLA"></option>
-            </datalist>
+            <label for="modloader" class="form-label">Modloader</label>
+            <select class="form-select" name="modloader" id="modloader">
+                <option value="">Unspecified</option>
+                <option value="FORGE">Forge</option>
+                <option value="NEOFORGE">NeoForge</option>
+                <option value="FABRIC">Fabric</option>
+                <option value="QUILT">Quilt</option>
+                <option value="LITELOADER">LiteLoader</option>
+                <option value="VANILLA">Vanilla</option>
+            </select>
         </div>
         <div class="mb-3">
             <label for="forge" class="form-label">Modloader version (optional)</label>

@@ -394,7 +394,7 @@ Example response:
 }
 ```
 
-The internal management note is never returned by the read API.
+Private mod management notes are never returned by the read API.
 
 ## Get a mod version
 

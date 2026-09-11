@@ -87,8 +87,8 @@
             </div>
         </div>
         <div class="mb-3">
-            <label for="internal_note" class="form-label">Internal note</label>
-            <textarea name="internal_note" id="internal_note" class="form-control" rows="5">{{request.form.get('internal_note', '')}}</textarea>
+            <label for="notes" class="form-label">Notes (private)</label>
+            <textarea name="notes" id="notes" class="form-control" rows="5">{{request.form.get('notes', request.form.get('internal_note', ''))}}</textarea>
         </div>
         <input class="btn btn-success" type="submit" value="Add Mod">
     </form>

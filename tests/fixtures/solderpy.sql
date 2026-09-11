@@ -445,8 +445,8 @@ INSERT INTO `builds` (`id`, `modpack_id`, `version`, `created_at`, `updated_at`,
 (1, 1, '1.0', '2024-01-01 00:00:00', '2024-01-01 00:00:00', '1.21.1', NULL, 1, 0, '21', 4096);
 INSERT INTO `client_modpack` (`id`, `client_id`, `modpack_id`, `created_at`, `updated_at`) VALUES
 (1, 1, 1, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
-INSERT INTO `mods` (`id`, `name`, `description`, `author`, `link`, `created_at`, `updated_at`, `pretty_name`) VALUES
-(1, 'ci-example-mod', 'Synthetic integration-test mod', 'CI', 'https://example.invalid/mod', '2024-01-01 00:00:00', '2024-01-01 00:00:00', 'CI Example Mod');
+INSERT INTO `mods` (`id`, `name`, `description`, `author`, `link`, `created_at`, `updated_at`, `pretty_name`, `note`) VALUES
+(1, 'ci-example-mod', 'Synthetic integration-test mod', 'CI', 'https://example.invalid/mod', '2024-01-01 00:00:00', '2024-01-01 00:00:00', 'CI Example Mod', 'Legacy solder.py private mod note');
 INSERT INTO `modversions` (`id`, `mod_id`, `version`, `md5`, `created_at`, `updated_at`, `filesize`) VALUES
 (1, 1, '1.0', '00000000000000000000000000000000', '2024-01-01 00:00:00', '2024-01-01 00:00:00', 1024);
 INSERT INTO `build_modversion` (`id`, `modversion_id`, `build_id`, `created_at`, `updated_at`) VALUES

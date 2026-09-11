@@ -57,6 +57,14 @@ class Database:
         ),
     )
 
+    NOTES_COLUMN_MIGRATIONS = (
+        (
+            "mods",
+            "notes",
+            "ALTER TABLE mods ADD COLUMN notes TEXT NULL AFTER link",
+        ),
+    )
+
     API_INDEX_MIGRATIONS = (
         (
             "build_modversion",
@@ -137,6 +145,29 @@ class Database:
             tuple(index_columns[:len(columns)]) == columns
             for index_columns in indexes.values()
         )
+
+    @staticmethod
+    def column_exists(cur, table: str, column: str) -> bool:
+        cur.execute(
+            """SELECT 1
+               FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = %s
+                 AND TABLE_NAME = %s
+                 AND COLUMN_NAME = %s""",
+            (db_name, table, column),
+        )
+        return cur.fetchone() is not None
+
+    @staticmethod
+    def migrate_legacy_mod_notes(cur) -> None:
+        """Move solder.py 1.7.4 mod notes to Technic's plural column."""
+        if Database.column_exists(cur, "mods", "note"):
+            cur.execute(
+                """UPDATE mods
+                   SET notes = note
+                   WHERE notes IS NULL AND note IS NOT NULL"""
+            )
+            cur.execute("ALTER TABLE mods DROP COLUMN note")
 
     @staticmethod
     def normalize_legacy_timestamps(cur) -> None:
@@ -263,11 +294,11 @@ class Database:
                         description VARCHAR(255) DEFAULT(''),
                         author VARCHAR(255),
                         link VARCHAR(255),
+                        notes TEXT,
                         side enum('CLIENT', 'SERVER', 'BOTH') DEFAULT 'BOTH',
                         modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'MOD',
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        note TEXT
+                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
                         )"""
             )
             cur.execute(
@@ -429,11 +460,6 @@ class Database:
                 "ALTER TABLE mods ADD COLUMN modtype ENUM('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'MOD'",
             ),
             (
-                "mods",
-                "note",
-                "ALTER TABLE mods ADD COLUMN note TEXT NULL",
-            ),
-            (
                 "builds",
                 "minecraft",
                 "ALTER TABLE builds ADD COLUMN minecraft VARCHAR(255) NOT NULL DEFAULT ''",
@@ -469,6 +495,7 @@ class Database:
                 "ALTER TABLE user_permissions ADD COLUMN solder_env BOOLEAN DEFAULT 0",
             ),
             *Database.MODLOADER_COLUMN_MIGRATIONS,
+            *Database.NOTES_COLUMN_MIGRATIONS,
         )
         con = Database.get_connection()
         if con is None:
@@ -489,6 +516,8 @@ class Database:
                 )
                 if cur.fetchone() is None:
                     cur.execute(query)
+
+            Database.migrate_legacy_mod_notes(cur)
 
             cur.execute("UPDATE modpacks SET user_id = 1 WHERE user_id IS NULL")
             cur.execute("ALTER TABLE modpacks MODIFY user_id INT NOT NULL")
@@ -549,7 +578,10 @@ class Database:
             Database.normalize_legacy_timestamps(cur)
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
 
-            for table, column, query in Database.MODLOADER_COLUMN_MIGRATIONS:
+            for table, column, query in (
+                *Database.MODLOADER_COLUMN_MIGRATIONS,
+                *Database.NOTES_COLUMN_MIGRATIONS,
+            ):
                 cur.execute(
                     """SELECT 1
                        FROM information_schema.COLUMNS
@@ -560,6 +592,8 @@ class Database:
                 )
                 if cur.fetchone() is None:
                     cur.execute(query)
+
+            Database.migrate_legacy_mod_notes(cur)
 
             cur.execute(
                 "UPDATE builds SET modloader = 'FORGE' "

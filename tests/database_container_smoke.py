@@ -260,7 +260,6 @@ def verify_technic_migration(database_container: str) -> None:
         ("builds", "marked"),
         ("builds", "modloader"),
         ("mods", "modtype"),
-        ("mods", "note"),
         ("mods", "notes"),
         ("mods", "side"),
         ("modpacks", "enable_optionals"),
@@ -280,7 +279,6 @@ def verify_technic_migration(database_container: str) -> None:
         ("modversions", "jarmd5"),
         ("modversions", "mcversion"),
         ("modversions", "modloader"),
-        ("modversions", "notes"),
         ("user_permissions", "solder_env"),
         ("users", "two_factor_confirmed_at"),
         ("users", "two_factor_recovery_codes"),
@@ -299,6 +297,15 @@ def verify_technic_migration(database_container: str) -> None:
         raise AssertionError(
             f"Migration created {column_count}/{len(expected_columns)} expected columns"
         )
+
+    legacy_note_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME = 'mods' "
+        "AND COLUMN_NAME = 'note';",
+    )
+    if legacy_note_count != "0":
+        raise AssertionError("Technic migration added solder.py's legacy note column")
 
     table_count = mysql(
         database_container,
@@ -328,6 +335,13 @@ def verify_technic_migration(database_container: str) -> None:
     if modpack_state != "1\thttps://example.invalid/pack":
         raise AssertionError(f"Migration did not preserve Technic data: {modpack_state}")
 
+    notes_state = mysql(
+        database_container,
+        "SELECT notes FROM mods WHERE id = 1;",
+    )
+    if notes_state != "Technic private mod note":
+        raise AssertionError(f"Migration did not preserve Technic notes: {notes_state}")
+
     user_id_definition = mysql(
         database_container,
         "SELECT CONCAT(IS_NULLABLE, ':', IF(COLUMN_DEFAULT IS NULL, 'NULL', "
@@ -353,8 +367,7 @@ def verify_fresh_schema(database_container: str) -> None:
         ("modpacks", "icon_url"),
         ("modpacks", "logo_url"),
         ("modpacks", "background_url"),
-        ("mods", "notes"),
-        ("modversions", "notes"),
+        ("mods", "note"),
         ("users", "two_factor_secret"),
         ("users", "two_factor_recovery_codes"),
         ("users", "two_factor_confirmed_at"),
@@ -370,6 +383,15 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if unwanted_count != "0":
         raise AssertionError(f"Fresh schema added {unwanted_count} unused columns")
+
+    notes_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND "
+        "TABLE_NAME = 'mods' AND COLUMN_NAME = 'notes';",
+    )
+    if notes_column_count != "1":
+        raise AssertionError("Fresh schema did not create Technic-compatible notes")
 
     unwanted_table_count = mysql(
         database_container,
@@ -817,6 +839,10 @@ def exercise_database_api(base_url: str) -> None:
     if mods.get("mods", {}).get("ci-example-mod") != "CI Example Mod":
         raise AssertionError(f"Mod catalogue was not readable: {mods}")
 
+    private_note_mod = request_json(f"{base_url}/api/mod/ci-example-mod")
+    if "notes" in private_note_mod:
+        raise AssertionError("Private management notes were exposed by the read API")
+
     server_mod = request_json(f"{base_url}/api/mod/ci-server-only")
     if server_mod.get("side") != "SERVER" or server_mod.get("modtype") != "MOD":
         raise AssertionError(f"Mod extension metadata was missing: {server_mod}")
@@ -1063,6 +1089,23 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         ).strip()
         base_url = f"http://127.0.0.1:{port_mapping.rsplit(':', 1)[1]}"
         wait_for_application(application_container, f"{base_url}/api/")
+        if fixture is not None and fixture.name == "solderpy.sql":
+            legacy_notes = mysql(
+                database_container,
+                "SELECT notes FROM mods WHERE id = 1;",
+            )
+            if legacy_notes != "Legacy solder.py private mod note":
+                raise AssertionError(
+                    f"Legacy solder.py note was not preserved: {legacy_notes}"
+                )
+            legacy_note_column = mysql(
+                database_container,
+                "SELECT COUNT(*) FROM information_schema.COLUMNS "
+                f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME = 'mods' "
+                "AND COLUMN_NAME = 'note';",
+            )
+            if legacy_note_column != "0":
+                raise AssertionError("Legacy mods.note column was not removed")
         mysql(
             database_container,
             "UPDATE modversions SET modloader = 'FORGE' WHERE id IN (26, 27);",

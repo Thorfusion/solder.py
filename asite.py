@@ -138,11 +138,11 @@ def newmodversion(id):
         else:
             flash("required dependency was not found", "error")
         return redirect(url_for("asite.modversion", id=id))
-    
+
     if "form-submit" in request.form:
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
-        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
+        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form.get("notes", request.form.get("internal_note", "")))
         flash("updated " + id, "success")
         return redirect(url_for("asite.modversion", id=id))
     if "deleteversion_submit" in request.form:
@@ -218,7 +218,7 @@ def newmod():
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
         try:
-            Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form["internal_note"])
+            Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form.get("notes", request.form.get("internal_note", "")))
         except DuplicateModError:
             flash(
                 f'A mod with the slug "{request.form["name"]}" already exists.',
@@ -714,7 +714,7 @@ def modlibrary_post():
                         markedbuild,
                         "0",
                         jarmd5.lower(),
-                        request.form.get("modloader"),
+                        modloader=request.form.get("modloader"),
                     )
                     final_zip = destination_folder / filename
                     os.replace(staged_zip, final_zip)
