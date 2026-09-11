@@ -67,9 +67,13 @@ class ApplicationSmokeTests(unittest.TestCase):
         version_source = (template_root / "modversion.html").read_text(
             encoding="utf-8"
         )
-        self.assertIn('id="search"', version_source)
-        self.assertIn('onkeyup="tablesearches(0);"', version_source)
-        self.assertIn('id="table"', version_source)
+        self.assertIn('id="dependency_search"', version_source)
+        self.assertIn(
+            "dropdownsearches('dependency_search', 'dependency_mod_id');",
+            version_source,
+        )
+        self.assertIn('id="dependency_mod_id"', version_source)
+        self.assertNotIn('id="table"', version_source)
 
     def test_authenticated_user_can_download_mcinstance_export(self):
         with self.client.session_transaction() as flask_session:

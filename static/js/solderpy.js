@@ -20,6 +20,30 @@ function tablesearches(column) {
     }
 }
 
+// Filter the choices in a select without replacing the normal dropdown UI.
+function dropdownsearches(inputId, selectId) {
+    const input = document.getElementById(inputId);
+    const select = document.getElementById(selectId);
+    if (!input || !select) {
+        return;
+    }
+
+    const filter = input.value.trim().toUpperCase();
+    for (const option of select.options) {
+        if (!option.value) {
+            option.hidden = false;
+            continue;
+        }
+        const text = option.textContent || option.innerText || "";
+        option.hidden = !text.toUpperCase().includes(filter);
+    }
+
+    const selected = select.options[select.selectedIndex];
+    if (selected && selected.hidden) {
+        select.value = "";
+    }
+}
+
 
 // sleep function
 // https://stackoverflow.com/questions/16873323/javascript-sleep-wait-before-continuing
