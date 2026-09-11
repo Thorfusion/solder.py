@@ -43,6 +43,38 @@
                 </td>
             </tr>
             {%endfor%}
+            <div class="divider"></div>
+            <h5>Required dependencies</h5>
+            {%if dependencies%}
+            <ul class="list-group mb-3">
+                {%for dependency in dependencies%}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{dependency.pretty_name}} ({{dependency.name}})</span>
+                    <form method="post" action="">
+                        <input type="hidden" name="dependency_id" value="{{dependency.id}}">
+                        <button class="btn btn-sm btn-danger" type="submit" name="deletedependency_submit" value="1">Remove</button>
+                    </form>
+                </li>
+                {%endfor%}
+            </ul>
+            {%else%}
+            <p>No required dependencies configured.</p>
+            {%endif%}
+
+            {%if available_dependencies%}
+            <form method="post" action="">
+                <div class="mb-3">
+                    <label for="dependency_mod_id" class="form-label">Add required dependency</label>
+                    <select class="form-select" name="dependency_mod_id" id="dependency_mod_id" required>
+                        <option value="" selected disabled>Select mod</option>
+                        {%for dependency in available_dependencies%}
+                        <option value="{{dependency.id}}">{{dependency.pretty_name}} ({{dependency.name}})</option>
+                        {%endfor%}
+                    </select>
+                </div>
+                <button class="btn btn-success" type="submit" name="adddependency_submit" value="1">Add dependency</button>
+            </form>
+            {%endif%}
         </tbody>
     </table>
     <form method="post" action="">
@@ -164,38 +196,6 @@
         <input type="text" class="form-control invisible" name="mod_delete_id" id="mod_delete_id" readonly>
         <input class="btn btn-danger invisible" type="submit" name="deletemod_submit" id="deletemod_submit" value="Delete">
     </form>
-    <div class="divider"></div>
-    <h5>Required dependencies</h5>
-    {%if dependencies%}
-    <ul class="list-group mb-3">
-        {%for dependency in dependencies%}
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-            <span>{{dependency.pretty_name}} ({{dependency.name}})</span>
-            <form method="post" action="">
-                <input type="hidden" name="dependency_id" value="{{dependency.id}}">
-                <button class="btn btn-sm btn-danger" type="submit" name="deletedependency_submit" value="1">Remove</button>
-            </form>
-        </li>
-        {%endfor%}
-    </ul>
-    {%else%}
-    <p>No required dependencies configured.</p>
-    {%endif%}
-
-    {%if available_dependencies%}
-    <form method="post" action="">
-        <div class="mb-3">
-            <label for="dependency_mod_id" class="form-label">Add required dependency</label>
-            <select class="form-select" name="dependency_mod_id" id="dependency_mod_id" required>
-                <option value="" selected disabled>Select mod</option>
-                {%for dependency in available_dependencies%}
-                <option value="{{dependency.id}}">{{dependency.pretty_name}} ({{dependency.name}})</option>
-                {%endfor%}
-            </select>
-        </div>
-        <button class="btn btn-success" type="submit" name="adddependency_submit" value="1">Add dependency</button>
-    </form>
-    {%endif%}
 </div>
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 {% endblock %}
