@@ -5,20 +5,28 @@ import threading
 
 import requests
 
+from .compatibility import normalize_modloader, version_is_compatible
 from .database import Database
 
 
 class MissingDependencyVersionError(ValueError):
-    def __init__(self, dependency_name, minecraft):
+    def __init__(self, dependency_name, minecraft, modloader=None):
         self.dependency_name = dependency_name
         self.minecraft = minecraft
+        self.modloader = modloader
+        loader_text = f" and modloader {modloader}" if modloader else ""
         super().__init__(
-            f'{dependency_name} has no version compatible with Minecraft {minecraft}.'
+            f'{dependency_name} has no version compatible with Minecraft '
+            f'{minecraft}{loader_text}.'
         )
 
 
+class IncompatibleModVersionError(ValueError):
+    """Raised when a version does not match the target build."""
+
+
 class Modversion:
-    def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0):
+    def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0, modloader=None):
         self.id = id
         self.mod_id = mod_id
         self.version = version
@@ -28,26 +36,55 @@ class Modversion:
         self.updated_at = updated_at
         self.filesize = filesize
         self.optional = optional
+        self.modloader = normalize_modloader(modloader)
 
     @classmethod
-    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild, url="0", jarmd5="0"):
+    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild, url="0", jarmd5="0", modloader=None):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO modversions (mod_id, version, mcversion, md5, created_at, updated_at, filesize) VALUES (%s, %s, %s, %s, %s, %s, %s)", (mod_id, version, mcversion, md5, now, now, filesize))
-        conn.commit()
-        cur.execute("SELECT LAST_INSERT_ID() AS id")
-        id = cur.fetchone()["id"]
-        conn.commit()
+        modloader = normalize_modloader(modloader)
+        try:
+            cur.execute(
+                """INSERT INTO modversions
+                          (mod_id, version, mcversion, modloader, md5, jarmd5,
+                           created_at, updated_at, filesize)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (mod_id, version, mcversion, modloader, md5, jarmd5, now, now, filesize),
+            )
+            id = cur.lastrowid
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
         if markedbuild == "1":
-            Modversion.add_modversion_to_selected_build(id, mod_id, "0", "1", "0")
+            try:
+                Modversion.add_modversion_to_selected_build(
+                    id, mod_id, "0", "1", "0"
+                )
+            except Exception:
+                # Do not leave a database row for an upload that could not be
+                # attached to its requested marked build.
+                Modversion.delete_modversion(id)
+                raise
         if md5 == "0":
-            version = Modversion.get_by_id(id)
-            t = threading.Thread(target=version.rehash, args=(url,))
+            stored_version = Modversion.get_by_id(id)
+            t = threading.Thread(target=stored_version.rehash, args=(url,))
             t.start()
-        if jarmd5 != "0":
-            Modversion.update_modversion_jarmd5(id, jarmd5)
-        return cls(id, mod_id, version, mcversion, md5, now, now, filesize)
+        return cls(
+            id,
+            mod_id,
+            version,
+            mcversion,
+            md5,
+            now,
+            now,
+            filesize,
+            modloader=modloader,
+        )
 
     @staticmethod
     def add_modversion_to_selected_build(modver_id, mod_id, build_id, marked, optional):
@@ -69,7 +106,9 @@ class Modversion:
                 build_id = marked_build["id"]
 
             cur.execute(
-                """SELECT modversions.mod_id, builds.minecraft
+                """SELECT modversions.mod_id, modversions.mcversion,
+                          modversions.modloader, builds.minecraft,
+                          builds.modloader AS build_modloader
                    FROM modversions
                    INNER JOIN builds ON builds.id = %s
                    WHERE modversions.id = %s
@@ -81,6 +120,16 @@ class Modversion:
                 raise ValueError("The selected build or mod version no longer exists.")
             if int(mod_id) != selected["mod_id"]:
                 raise ValueError("The selected version does not belong to that mod.")
+            if not version_is_compatible(
+                selected.get("mcversion"),
+                selected.get("modloader"),
+                selected["minecraft"],
+                selected.get("build_modloader"),
+            ):
+                raise IncompatibleModVersionError(
+                    "The selected version is not compatible with the build's "
+                    "Minecraft version and modloader."
+                )
 
             cur.execute(
                 """SELECT build_modversion.id
@@ -114,6 +163,7 @@ class Modversion:
                 build_id,
                 selected["minecraft"],
                 selected["mod_id"],
+                selected.get("build_modloader"),
             )
             conn.commit()
             return added_dependencies
@@ -125,7 +175,9 @@ class Modversion:
             conn.close()
 
     @staticmethod
-    def _add_required_dependencies(cur, build_id, minecraft, root_mod_id):
+    def _add_required_dependencies(
+        cur, build_id, minecraft, root_mod_id, modloader=None
+    ):
         cur.execute(
             """SELECT mod_dependencies.mod_id,
                       mod_dependencies.dependency_mod_id,
@@ -174,9 +226,19 @@ class Modversion:
                    FROM modversions
                    WHERE mod_id = %s
                      AND (mcversion = %s OR mcversion IS NULL)
-                   ORDER BY CASE WHEN mcversion = %s THEN 0 ELSE 1 END, id DESC
+                     AND (%s IS NULL OR modloader = %s OR modloader IS NULL)
+                   ORDER BY CASE WHEN mcversion = %s THEN 0 ELSE 1 END,
+                            CASE WHEN modloader = %s THEN 0 ELSE 1 END,
+                            id DESC
                    LIMIT 1""",
-                (dependency_mod_id, minecraft, minecraft),
+                (
+                    dependency_mod_id,
+                    minecraft,
+                    modloader,
+                    modloader,
+                    minecraft,
+                    modloader,
+                ),
             )
             dependency_version = cur.fetchone()
             if dependency_version is None:
@@ -185,6 +247,7 @@ class Modversion:
                         dependency_mod_id, f"Mod #{dependency_mod_id}"
                     ),
                     minecraft,
+                    modloader,
                 )
 
             cur.execute(
@@ -202,9 +265,47 @@ class Modversion:
     def update_modversion_in_build(oldmodver_id, modver_id, build_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("UPDATE build_modversion SET modversion_id = %s WHERE modversion_id = %s AND build_id = %s", (modver_id, oldmodver_id, build_id))
-        conn.commit()
-        return None
+        try:
+            cur.execute(
+                """SELECT replacement.mod_id, replacement.mcversion,
+                          replacement.modloader,
+                          current.mod_id AS current_mod_id,
+                          builds.minecraft,
+                          builds.modloader AS build_modloader
+                   FROM modversions AS replacement
+                   INNER JOIN modversions AS current ON current.id = %s
+                   INNER JOIN builds ON builds.id = %s
+                   WHERE replacement.id = %s""",
+                (oldmodver_id, build_id, modver_id),
+            )
+            selected = cur.fetchone()
+            if selected is None:
+                raise ValueError("The selected build or mod version no longer exists.")
+            if selected["mod_id"] != selected["current_mod_id"]:
+                raise ValueError("The replacement version belongs to another mod.")
+            if not version_is_compatible(
+                selected.get("mcversion"),
+                selected.get("modloader"),
+                selected["minecraft"],
+                selected.get("build_modloader"),
+            ):
+                raise IncompatibleModVersionError(
+                    "The selected version is not compatible with the build's "
+                    "Minecraft version and modloader."
+                )
+            cur.execute(
+                """UPDATE build_modversion
+                   SET modversion_id = %s
+                   WHERE modversion_id = %s AND build_id = %s""",
+                (modver_id, oldmodver_id, build_id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def update_modversion_jarmd5(id, jarmd5):
@@ -230,14 +331,14 @@ class Modversion:
         cur.execute("SELECT * FROM modversions WHERE id = %s", (id,))
         row = cur.fetchone()
         if row:
-            return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
+            return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"))
         return None
 
     @staticmethod
     def get_all():
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, mod_id, version, mcversion FROM modversions")
+        cur.execute("SELECT id, mod_id, version, mcversion, modloader FROM modversions")
         rows = cur.fetchall()
         if rows:
             return rows

@@ -219,6 +219,7 @@ are returned in deterministic natural-name order.
   "side": "BOTH",
   "type": "MOD",
   "modtype": "MOD",
+  "modloader": "FORGE",
   "optional": false,
   "dependencies": [
     {
@@ -291,6 +292,7 @@ extended manifest. In addition to the normal fields, it contains:
 {
   "modpack": "example-pack",
   "version": "2.1",
+  "modloader": "FORGE",
   "target": "server",
   "optional": false,
   "manifest_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -378,6 +380,7 @@ Example response:
   "side": "BOTH",
   "type": "MOD",
   "modtype": "MOD",
+  "modloader": "FORGE",
   "versions": ["1.20.1-3.0", "1.20.1-4.0"],
   "dependencies": [
     {
@@ -433,6 +436,12 @@ Example response:
 
 `optional` belongs to the relationship between this mod version and that build;
 it is not a global property of a mod or mod version.
+
+`modloader` is an uppercase loader identifier such as `FORGE`, `NEOFORGE`,
+`FABRIC`, `QUILT`, or `LITELOADER`. A `null` mod-version value means the
+package is loader-agnostic. The field is included in expanded/extended build
+manifests and direct mod-version responses; the default Technic manifest shape
+is unchanged.
 
 ## Metadata values
 

@@ -15,13 +15,25 @@
                     <input type="text" class="form-control" name="mcversion" id="mcversion" required>
                 </th>
                 <th scope="col">
+                    <label for="modloader" class="form-label">Modloader (blank for any)</label>
+                    <input type="text" class="form-control" name="modloader" id="modloader" list="modloaders">
+                    <datalist id="modloaders">
+                        <option value="FORGE"></option>
+                        <option value="NEOFORGE"></option>
+                        <option value="FABRIC"></option>
+                        <option value="QUILT"></option>
+                        <option value="LITELOADER"></option>
+                        <option value="VANILLA"></option>
+                    </datalist>
+                </th>
+                <th scope="col">
                     <label for="md5" class="form-label">md5</label>
                     <input type="text" class="form-control md5_width" name="md5" id="md5">
                 </th>
                 <th scope="col">Download URL</th>
                 <th scope="col">Filesize</th>
                 <th>
-                    <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpresswithurl('version', '{{ mod.name }}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
+                    <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_modloader', 'modloader');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpresswithurl('version', '{{ mod.name }}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
                 </th>
             </tr>
         </thead>
@@ -30,6 +42,7 @@
             <tr>
                 <td>{{versions.version}}</td>
                 <td>{{versions.mcversion}}</td>
+                <td>{{versions.modloader or 'ANY'}}</td>
                 <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5_{{versions.id}}" id="md5_{{versions.id}}">
                 </td>
                 <td><a class="link-primary" href="{{mirror_url}}{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip">{{ mod.name }}-{{versions.version}}.zip</a></td>
@@ -95,6 +108,7 @@
         <input type="text" class="form-control invisible" name="newmodvermanual_md5" id="newmodvermanual_md5" readonly>
         <input type="text" class="form-control invisible" name="newmodvermanual_version" id="newmodvermanual_version" readonly>
         <input type="text" class="form-control invisible" name="newmodvermanual_mcversion" id="newmodvermanual_mcversion" readonly>
+        <input type="text" class="form-control invisible" name="newmodvermanual_modloader" id="newmodvermanual_modloader" readonly>
         <input type="text" class="form-control invisible" name="newmodvermanual_url" id="newmodvermanual_url" readonly>
         <input class="btn btn-danger invisible" type="submit" name="newmodvermanual_submit" id="newmodvermanual_submit" value="Delete">
     </form>

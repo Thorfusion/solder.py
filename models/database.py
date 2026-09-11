@@ -44,6 +44,19 @@ class Database:
         INDEX idx_mod_dependencies_dependency (dependency_mod_id)
     )"""
 
+    MODLOADER_COLUMN_MIGRATIONS = (
+        (
+            "builds",
+            "modloader",
+            "ALTER TABLE builds ADD COLUMN modloader VARCHAR(32) NULL AFTER forge",
+        ),
+        (
+            "modversions",
+            "modloader",
+            "ALTER TABLE modversions ADD COLUMN modloader VARCHAR(32) NULL AFTER mcversion",
+        ),
+    )
+
     API_INDEX_MIGRATIONS = (
         (
             "build_modversion",
@@ -78,9 +91,10 @@ class Database:
         ),
         (
             "modversions",
-            ("mod_id", "mcversion"),
+            ("mod_id", "mcversion", "modloader"),
             "ALTER TABLE modversions "
-            "ADD INDEX idx_modversions_mod_mcversion (mod_id, mcversion)",
+            "ADD INDEX idx_modversions_mod_compatibility "
+            "(mod_id, mcversion, modloader)",
         ),
         (
             "modversions",
@@ -231,6 +245,7 @@ class Database:
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         minecraft VARCHAR(255) NOT NULL DEFAULT(''),
                         forge VARCHAR(255),
+                        modloader VARCHAR(32),
                         is_published TINYINT(1) DEFAULT(0),
                         private TINYINT(1) DEFAULT(0),
                         min_java VARCHAR(255),
@@ -261,12 +276,14 @@ class Database:
                         mod_id INT NOT NULL,
                         version VARCHAR(255) NOT NULL,
                         mcversion VARCHAR(255),
+                        modloader VARCHAR(32),
                         md5 VARCHAR(255) NOT NULL,
                         jarmd5 VARCHAR(255),
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         filesize INT,
-                        INDEX idx_modversions_mod_mcversion (mod_id, mcversion),
+                        INDEX idx_modversions_mod_compatibility
+                            (mod_id, mcversion, modloader),
                         INDEX idx_modversions_mod_version (mod_id, version)
                         )"""
             )
@@ -451,6 +468,7 @@ class Database:
                 "solder_env",
                 "ALTER TABLE user_permissions ADD COLUMN solder_env BOOLEAN DEFAULT 0",
             ),
+            *Database.MODLOADER_COLUMN_MIGRATIONS,
         )
         con = Database.get_connection()
         if con is None:
@@ -474,6 +492,10 @@ class Database:
 
             cur.execute("UPDATE modpacks SET user_id = 1 WHERE user_id IS NULL")
             cur.execute("ALTER TABLE modpacks MODIFY user_id INT NOT NULL")
+            cur.execute(
+                "UPDATE builds SET modloader = 'FORGE' "
+                "WHERE modloader IS NULL AND forge IS NOT NULL"
+            )
 
             for table, columns, query in Database.API_INDEX_MIGRATIONS:
                 if not Database.index_covers_columns(cur, table, columns):
@@ -526,6 +548,23 @@ class Database:
             cur = con.cursor()
             Database.normalize_legacy_timestamps(cur)
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
+
+            for table, column, query in Database.MODLOADER_COLUMN_MIGRATIONS:
+                cur.execute(
+                    """SELECT 1
+                       FROM information_schema.COLUMNS
+                       WHERE TABLE_SCHEMA = %s
+                         AND TABLE_NAME = %s
+                         AND COLUMN_NAME = %s""",
+                    (db_name, table, column),
+                )
+                if cur.fetchone() is None:
+                    cur.execute(query)
+
+            cur.execute(
+                "UPDATE builds SET modloader = 'FORGE' "
+                "WHERE modloader IS NULL AND forge IS NOT NULL"
+            )
 
             for table, columns, query in Database.API_INDEX_MIGRATIONS:
                 cur.execute(

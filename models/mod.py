@@ -1,16 +1,25 @@
 import datetime
+import hashlib
+import hmac
+from pathlib import Path, PurePosixPath
+import re
 
-from flask import flash
 from mysql.connector import IntegrityError, errorcode
 
 from .database import Database
 from .modversion import Modversion
 import zipfile
-import os
 
 
 class DuplicateModError(ValueError):
     """Raised when a mod slug is already present in the database."""
+
+
+class UploadVerificationError(ValueError):
+    """Raised when an uploaded Solder package fails server verification."""
+
+
+_MAX_UPLOAD_JAR_SIZE = 512 * 1024 * 1024
 
 
 class Mod:
@@ -149,7 +158,7 @@ class Mod:
     def get_versions(self):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id, mod_id, version, mcversion, md5, filesize FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
+        cur.execute("SELECT id, mod_id, version, mcversion, modloader, md5, filesize FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
         rows = cur.fetchall()
         if rows:
             return rows
@@ -172,34 +181,86 @@ class Mod:
             cur.execute("SELECT * FROM modversions WHERE mod_id = %s AND version = %s", (self.id, version))
             row = cur.fetchone()
             if row:
-                return Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"])
+                return Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"))
             return None
         finally:
             cur.close()
             conn.close()
     
-    def extract_jar_from_zip(zip_paths):
-        # Get folder where the zip file is located
-        base_dir = os.path.dirname(zip_paths)
+    @staticmethod
+    def file_md5(path):
+        """Calculate the MD5 used by Solder manifests (not a security digest)."""
+        digest = hashlib.md5(usedforsecurity=False)
+        with open(path, "rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
-        with zipfile.ZipFile(zip_paths, 'r') as zip_ref:
-            # Find jar file inside mods/ folder
-            jar_files = [f for f in zip_ref.namelist() if f.startswith("mods/") and f.endswith(".jar")]
+    @staticmethod
+    def verify_file_md5(path, expected_md5, label="uploaded file"):
+        expected_md5 = str(expected_md5 or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{32}", expected_md5):
+            raise UploadVerificationError(f"The client supplied an invalid MD5 for {label}.")
+        actual_md5 = Mod.file_md5(path)
+        if not hmac.compare_digest(actual_md5, expected_md5):
+            raise UploadVerificationError(f"The MD5 verification failed for {label}.")
+        return actual_md5
 
-            if not jar_files:
-                flash("failed to extract jarfile", "error")
+    @staticmethod
+    def extract_jar_from_zip(zip_paths, output_name=None, expected_md5=None):
+        """Extract the single mods/*.jar entry and optionally verify its MD5."""
+        base_dir = Path(zip_paths).parent
+        try:
+            with zipfile.ZipFile(zip_paths, "r") as zip_ref:
+                jar_files = []
+                for info in zip_ref.infolist():
+                    normalized = info.filename.replace("\\", "/")
+                    path = PurePosixPath(normalized)
+                    if (
+                        not info.is_dir()
+                        and len(path.parts) >= 2
+                        and path.parts[0] == "mods"
+                        and path.suffix.lower() == ".jar"
+                        and ".." not in path.parts
+                    ):
+                        jar_files.append(info)
 
-            jar_inside_zip = jar_files[0]  # Take the first match
-            jar_name = os.path.basename(jar_inside_zip)
+                if len(jar_files) != 1:
+                    raise UploadVerificationError(
+                        "A JAR upload must contain exactly one JAR inside the mods folder."
+                    )
+                if jar_files[0].file_size > _MAX_UPLOAD_JAR_SIZE:
+                    raise UploadVerificationError(
+                        "The raw JAR exceeds the 512 MiB upload limit."
+                    )
 
-            # Full path where the JAR will be extracted
-            output_path = os.path.join(base_dir, jar_name)
+                jar_name = output_name or PurePosixPath(jar_files[0].filename).name
+                if Path(jar_name).name != jar_name or not jar_name.lower().endswith(".jar"):
+                    raise UploadVerificationError("The output JAR filename is invalid.")
 
-            # Extract the jar file only
-            with zip_ref.open(jar_inside_zip) as source, open(output_path, 'wb') as target:
-                target.write(source.read())
-
-            return jar_name
+                output_path = base_dir / jar_name
+                try:
+                    with zip_ref.open(jar_files[0], "r") as source, open(
+                        output_path, "wb"
+                    ) as target:
+                        extracted_size = 0
+                        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                            extracted_size += len(chunk)
+                            if extracted_size > _MAX_UPLOAD_JAR_SIZE:
+                                raise UploadVerificationError(
+                                    "The raw JAR exceeds the 512 MiB upload limit."
+                                )
+                            target.write(chunk)
+                    if expected_md5 is not None:
+                        Mod.verify_file_md5(output_path, expected_md5, "the raw JAR")
+                except Exception:
+                    output_path.unlink(missing_ok=True)
+                    raise
+                return jar_name
+        except UploadVerificationError:
+            raise
+        except (OSError, RuntimeError, zipfile.BadZipFile) as error:
+            raise UploadVerificationError("The uploaded package is not a valid ZIP file.") from error
 
 
     def to_json(self):

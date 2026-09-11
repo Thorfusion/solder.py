@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import http.cookiejar
+import io
 import json
 import os
 import subprocess
@@ -12,6 +13,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import zipfile
 from pathlib import Path
 
 
@@ -231,6 +233,7 @@ def verify_performance_indexes(database_container: str) -> None:
         ("client_modpack", "modpack_id,client_id"),
         ("client_modpack", "client_id,modpack_id"),
         ("modversions", "mod_id,mcversion"),
+        ("modversions", "mod_id,mcversion,modloader"),
         ("modversions", "mod_id,version"),
         ("user_permissions", "user_id"),
         ("clients", "uuid"),
@@ -255,6 +258,7 @@ def verify_technic_migration(database_container: str) -> None:
     expected_columns = (
         ("build_modversion", "optional"),
         ("builds", "marked"),
+        ("builds", "modloader"),
         ("mods", "modtype"),
         ("mods", "note"),
         ("mods", "notes"),
@@ -275,6 +279,7 @@ def verify_technic_migration(database_container: str) -> None:
         ("modpacks", "background_url"),
         ("modversions", "jarmd5"),
         ("modversions", "mcversion"),
+        ("modversions", "modloader"),
         ("modversions", "notes"),
         ("user_permissions", "solder_env"),
         ("users", "two_factor_confirmed_at"),
@@ -596,6 +601,45 @@ def seed_api_access_scenario(database_container: str) -> None:
     )
 
 
+def seed_mcinstance_scenario(database_container: str) -> None:
+    mysql(
+        database_container,
+        """INSERT INTO mods
+               (id, name, description, author, link, pretty_name, side, modtype)
+           VALUES
+               (26, 'ci-mcil-loader', 'Synthetic MCInstanceLoader package',
+                'CI', 'https://example.invalid/mcil', 'CI MCIL Loader',
+                'BOTH', 'MCIL'),
+               (27, 'ci-mcil-optional', 'Synthetic optional MCIL export mod',
+                'CI', 'https://example.invalid/mcil-optional',
+                'CI MCIL Optional', 'CLIENT', 'MOD');
+           INSERT INTO modversions
+               (id, mod_id, version, mcversion, md5, jarmd5, filesize)
+           VALUES
+               (26, 26, '1.7.10-2.7', '1.7.10',
+                '26262626262626262626262626262626',
+                '26262626262626262626262626262626', 2626),
+               (27, 27, '1.7.10-1.0', '1.7.10',
+                '27272727272727272727272727272727',
+                '27272727272727272727272727272727', 2727);
+           INSERT INTO build_modversion
+               (id, modversion_id, build_id, optional)
+           VALUES
+               (36, 26, 20, 0),
+               (37, 27, 20, 1);
+           UPDATE modversions
+           SET jarmd5 = '11111111111111111111111111111111', mcversion = NULL
+           WHERE id = 1;
+           UPDATE builds
+           SET minecraft = '1.7.10', forge = '10.13.4.1614'
+           WHERE id = 20;
+           INSERT INTO user_modpack
+               (id, user_id, modpack_id, created_at, updated_at)
+           VALUES
+               (20, 1, 20, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);""",
+    )
+
+
 def request_json_with_status(endpoint: str) -> tuple[int, dict]:
     parsed = urllib.parse.urlsplit(endpoint)
     if parsed.scheme != "http" or parsed.hostname != "127.0.0.1":
@@ -903,6 +947,29 @@ def exercise_synthetic_user_login(base_url: str, database_container: str) -> Non
         if response.status != 200 or b"CI Example Mod" not in build_editor:
             raise AssertionError("The authenticated build editor did not render")
 
+    with opener.open(f"{base_url}/modpackbuild/20/mcinstance", timeout=5) as response:
+        if response.status != 200:
+            raise AssertionError("The MCInstance export did not return HTTP 200")
+        disposition = response.headers.get("Content-Disposition", "")
+        if "ci-hidden-pack-1.0.mcinstance" not in disposition:
+            raise AssertionError(
+                f"The MCInstance export filename was incorrect: {disposition}"
+            )
+        exported = io.BytesIO(response.read())
+
+    with zipfile.ZipFile(exported) as archive:
+        resources = archive.read("resources.packconfig").decode("utf-8")
+        optionals = archive.read("optionals.packconfig").decode("utf-8")
+        metadata = archive.read("metadata.packconfig").decode("utf-8")
+        if "ci-mcil-loader" in resources or "solder-mod-26" in resources:
+            raise AssertionError("The MCInstanceLoader package exported itself")
+        if "solder-mod-27" not in resources or "optional = true" not in resources:
+            raise AssertionError("The optional MCInstance resource was not exported")
+        if "option1.resources = solder-mod-27" not in optionals:
+            raise AssertionError("The MCInstance optional menu was not exported")
+        if "name = CI Hidden Pack" not in metadata:
+            raise AssertionError("The MCInstance metadata did not identify the pack")
+
     duplicate_request = urllib.request.Request(
         f"{base_url}/newmod",
         data=urllib.parse.urlencode(
@@ -976,6 +1043,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
 
         seed_dependency_scenario(database_container)
         seed_api_access_scenario(database_container)
+        seed_mcinstance_scenario(database_container)
 
         docker(
             "run",
@@ -995,6 +1063,10 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         ).strip()
         base_url = f"http://127.0.0.1:{port_mapping.rsplit(':', 1)[1]}"
         wait_for_application(application_container, f"{base_url}/api/")
+        mysql(
+            database_container,
+            "UPDATE modversions SET modloader = 'FORGE' WHERE id IN (26, 27);",
+        )
         dependency_table_count = mysql(
             database_container,
             "SELECT COUNT(*) FROM information_schema.TABLES "

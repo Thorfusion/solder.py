@@ -121,6 +121,10 @@ def _mod_download_url(mod_name, version):
     return f"{public_repo_url}{mod_name}/{mod_name}-{version}.zip"
 
 
+def _optional_string_attribute(value):
+    return value if isinstance(value, str) else None
+
+
 def _mod_manifest_entry(
     modversion, expanded=False, extended=False, dependencies=None
 ):
@@ -147,6 +151,9 @@ def _mod_manifest_entry(
                 "side": getattr(modversion, "side", "BOTH"),
                 "type": getattr(modversion, "modtype", "MOD"),
                 "modtype": getattr(modversion, "modtype", "MOD"),
+                "modloader": _optional_string_attribute(
+                    getattr(modversion, "modloader", None)
+                ),
                 "optional": bool(getattr(modversion, "optional", 0)),
                 "dependencies": dependencies or [],
             }
@@ -333,10 +340,14 @@ def modpack_slug_build(slugstring: str, buildstring: str):
     }
 
     if extended:
+        build_modloader = _optional_string_attribute(
+            getattr(build, "modloader", None)
+        )
         manifest.update(
             {
                 "modpack": current_modpack.slug,
                 "version": build.version,
+                "modloader": build_modloader,
                 "target": target,
                 "optional": include_optional,
             }
@@ -413,6 +424,9 @@ def mod_name_version(name: str, version: str):
     res["side"] = mod.side
     res["type"] = mod.modtype
     res["modtype"] = mod.modtype
+    res["modloader"] = _optional_string_attribute(
+        getattr(modversion, "modloader", None)
+    )
     res["dependencies"] = ModDependency.get_by_mod_api(mod.id)
     res["builds"] = modversion.get_builds_api(
         cid=request.args.get("cid"), api_key=_has_valid_api_key()

@@ -211,6 +211,7 @@ class ApiTests(unittest.TestCase):
             min_java="21",
             min_memory=4096,
             forge="52.0.1",
+            modloader="FORGE",
         )
         build.get_modversions_api.return_value = [
             SimpleNamespace(
@@ -280,6 +281,7 @@ class ApiTests(unittest.TestCase):
                 link="https://example.test/mod",
                 side="BOTH",
                 modtype="MOD",
+                modloader="FORGE",
                 optional=1,
             )
         ]
@@ -366,6 +368,7 @@ class ApiTests(unittest.TestCase):
             min_java="21",
             min_memory=4096,
             forge="52.0.1",
+            modloader="FORGE",
         )
         build.get_modversions_api.return_value = [
             SimpleNamespace(
@@ -377,6 +380,7 @@ class ApiTests(unittest.TestCase):
                 filesize=1234,
                 side="BOTH",
                 modtype="MOD",
+                modloader="FORGE",
                 optional=0,
             )
         ]
@@ -402,10 +406,12 @@ class ApiTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["modpack"], "stable")
         self.assertEqual(payload["version"], "42")
+        self.assertEqual(payload["modloader"], "FORGE")
         self.assertEqual(payload["target"], "server")
         self.assertTrue(payload["optional"])
         self.assertEqual(payload["mods"][0]["side"], "BOTH")
         self.assertEqual(payload["mods"][0]["modtype"], "MOD")
+        self.assertEqual(payload["mods"][0]["modloader"], "FORGE")
         self.assertFalse(payload["mods"][0]["optional"])
         self.assertEqual(payload["mods"][0]["dependencies"][0]["id"], 4)
         self.assertEqual(len(payload["manifest_hash"]), 64)
@@ -591,7 +597,7 @@ class ApiTests(unittest.TestCase):
     @patch.object(api_module.Mod, "get_by_name_api")
     def test_mod_version_has_download_url(self, get_mod):
         mod = Mock(id=1, side="BOTH", modtype="MOD")
-        version = Mock(id=4, version="2.0")
+        version = Mock(id=4, version="2.0", modloader="FABRIC")
         version.to_json.return_value = {
             "mod_id": 1,
             "version": "2.0",
@@ -622,6 +628,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.get_json()["builds"], [])
         self.assertEqual(response.get_json()["side"], "BOTH")
         self.assertEqual(response.get_json()["modtype"], "MOD")
+        self.assertEqual(response.get_json()["modloader"], "FABRIC")
         self.assertEqual(response.get_json()["dependencies"][0]["id"], 4)
         self.get_mod_dependencies.assert_called_once_with(1)
         version.get_builds_api.assert_called_once_with(cid=None, api_key=False)

@@ -23,7 +23,7 @@
                 <td class="tablewidth20">
                     <select class="form-select" name="selmodver_{{combo.modid}}" id="selmodver_{{combo.modid}}" onchange="submitoptionpress('selmodver_oldver', '{{combo.modverid}}', 'selmodver_ver', 'selmodver_{{combo.modid}}', 'selmodver_submit');">
                         {%for modlist in combo.versions%}
-                        <option {%if combo.version==modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}</option>
+                        <option {%if combo.version==modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}} ({{modlist.modloader or 'ANY'}})</option>
                         {%endfor%}
                     </select>
                 </td>
@@ -73,7 +73,7 @@
             <select class="form-select" name="modversion" id="modversion" required>
                 <option class="is-invalid" name="modfirst" value="">Select mod first</option>
                 {%for modlist in listmodversions%}
-                <option value="{{modlist.id}}" id="modversion_{{modlist.mod_id}}" name="modlist" hidden="true">{{modlist.version}}</option>
+                <option value="{{modlist.id}}" id="modversion_{{modlist.mod_id}}" name="modlist" hidden="true">{{modlist.version}} ({{modlist.modloader or 'ANY'}})</option>
                 {%endfor%}
             </select>
         </div>
@@ -96,6 +96,22 @@
         <div class="mb-3">
             <label for="mcversion" class="form-label">Minecraft version</label>
             <input type="text" class="form-control" name="mcversion" id="mcversion" value="{{ packbuild.minecraft }}" required></input>
+        </div>
+        <div class="mb-3">
+            <label for="modloader" class="form-label">Modloader (optional for legacy builds)</label>
+            <input type="text" class="form-control" name="modloader" id="modloader" value="{{ packbuild.modloader or '' }}" list="modloaders"></input>
+            <datalist id="modloaders">
+                <option value="FORGE"></option>
+                <option value="NEOFORGE"></option>
+                <option value="FABRIC"></option>
+                <option value="QUILT"></option>
+                <option value="LITELOADER"></option>
+                <option value="VANILLA"></option>
+            </datalist>
+        </div>
+        <div class="mb-3">
+            <label for="forge" class="form-label">Modloader version (optional)</label>
+            <input type="text" class="form-control" name="forge" id="forge" value="{{ packbuild.forge or '' }}"></input>
         </div>
         <div class="mb-3">
             <label for="min_java" class="form-label">Minimum Java Version</label>

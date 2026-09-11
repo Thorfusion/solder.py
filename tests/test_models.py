@@ -1,4 +1,5 @@
 import datetime
+import hashlib
 import tempfile
 import unittest
 import zipfile
@@ -17,10 +18,14 @@ from models.build import Build  # noqa: E402
 from models.build_modversion import Build_modversion  # noqa: E402
 from models.common import common  # noqa: E402
 from models.database import Database  # noqa: E402
-from models.mod import DuplicateModError, Mod  # noqa: E402
+from models.mod import DuplicateModError, Mod, UploadVerificationError  # noqa: E402
 from models.mod_dependency import CircularDependencyError, ModDependency  # noqa: E402
 from models.modpack import Modpack  # noqa: E402
-from models.modversion import MissingDependencyVersionError, Modversion  # noqa: E402
+from models.modversion import (  # noqa: E402
+    IncompatibleModVersionError,
+    MissingDependencyVersionError,
+    Modversion,
+)
 from models.passhasher import Passhasher  # noqa: E402
 from models.session import Session  # noqa: E402
 
@@ -238,7 +243,9 @@ class ModelBehaviorTests(unittest.TestCase):
         ]
         cursor.fetchone.return_value = {"id": 202}
 
-        added = Modversion._add_required_dependencies(cursor, 10, "1.21.1", 1)
+        added = Modversion._add_required_dependencies(
+            cursor, 10, "1.21.1", 1, "FABRIC"
+        )
 
         self.assertEqual(added, ["Library A"])
         version_queries = [
@@ -248,7 +255,10 @@ class ModelBehaviorTests(unittest.TestCase):
             and "mcversion" in call.args[0]
         ]
         self.assertEqual(len(version_queries), 1)
-        self.assertEqual(version_queries[0].args[1], (2, "1.21.1", "1.21.1"))
+        self.assertEqual(
+            version_queries[0].args[1],
+            (2, "1.21.1", "FABRIC", "FABRIC", "1.21.1", "FABRIC"),
+        )
         cursor.execute.assert_any_call(
             """INSERT INTO build_modversion
                           (modversion_id, build_id, optional)
@@ -412,6 +422,93 @@ class ModelBehaviorTests(unittest.TestCase):
 
             self.assertEqual(jar_name, "example.jar")
             self.assertEqual(Path(directory, jar_name).read_bytes(), b"jar contents")
+
+    def test_new_modversion_stores_verified_jar_hash_in_the_insert(self):
+        connection = Mock()
+        connection.cursor.return_value.lastrowid = 42
+        jar_md5 = "d41d8cd98f00b204e9800998ecf8427e"
+
+        with patch(
+            "models.modversion.Database.get_connection", return_value=connection
+        ):
+            version = Modversion.new(
+                3,
+                "1.20.1-1.0",
+                "1.20.1",
+                "a" * 32,
+                123,
+                "0",
+                jarmd5=jar_md5,
+                modloader="fabric",
+            )
+
+        query, parameters = connection.cursor.return_value.execute.call_args.args
+        self.assertIn("jarmd5", query)
+        self.assertEqual(parameters[3], "FABRIC")
+        self.assertEqual(parameters[5], jar_md5)
+        self.assertEqual(version.id, 42)
+        self.assertEqual(version.modloader, "FABRIC")
+        connection.cursor.return_value.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_incompatible_modloader_is_rejected_before_adding_version(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = {
+            "mod_id": 1,
+            "mcversion": "1.21.1",
+            "modloader": "FORGE",
+            "minecraft": "1.21.1",
+            "build_modloader": "FABRIC",
+        }
+
+        with (
+            patch(
+                "models.modversion.Database.get_connection",
+                return_value=connection,
+            ),
+            self.assertRaises(IncompatibleModVersionError),
+        ):
+            Modversion.add_modversion_to_selected_build(101, 1, 10, "0", "0")
+
+        connection.commit.assert_not_called()
+        connection.rollback.assert_called_once_with()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_uploaded_jar_is_renamed_and_verified_server_side(self):
+        jar_contents = b"verified jar contents"
+        expected_md5 = hashlib.md5(
+            jar_contents, usedforsecurity=False
+        ).hexdigest()
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory, "example.zip")
+            with zipfile.ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("mods/client-name.jar", jar_contents)
+
+            jar_name = Mod.extract_jar_from_zip(
+                archive,
+                output_name="canonical-name.jar",
+                expected_md5=expected_md5,
+            )
+
+            self.assertEqual(jar_name, "canonical-name.jar")
+            self.assertEqual(Path(directory, jar_name).read_bytes(), jar_contents)
+
+    def test_uploaded_jar_hash_mismatch_is_rejected_and_removed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory, "example.zip")
+            with zipfile.ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("mods/example.jar", b"different contents")
+
+            with self.assertRaisesRegex(UploadVerificationError, "MD5 verification"):
+                Mod.extract_jar_from_zip(
+                    archive,
+                    output_name="example.jar",
+                    expected_md5="d41d8cd98f00b204e9800998ecf8427e",
+                )
+
+            self.assertFalse(Path(directory, "example.jar").exists())
 
     def test_empty_build_returns_an_empty_mod_list(self):
         connection = Mock()
@@ -633,6 +730,7 @@ class ModelBehaviorTests(unittest.TestCase):
             "updated_at": None,
             "minecraft": "1.21.1",
             "forge": None,
+            "modloader": "FABRIC",
             "is_published": 1,
             "private": 0,
             "min_java": "21",
@@ -668,24 +766,27 @@ class ModelBehaviorTests(unittest.TestCase):
                 {"id": 4, "pretty_name": "No Compatible Version"},
             ],
             [
-                {"id": 102, "mod_id": 1, "version": "1.1", "mcversion": None},
+                {"id": 102, "mod_id": 1, "version": "1.1", "mcversion": None, "modloader": None},
                 {
                     "id": 101,
                     "mod_id": 1,
                     "version": "1.0",
                     "mcversion": "1.21.1",
+                    "modloader": "FABRIC",
                 },
                 {
                     "id": 201,
                     "mod_id": 2,
                     "version": "2.0",
                     "mcversion": "1.21.1",
+                    "modloader": None,
                 },
                 {
                     "id": 301,
                     "mod_id": 3,
                     "version": "3.0",
                     "mcversion": "1.21.1",
+                    "modloader": "FABRIC",
                 },
             ],
         ]
@@ -711,6 +812,10 @@ class ModelBehaviorTests(unittest.TestCase):
             [201],
         )
         self.assertEqual(cursor.execute.call_count, 4)
+        self.assertEqual(
+            cursor.execute.call_args.args[1],
+            ("1.21.1", "FABRIC", "FABRIC"),
+        )
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
 

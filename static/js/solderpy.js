@@ -169,6 +169,9 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     dataSelect = document.getElementById(input)
     let datas = dataSelect.files
     let data = datas[0]
+    let lowerName = data.name.toLowerCase();
+    let isZip = lowerName.endsWith(".zip");
+    let isJson = lowerName.endsWith(".json") || data.type == "application/json";
 
     if (verchange == "1") {
         // Adds the version number in the file provided to minecraft version and mod version boxes
@@ -186,10 +189,10 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     mcversionname = document.getElementById(mcversion).value;
     modversionname = document.getElementById(modversion).value;
 
-    if (data.type != "application/x-zip-compressed") { // if uploaded file is not a zip file
+    if (!isZip) { // Browsers report several different MIME types for ZIP files.
         // starts a new zipfile
         var zip = new JSZip();
-        if (data.type != "application/json" && data.name != "modpack.jar") { // if the file is not modpack.jar or filetye json
+        if (!isJson && data.name != "modpack.jar") { // if the file is not modpack.jar or filetype json
 
             hashjarmd5("file")
             // adds a folder "mods" inside zipfile
@@ -207,7 +210,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             document.getElementById('jarmd5').value = "0";
             document.getElementById("filetypelauncher").checked = true;
         }
-        if (data.type == "application/json") { // if the filetype is detected to be json
+        if (isJson) { // if the filetype is detected to be json
             // adds a folder "bin" inside zipfile
             var bin = zip.folder("bin");
             // adds the file uploaded inside bin folder with correct naming scheme
@@ -223,7 +226,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             });
 
     }
-    if (data.type == "application/x-zip-compressed") { // if the filetype is detected to be zip
+    if (isZip) { // if the filetype is detected to be zip
         zipfile_md5(data)
         document.getElementById('jarmd5').value = "0";
         document.getElementById("filetypezip").checked = true;

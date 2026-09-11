@@ -3,12 +3,13 @@ import re
 
 from flask import flash
 
+from .compatibility import normalize_modloader
 from .database import Database
 from .modversion import Modversion
 
 
 class Build:
-    def __init__(self, id, modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory, marked, count=None):
+    def __init__(self, id, modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory, marked, count=None, modloader=None):
         self.id = id
         self.modpack_id = modpack_id
         self.version = version
@@ -22,13 +23,19 @@ class Build:
         self.min_memory = min_memory
         self.marked = marked
         self.count = count
+        self.modloader = normalize_modloader(modloader)
+        if self.modloader is None and forge:
+            self.modloader = "FORGE"
 
     @classmethod
-    def new(cls, modpack_id, version, minecraft, is_published, private, min_java, min_memory, clone_id):
+    def new(cls, modpack_id, version, minecraft, is_published, private, min_java, min_memory, clone_id, forge=None, modloader=None):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO builds (modpack_id, version, created_at, updated_at, minecraft, is_published, private, min_java, min_memory) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (modpack_id, version, now, now, minecraft, is_published, private, min_java, min_memory))
+        modloader = normalize_modloader(modloader)
+        if modloader is None and forge:
+            modloader = "FORGE"
+        cur.execute("INSERT INTO builds (modpack_id, version, created_at, updated_at, minecraft, forge, modloader, is_published, private, min_java, min_memory) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (modpack_id, version, now, now, minecraft, forge, modloader, is_published, private, min_java, min_memory))
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
@@ -39,7 +46,7 @@ class Build:
                 for mv in modversions:
                     cur.execute("INSERT INTO build_modversion (modversion_id, build_id, optional) VALUES (%s, %s, %s)", (mv["modversion_id"], id, mv["optional"]))
             conn.commit()
-        cls(id, modpack_id, version, now, now, minecraft, "0", is_published, private, min_java, min_memory, "0")
+        cls(id, modpack_id, version, now, now, minecraft, forge, is_published, private, min_java, min_memory, "0", modloader=modloader)
 
     @staticmethod
     def delete_build(id):
@@ -51,13 +58,16 @@ class Build:
         return None
 
     @staticmethod
-    def update(id, version, minecraft, is_published, private, min_java, min_memory):
+    def update(id, version, minecraft, is_published, private, min_java, min_memory, forge=None, modloader=None):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
+        modloader = normalize_modloader(modloader)
+        if modloader is None and forge:
+            modloader = "FORGE"
         cur.execute("""UPDATE builds 
-            SET version = %s, minecraft = %s, is_published = %s, private = %s, min_java = %s, min_memory = %s
-            WHERE id = %s;""", (version, minecraft, is_published, private, min_java, min_memory, id))
+            SET version = %s, minecraft = %s, forge = %s, modloader = %s, is_published = %s, private = %s, min_java = %s, min_memory = %s
+            WHERE id = %s;""", (version, minecraft, forge, modloader, is_published, private, min_java, min_memory, id))
         conn.commit()
         return None
 
@@ -87,14 +97,13 @@ class Build:
     def get_modpackid_by_id(cls, id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT modpack_id FROM builds WHERE id = %s", (id,))
-        try: 
-            row = cur.fetchone()["modpack_id"]
-            conn.commit()
-            return (row)
-        except:
-            flash("unable to get modpackid by id", "error")
-            return 0
+        try:
+            cur.execute("SELECT modpack_id FROM builds WHERE id = %s", (id,))
+            row = cur.fetchone()
+            return row["modpack_id"] if row else 0
+        finally:
+            cur.close()
+            conn.close()
 
     @classmethod
     def get_by_id(cls, id):
@@ -245,6 +254,7 @@ class Build:
                 cursor.execute(
                     """SELECT modversions.id, modversions.mod_id,
                               modversions.version, modversions.mcversion,
+                              modversions.modloader,
                               modversions.md5, modversions.created_at,
                               modversions.updated_at, modversions.filesize,
                               mods.name AS modname, mods.pretty_name,
@@ -264,6 +274,7 @@ class Build:
                 cursor.execute(
                     """SELECT modversions.id, modversions.mod_id,
                               modversions.version, modversions.mcversion,
+                              modversions.modloader,
                               modversions.md5, modversions.created_at,
                               modversions.updated_at, modversions.filesize,
                               mods.name AS modname, mods.pretty_name,
@@ -282,7 +293,7 @@ class Build:
             modversions = cursor.fetchall()
             versions = []
             for mv in modversions:
-                v = Modversion(mv["id"], mv["mod_id"], mv["version"], mv["mcversion"], mv["md5"], mv["created_at"], mv["updated_at"], mv["filesize"], mv["optional"])
+                v = Modversion(mv["id"], mv["mod_id"], mv["version"], mv["mcversion"], mv["md5"], mv["created_at"], mv["updated_at"], mv["filesize"], mv["optional"], mv.get("modloader"))
                 v.modname = mv["modname"]
                 v.pretty_name = mv["pretty_name"]
                 v.author = mv["author"]

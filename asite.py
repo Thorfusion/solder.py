@@ -1,19 +1,23 @@
 import os
+from pathlib import Path
+import tempfile
 import threading
 import boto3
 
 from api import solderpy_version
-from flask import Blueprint, app, flash, redirect, render_template, request, session, url_for
+from flask import Blueprint, app, flash, redirect, render_template, request, send_file, session, url_for
 from models.build import Build
 from models.build_modversion import Build_modversion
 from models.client import Client
 from models.client_modpack import Client_modpack
+from models.compatibility import InvalidModloaderError
 from models.database import Database
 from models.key import Key
-from models.mod import DuplicateModError, Mod
+from models.mcinstance import MCInstanceExport, MCInstanceExportError
+from models.mod import DuplicateModError, Mod, UploadVerificationError
 from models.mod_dependency import DependencyError, ModDependency
 from models.modpack import Modpack
-from models.modversion import MissingDependencyVersionError, Modversion
+from models.modversion import IncompatibleModVersionError, MissingDependencyVersionError, Modversion
 from models.session import Session
 from models.user import User
 from mysql import connector
@@ -156,7 +160,7 @@ def newmodversion(id):
             return redirect(url_for("asite.modversion", id=id))
         try:
             added_dependencies = Modversion.add_modversion_to_selected_build(request.form["addtoselbuild_id"], id, "0", "1", "0")
-        except MissingDependencyVersionError as error:
+        except (IncompatibleModVersionError, MissingDependencyVersionError) as error:
             flash(str(error), "error")
             return redirect(url_for("asite.modversion", id=id))
         message = "added to marked build " + id
@@ -188,10 +192,16 @@ def newmodversion(id):
                 return redirect(request.referrer)
         filesie2 = Modversion.get_file_size(md5_repo_url + request.form["newmodvermanual_url"])
         if request.form["newmodvermanual_md5"] != "":
-            Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0")
+            try:
+                Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0", modloader=request.form.get("newmodvermanual_modloader"))
+            except InvalidModloaderError as error:
+                flash(str(error), "error")
         else:
             # Todo Add filesize rehash and md5 hash, if fails do not add
-            Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", md5_repo_url + request.form["newmodvermanual_url"])
+            try:
+                Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", md5_repo_url + request.form["newmodvermanual_url"], modloader=request.form.get("newmodvermanual_modloader"))
+            except InvalidModloaderError as error:
+                flash(str(error), "error")
     return redirect(url_for("asite.modversion", id=id))
 
 
@@ -262,7 +272,11 @@ def modpack(id):
                 clonebuild = request.form['clonebuild']
             if "clonebuildman" in request.form and request.form['clonebuildman'] != "":
                 clonebuild = request.form['clonebuildman']
-            Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild)
+            try:
+                Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild, request.form.get("forge") or None, request.form.get("modloader"))
+            except InvalidModloaderError as error:
+                flash(str(error), "error")
+                return redirect(url_for("asite.modpack", id=id))
             flash("added build", "success")
             return redirect(url_for("asite.modpack", id=id))
         if "recommended_submit" in request.form:
@@ -512,7 +526,11 @@ def modpackbuild(id):
                 publish = request.form['publish']
             if "private" in request.form:
                 private = request.form['private']
-            Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"])
+            try:
+                Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], request.form.get("forge") or None, request.form.get("modloader"))
+            except InvalidModloaderError as error:
+                flash(str(error), "error")
+                return redirect(url_for("asite.modpackbuild", id=id))
             flash("updated " + id, "success")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "optional_submit" in request.form:
@@ -520,7 +538,11 @@ def modpackbuild(id):
             flash("updated " + id, "success")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "selmodver_submit" in request.form:
-            Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], id)
+            try:
+                Modversion.update_modversion_in_build(request.form["selmodver_oldver"], request.form["selmodver_ver"], id)
+            except (IncompatibleModVersionError, ValueError) as error:
+                flash(str(error), "error")
+                return redirect(url_for("asite.modpackbuild", id=id))
             flash("updated " + id, "success")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "delete_submit" in request.form:
@@ -543,7 +565,7 @@ def modpackbuild(id):
                 newoptional = request.form['newoptional']
             try:
                 added_dependencies = Modversion.add_modversion_to_selected_build(request.form["modversion"], request.form["modnames"], id, "0", newoptional)
-            except MissingDependencyVersionError as error:
+            except (IncompatibleModVersionError, MissingDependencyVersionError) as error:
                 flash(str(error), "error")
                 return redirect(url_for("asite.modpackbuild", id=id))
             message = "added modversion to build"
@@ -569,6 +591,40 @@ def modpackbuild(id):
         packbuildname=editor.packbuildname,
         listmodversions=editor.listmodversions,
         buildlist=editor.buildlist,
+    )
+
+
+@asite.route("/modpackbuild/<int:id>/mcinstance", methods=["GET"])
+def export_mcinstance(id):
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+        return redirect(request.referrer or url_for("asite.modpacklibrary"))
+
+    modpack_id = Build.get_modpackid_by_id(id)
+    if not modpack_id or not User_modpack.get_user_modpackpermission(
+        session["token"], modpack_id
+    ):
+        return redirect(request.referrer or url_for("asite.modpacklibrary"))
+
+    try:
+        build, packages = MCInstanceExport.load(id)
+        archive = MCInstanceExport.render(
+            build, packages, public_repo_url, UPLOAD_FOLDER
+        )
+    except MCInstanceExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpack", id=modpack_id))
+
+    filename = secure_filename(f"{build.modpack_slug}-{build.version}.mcinstance")
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
     )
 
 
@@ -608,7 +664,6 @@ def modlibrary_post():
             if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(request.form['markedbuild'])) == False:
                 return redirect(request.referrer)
             markedbuild = request.form['markedbuild']
-        Modversion.new(request.form["modid"], request.form["mcversion"] + "-" + request.form["version"], request.form["mcversion"], request.form["md5"], request.form["filesize"], markedbuild, "0", request.form["jarmd5"])
         if 'file' not in request.files:
             print('No file part')
             return redirect(url_for('asite.modlibrary'))
@@ -617,24 +672,76 @@ def modlibrary_post():
             print('No selected file')
             return redirect(url_for('asite.modlibrary'))
         if filew and allowed_file(filew.filename):
-            filename = secure_filename(filew.filename)
-            print("saving")
-            createFolder(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/")
-            filew.save(os.path.join(UPLOAD_FOLDER + secure_filename(request.form["mod"]) + "/", filename))
+            mod_name = request.form["mod"]
+            version = request.form["mcversion"] + "-" + request.form["version"]
+            filename = f"{mod_name}-{version}.zip"
+            jarfilename = f"{mod_name}-{version}.jar"
+            if (
+                secure_filename(mod_name) != mod_name
+                or secure_filename(version) != version
+            ):
+                flash("The mod slug or version contains unsafe filename characters.", "error")
+                return redirect(url_for("asite.modlibrary"))
+            destination_folder = Path(UPLOAD_FOLDER, mod_name)
+            destination_folder.mkdir(parents=True, exist_ok=True)
+            jarmd5 = request.form.get("jarmd5", "0").strip() or "0"
+
+            try:
+                with tempfile.TemporaryDirectory(
+                    prefix=".solder-upload-", dir=destination_folder
+                ) as staging_directory:
+                    staged_zip = Path(staging_directory, filename)
+                    filew.save(staged_zip)
+                    verified_md5 = Mod.verify_file_md5(
+                        staged_zip, request.form.get("md5"), "the Solder ZIP"
+                    )
+                    staged_jar = None
+                    if jarmd5 != "0":
+                        Mod.extract_jar_from_zip(
+                            staged_zip,
+                            output_name=jarfilename,
+                            expected_md5=jarmd5,
+                        )
+                        staged_jar = Path(staging_directory, jarfilename)
+
+                    actual_filesize = staged_zip.stat().st_size
+                    Modversion.new(
+                        request.form["modid"],
+                        version,
+                        request.form["mcversion"],
+                        verified_md5,
+                        actual_filesize,
+                        markedbuild,
+                        "0",
+                        jarmd5.lower(),
+                        request.form.get("modloader"),
+                    )
+                    final_zip = destination_folder / filename
+                    os.replace(staged_zip, final_zip)
+                    if staged_jar is not None:
+                        final_jar = destination_folder / jarfilename
+                        os.replace(staged_jar, final_jar)
+            except (
+                IncompatibleModVersionError,
+                InvalidModloaderError,
+                MissingDependencyVersionError,
+                UploadVerificationError,
+            ) as error:
+                flash(str(error), "error")
+                return redirect(url_for("asite.modlibrary"))
+
             if R2_BUCKET != None:
                 keyname = "mods/" + request.form["mod"] + "/" + filename
                 try:
-                    R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + filename, R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
+                    R2.upload_file(str(final_zip), R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
                 except Exception as e:
                     ErrorPrinter.message("failed to upload zipfile to buckets", e)
                     flash("failed to upload zipfile to bucket", "error")
-            if request.form["jarmd5"] != "0":
-                print("saving jar")
-                jarfilename = Mod.extract_jar_from_zip(UPLOAD_FOLDER + request.form["mod"] + "/" + filename)
+            if jarmd5 != "0":
                 if R2_BUCKET != None:
                     jarkeyname = "mods/" + request.form["mod"] + "/" + jarfilename
                     try:
-                        R2.upload_file(UPLOAD_FOLDER + request.form["mod"] + "/" + jarfilename, R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/jar'})
+                        R2.upload_file(str(final_jar), R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/jar'})
                     except Exception as e:
                         ErrorPrinter.message("failed to upload jarfile to buckets", e)
                         flash("failed to upload jarfile to bucket", "error")

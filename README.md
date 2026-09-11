@@ -60,9 +60,10 @@ and optional-manifest extensions, is documented in the
 
 + **Generate changelog**
 
-+ **MCInstance Loader Support (in dev)**
++ **MCInstanceLoader export support**
 
-  Multi launcher support
+  Export a build from its management page as an MCInstanceLoader
+  `.mcinstance` archive.
 
 + **Database compatbility with technic solder**
 
@@ -73,9 +74,40 @@ and optional-manifest extensions, is documented in the
 + Maven integration
 + Modrinth integration
 
-## Unfinished Features in dev
+## MCInstanceLoader exports
 
-+ MCInstance Loader support
+The **Export MCIL** action on a modpack's build list creates the
+[MCInstanceLoader 2.7 archive format](https://github.com/HRudyPlayZ/MCInstanceLoader/tree/1.7.10).
+`PUBLIC_REPO_LOCATION` must be configured because the generated resource list
+uses the public repository URLs. Build create/edit forms store the modloader
+and its optional version (in Technic's existing `forge` version column) for
+`metadata.packconfig`.
+
+The export maps Solder packages as follows:
+
+- A `MOD` uploaded from a JAR becomes a downloadable MCIL resource in `mods/`,
+  including its side, optional status and verified raw-JAR MD5.
+- `CONFIG`, `RES`, `NONE`, and older mandatory `MOD` packages without a raw JAR
+  are unpacked into `overrides`, `client-overrides`, or `server-overrides`
+  according to their configured side.
+- `MCIL` identifies the MCInstanceLoader package itself and is excluded from
+  the payload. `LAUNCHER` packages are also excluded because their Technic
+  `bin/` contents are launcher-specific.
+- Optional bundled ZIPs are rejected because MCInstanceLoader can only toggle
+  individual download resources. Optional server-only packages are rejected
+  because MCInstanceLoader 2.7 presents optional choices only on clients.
+
+The browser still calculates upload MD5 values so the interface remains
+responsive. Before adding the version to the database, solder.py independently
+hashes the received Solder ZIP and its extracted raw JAR and rejects a mismatch.
+It also gives the raw JAR its canonical `<slug>-<version>.jar` repository name.
+
+Mod versions can be assigned a modloader in both upload flows. Leaving it blank
+makes the version loader-agnostic, just as a null mod Minecraft version is
+universal. Build management lists and accepts only versions matching both the
+build's Minecraft version and modloader; required dependencies use the same
+matching rules. Existing Technic builds with a Forge version are identified as
+`FORGE` automatically.
 
 ## Server and optional API manifests
 

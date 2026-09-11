@@ -80,6 +80,18 @@
       <input type="text" class="form-control" name="mcversion" id="mcversion" required onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '0')">
     </div>
     <div class="mb-3">
+      <label for="modloader" class="form-label">Modloader (blank for any)</label>
+      <input type="text" class="form-control" name="modloader" id="modloader" list="modloaders" placeholder="FORGE">
+      <datalist id="modloaders">
+        <option value="FORGE"></option>
+        <option value="NEOFORGE"></option>
+        <option value="FABRIC"></option>
+        <option value="QUILT"></option>
+        <option value="LITELOADER"></option>
+        <option value="VANILLA"></option>
+      </datalist>
+    </div>
+    <div class="mb-3">
       <label for="version" class="form-label">Mod Version number</label>
       <input type="text" class="form-control" name="version" id="version" required onchange="zipfile_mods('mod', 'mcversion', 'version', 'file', '0')">
     </div>

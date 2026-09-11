@@ -68,7 +68,8 @@ class Build_modversion:
             cur.execute(
                 """SELECT builds.id, builds.modpack_id, builds.version,
                           builds.created_at, builds.updated_at, builds.minecraft,
-                          builds.forge, builds.is_published, builds.private,
+                          builds.forge, builds.modloader,
+                          builds.is_published, builds.private,
                           builds.min_java, builds.min_memory, builds.marked,
                           modpacks.name AS modpack_name
                    FROM builds
@@ -102,11 +103,16 @@ class Build_modversion:
             mod_rows = cur.fetchall() or []
 
             cur.execute(
-                """SELECT id, mod_id, version, mcversion
+                """SELECT id, mod_id, version, mcversion, modloader
                    FROM modversions
-                   WHERE mcversion = %s OR mcversion IS NULL
+                   WHERE (mcversion = %s OR mcversion IS NULL)
+                     AND (%s IS NULL OR modloader = %s OR modloader IS NULL)
                    ORDER BY mod_id, id DESC""",
-                (packbuild.minecraft,),
+                (
+                    packbuild.minecraft,
+                    packbuild.modloader,
+                    packbuild.modloader,
+                ),
             )
             version_rows = cur.fetchall() or []
         finally:
