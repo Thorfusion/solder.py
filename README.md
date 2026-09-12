@@ -252,6 +252,140 @@ proxy_set_header X-Forwarded-For $http_x_forwarded_for;
 
 You can use the same nginx/apache server for both reverse proxy and filehosting.
 
+### Hosting the repository and reverse proxying with Caddy
+
+If you do not want to use S3 or R2, the recommended Docker setup is to let
+[Caddy](https://hub.docker.com/_/caddy) serve the local mod repository and
+reverse proxy the rest of the site to solder.py. Only Caddy is exposed to the
+internet. The solder.py container writes files to the shared repository while
+Caddy mounts that repository read-only.
+
+This example uses `solder.example.com`. Before starting it:
+
+1. Point the domain's DNS record at the Docker host.
+2. Allow inbound TCP ports 80 and 443. UDP port 443 is optional and enables
+   HTTP/3.
+3. Create the repository directory and make sure the user running the
+   solder.py container can write to it:
+
+```bash
+sudo mkdir -p /srv/solder/mods
+```
+
+Create a file named `Caddyfile` beside the Compose file:
+
+```caddyfile
+solder.example.com {
+    # handle_path removes /mods before looking in /srv/solder-mods. A request
+    # for /mods/example/example-1.0.zip therefore maps to
+    # /srv/solder-mods/example/example-1.0.zip.
+    handle_path /mods/* {
+        root * /srv/solder-mods
+        file_server
+    }
+
+    handle {
+        reverse_proxy solderpy:5000
+    }
+}
+```
+
+Directory browsing is not enabled, so requests to repository directories do
+not produce file listings.
+
+Create `compose.yml`, filling in the existing database values for your
+installation. Replace `mysql` with the database hostname or service name used
+by your deployment:
+
+```yaml
+services:
+  solderpy:
+    image: thorfusion/solderpy:latest
+    restart: unless-stopped
+    expose:
+      - "5000"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: solderpy
+      DB_PASSWORD: change-me
+      DB_DATABASE: solderpy
+      PUBLIC_REPO_LOCATION: https://solder.example.com/mods/
+      MD5_REPO_LOCATION: /app/mods/
+      # Caddy has a fixed address so only it is trusted as the reverse proxy.
+      PROXY_IP: 172.30.50.2
+    volumes:
+      - /srv/solder/mods:/app/mods
+    networks:
+      solder_frontend:
+        ipv4_address: 172.30.50.3
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - solderpy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - /srv/solder/mods:/srv/solder-mods:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      solder_frontend:
+        ipv4_address: 172.30.50.2
+
+networks:
+  solder_frontend:
+    ipam:
+      config:
+        - subnet: 172.30.50.0/24
+
+volumes:
+  caddy_data:
+  caddy_config:
+```
+
+If MySQL is another service in the same Compose file, attach `solderpy` to its
+database network as well. Do not publish solder.py's port `5000`; Caddy should
+be its only public entry point. If `172.30.50.0/24` overlaps an existing Docker
+or LAN network, choose another private subnet and update both fixed addresses.
+
+Start or update the installation with:
+
+```bash
+docker compose up -d
+```
+
+Caddy automatically obtains and renews HTTPS certificates when the domain
+resolves to the server and ports 80 and 443 are reachable. The `caddy_data`
+volume must remain persistent because it stores Caddy's certificates and other
+state.
+
+With this layout, the important solder.py repository settings are:
+
+```ini
+PUBLIC_REPO_LOCATION=https://solder.example.com/mods/
+MD5_REPO_LOCATION=/app/mods/
+```
+
+`PUBLIC_REPO_LOCATION` is the URL used by launchers. `MD5_REPO_LOCATION` is the
+local path used by solder.py for hashing and file inspection, so those internal
+operations do not need to download the file again through Caddy.
+
+After uploading a mod version, verify both services through Caddy:
+
+```bash
+curl -I https://solder.example.com/api/
+curl -I https://solder.example.com/mods/example-mod/example-mod-1.0.zip
+```
+
+Back up `/srv/solder/mods` along with the database. The mod repository is user
+data and is not stored inside either Docker image.
+
 ## Install solder.py with python (Limited support)
 
 You need to set the enviroment variables either through host or as a .env file, see the .env.example for further use
