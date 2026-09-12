@@ -1,10 +1,24 @@
-.center {
-  position: absolute;
-  left: 50%;
-  top: 50%;
+.dashboard {
+  max-width: 90rem;
+}
 
-  transform: translate(-50%, -50%);
+.dashboard-count {
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
 
-  width: 40%;
-  height: 50%;
+.dashboard-status {
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 0.65rem;
+  margin-top: 0.35rem;
+  width: 0.65rem;
+}
+
+.dashboard-status-ok {
+  background: var(--bs-success);
+}
+
+.dashboard-status-warning {
+  background: var(--bs-warning);
 }

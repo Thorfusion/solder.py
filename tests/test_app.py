@@ -1,6 +1,7 @@
 import hashlib
 import io
 import importlib
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -14,6 +15,7 @@ from tests.environment import configure_test_environment
 configure_test_environment()
 
 from models.integration import IntegrationError  # noqa: E402
+from models.dashboard import Dashboard  # noqa: E402
 from models.mod import DuplicateModError  # noqa: E402
 
 
@@ -52,6 +54,92 @@ class ApplicationSmokeTests(unittest.TestCase):
             routes,
         )
         self.assertIn("/api/modpack/<slugstring>/<buildstring>", routes)
+
+    def test_dashboard_is_a_status_view_without_duplicate_action_buttons(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        changed_at = datetime(2026, 9, 12, 10, 30)
+        dashboard = {
+            "counts": {
+                "modpacks": 2,
+                "builds": 5,
+                "unpublished_builds": 1,
+                "mods": 20,
+                "modversions": 40,
+            },
+            "attention": [
+                {
+                    "title": "Example Pack",
+                    "detail": "Latest build is unpublished",
+                    "target": "modpack",
+                    "target_id": 3,
+                }
+            ],
+            "marked_build": {
+                "id": 7,
+                "modpack_name": "Example Pack",
+                "version": "2.0",
+                "minecraft": "1.21.1",
+                "modloader": "FABRIC",
+                "forge": None,
+                "mod_count": 20,
+                "is_published": 0,
+            },
+            "recent": [
+                {
+                    "item_id": 7,
+                    "item_type": "build",
+                    "title": "Example Pack - 2.0",
+                    "detail": "Minecraft 1.21.1 / FABRIC",
+                    "updated_at": changed_at,
+                }
+            ],
+        }
+        health = [
+            {
+                "name": "Public repository",
+                "ready": True,
+                "detail": "Configured",
+            }
+        ]
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.Session.get_user_id", return_value=4),
+            patch("asite.Dashboard.load", return_value=dashboard) as load,
+            patch("asite.Dashboard.repository_health", return_value=health),
+            patch("asite.Build.get_marked_build", return_value=7),
+            patch("asite.Modpack.get_by_pinned", return_value=[]),
+        ):
+            response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Needs attention", response.data)
+        self.assertIn(b"Latest build is unpublished", response.data)
+        self.assertIn(b"Marked build", response.data)
+        self.assertIn(b"Recent changes", response.data)
+        self.assertIn(b"Repository health", response.data)
+        self.assertNotIn(b"<button", response.data)
+        self.assertNotIn(b"solderpy.js", response.data)
+        load.assert_called_once_with(4)
+
+    def test_dashboard_repository_health_accepts_url_or_local_md5_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            local_health = Dashboard.repository_health(
+                "https://cdn.example.test/mods/", directory
+            )
+        remote_health = Dashboard.repository_health(
+            "https://cdn.example.test/mods/",
+            "https://private.example.test/mods/",
+            "bucket",
+        )
+
+        self.assertTrue(local_health[0]["ready"])
+        self.assertTrue(local_health[1]["ready"])
+        self.assertEqual(local_health[1]["detail"], "Local path accessible")
+        self.assertTrue(remote_health[1]["ready"])
+        self.assertEqual(remote_health[1]["detail"], "Remote source configured")
+        self.assertEqual(remote_health[2]["detail"], "Enabled")
 
     def test_modloader_controls_and_dependency_search_use_existing_ui_styles(self):
         template_root = Path(__file__).resolve().parents[1] / "templates"

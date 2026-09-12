@@ -14,6 +14,7 @@ from models.client import Client
 from models.client_modpack import Client_modpack
 from models.compatibility import InvalidModloaderError
 from models.database import Database
+from models.dashboard import Dashboard
 from models.key import Key
 from models.mcinstance import (
     MCInstanceExport,
@@ -120,7 +121,11 @@ def index():
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
 
-    return render_template('index.html')
+    dashboard = Dashboard.load(Session.get_user_id(session["token"]))
+    dashboard["repository_health"] = Dashboard.repository_health(
+        public_repo_url, md5_repo_url, R2_BUCKET
+    )
+    return render_template("index.html", dashboard=dashboard)
 
 
 @asite.route("/logout")

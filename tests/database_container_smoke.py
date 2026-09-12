@@ -1205,6 +1205,20 @@ def exercise_synthetic_user_login(
     else:
         raise AssertionError("Synthetic user login did not redirect after success")
 
+    with opener.open(f"{base_url}/", timeout=5) as response:
+        dashboard_page = response.read()
+        if response.status != 200:
+            raise AssertionError("The management dashboard did not load")
+        for expected_text in (
+            b"Needs attention",
+            b"Recent changes",
+            b"Repository health",
+        ):
+            if expected_text not in dashboard_page:
+                raise AssertionError(
+                    f"The management dashboard is missing {expected_text!r}"
+                )
+
     with opener.open(f"{base_url}/modversion/3", timeout=5) as response:
         version_page = response.read()
         if (
