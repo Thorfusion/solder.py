@@ -522,6 +522,9 @@ class WriteApiStore:
                 version_id = cls._insert(
                     cur, "modversions", {"mod_id": mod_id, **values}
                 )
+                Modversion.promote_parent_mod_for_jar_md5(
+                    cur, mod_id, values.get("jarmd5")
+                )
                 cur.execute("SELECT * FROM modversions WHERE id = %s", (version_id,))
                 return cur.fetchone()
         except IntegrityError as error:
@@ -546,6 +549,9 @@ class WriteApiStore:
                         409,
                     )
             cls._update(cur, "modversions", modversion["id"], values)
+            Modversion.promote_parent_mod_for_jar_md5(
+                cur, modversion["mod_id"], values.get("jarmd5")
+            )
             cur.execute(
                 "SELECT * FROM modversions WHERE id = %s", (modversion["id"],)
             )

@@ -389,6 +389,17 @@ class ModelBehaviorTests(unittest.TestCase):
             "ALTER TABLE mods DROP COLUMN note",
         )
 
+    def test_jar_hash_migration_promotes_parent_mod_type(self):
+        cursor = Mock()
+
+        Database.migrate_jar_hash_mod_types(cursor)
+
+        query = cursor.execute.call_args.args[0]
+        self.assertIn("INNER JOIN modversions", query)
+        self.assertIn("SET mods.modtype = 'MOD'", query)
+        self.assertIn("CHAR_LENGTH(TRIM(modversions.jarmd5)) = 32", query)
+        self.assertIn("NOT REGEXP '[^0-9A-Fa-f]'", query)
+
     def test_duplicate_mod_rolls_back_and_raises_a_specific_error(self):
         connection = Mock()
         cursor = connection.cursor.return_value
@@ -488,14 +499,39 @@ class ModelBehaviorTests(unittest.TestCase):
                 modloader="fabric",
             )
 
-        query, parameters = connection.cursor.return_value.execute.call_args.args
+        calls = connection.cursor.return_value.execute.call_args_list
+        query, parameters = calls[0].args
         self.assertIn("jarmd5", query)
         self.assertEqual(parameters[3], "FABRIC")
         self.assertEqual(parameters[6], jar_md5)
+        self.assertEqual(
+            calls[1].args,
+            ("UPDATE mods SET modtype = 'MOD' WHERE id = %s", (3,)),
+        )
         self.assertEqual(version.id, 42)
         self.assertEqual(version.modloader, "FABRIC")
         connection.cursor.return_value.close.assert_called_once_with()
         connection.close.assert_called_once_with()
+
+    def test_new_modversion_without_jar_hash_keeps_parent_mod_type(self):
+        connection = Mock()
+        connection.cursor.return_value.lastrowid = 42
+
+        with patch(
+            "models.modversion.Database.get_connection", return_value=connection
+        ):
+            Modversion.new(
+                3,
+                "1.20.1-1.0",
+                "1.20.1",
+                "a" * 32,
+                123,
+                "0",
+                jarmd5="0",
+                modloader="fabric",
+            )
+
+        self.assertEqual(connection.cursor.return_value.execute.call_count, 1)
 
     def test_repository_file_source_keeps_the_configured_origin(self):
         url = Modversion.repository_file_source(

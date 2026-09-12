@@ -29,6 +29,8 @@ class IncompatibleModVersionError(ValueError):
 
 
 class Modversion:
+    JAR_MD5_PATTERN = re.compile(r"^[0-9A-Fa-f]{32}$")
+
     def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0, modloader=None, integration_version_id=None, jarmd5=None):
         self.id = id
         self.mod_id = mod_id
@@ -78,6 +80,7 @@ class Modversion:
                 (mod_id, version, mcversion, modloader, integration_version_id, md5, jarmd5, now, now, filesize),
             )
             id = cur.lastrowid
+            cls.promote_parent_mod_for_jar_md5(cur, mod_id, jarmd5)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -115,6 +118,17 @@ class Modversion:
             integration_version_id=integration_version_id,
             jarmd5=jarmd5,
         )
+
+    @classmethod
+    def promote_parent_mod_for_jar_md5(cls, cur, mod_id, jarmd5):
+        """Keep the parent package type consistent with raw-JAR detection."""
+        if not cls.JAR_MD5_PATTERN.fullmatch(str(jarmd5 or "").strip()):
+            return False
+        cur.execute(
+            "UPDATE mods SET modtype = 'MOD' WHERE id = %s",
+            (mod_id,),
+        )
+        return True
 
     @staticmethod
     def add_modversion_to_selected_build(modver_id, mod_id, build_id, marked, optional):
@@ -346,6 +360,14 @@ class Modversion:
                 "UPDATE modversions SET jarmd5 = %s WHERE id = %s",
                 (jarmd5, id),
             )
+            if Modversion.JAR_MD5_PATTERN.fullmatch(str(jarmd5 or "").strip()):
+                cur.execute(
+                    """UPDATE mods
+                       INNER JOIN modversions ON modversions.mod_id = mods.id
+                       SET mods.modtype = 'MOD'
+                       WHERE modversions.id = %s""",
+                    (id,),
+                )
             conn.commit()
         except Exception:
             conn.rollback()

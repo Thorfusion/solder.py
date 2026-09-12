@@ -238,6 +238,18 @@ class Database:
             cur.execute("ALTER TABLE mods DROP COLUMN note")
 
     @staticmethod
+    def migrate_jar_hash_mod_types(cur) -> None:
+        """Promote mods with a stored raw-JAR hash to the MOD package type."""
+        cur.execute(
+            """UPDATE mods
+               INNER JOIN modversions ON modversions.mod_id = mods.id
+               SET mods.modtype = 'MOD'
+               WHERE CHAR_LENGTH(TRIM(modversions.jarmd5)) = 32
+                 AND TRIM(modversions.jarmd5) NOT REGEXP '[^0-9A-Fa-f]'
+                 AND (mods.modtype IS NULL OR mods.modtype <> 'MOD')"""
+        )
+
+    @staticmethod
     def normalize_legacy_timestamps(cur) -> None:
         """Replace only obsolete zero-date defaults left by older databases.
 
@@ -587,6 +599,7 @@ class Database:
                     cur.execute(query)
 
             Database.migrate_legacy_mod_notes(cur)
+            Database.migrate_jar_hash_mod_types(cur)
 
             cur.execute("UPDATE modpacks SET user_id = 1 WHERE user_id IS NULL")
             cur.execute("ALTER TABLE modpacks MODIFY user_id INT NOT NULL")
@@ -659,6 +672,7 @@ class Database:
                     cur.execute(query)
 
             Database.migrate_legacy_mod_notes(cur)
+            Database.migrate_jar_hash_mod_types(cur)
 
             cur.execute(
                 "UPDATE builds SET modloader = 'FORGE' "

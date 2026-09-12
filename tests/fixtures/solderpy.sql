@@ -452,8 +452,9 @@ INSERT INTO `modversions` (`id`, `mod_id`, `version`, `md5`, `created_at`, `upda
 INSERT INTO `build_modversion` (`id`, `modversion_id`, `build_id`, `created_at`, `updated_at`) VALUES
 (1, 1, 1, '2024-01-01 00:00:00', '2024-01-01 00:00:00');
 
-UPDATE `mods` SET `side` = 'BOTH', `modtype` = 'MOD' WHERE `id` = 1;
-UPDATE `modversions` SET `mcversion` = '1.21.1' WHERE `id` = 1;
+-- A valid legacy raw-JAR hash should promote this package back to MOD at startup.
+UPDATE `mods` SET `side` = 'BOTH', `modtype` = 'CONFIG' WHERE `id` = 1;
+UPDATE `modversions` SET `mcversion` = '1.21.1', `jarmd5` = 'd41d8cd98f00b204e9800998ecf8427e' WHERE `id` = 1;
 INSERT INTO `sessions` (`token`, `ip`, `expiry`, `user_id`) VALUES
 ('ci-session-token-not-a-secret', '127.0.0.1', '2030-01-01 00:00:00', 1);
 INSERT INTO `user_modpack` (`id`, `user_id`, `modpack_id`, `created_at`, `updated_at`) VALUES

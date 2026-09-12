@@ -1483,6 +1483,14 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             )
             if legacy_note_column != "0":
                 raise AssertionError("Legacy mods.note column was not removed")
+            migrated_mod_type = mysql(
+                database_container,
+                "SELECT modtype FROM mods WHERE id = 1;",
+            )
+            if migrated_mod_type != "MOD":
+                raise AssertionError(
+                    "A legacy mod with a raw-JAR hash was not promoted to MOD"
+                )
         mysql(
             database_container,
             "UPDATE modversions SET modloader = 'FORGE' WHERE id IN (26, 27);",
