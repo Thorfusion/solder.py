@@ -343,8 +343,15 @@ def verify_technic_migration(database_container: str) -> None:
         database_container,
         "SELECT user_id, url FROM modpacks WHERE id = 1;",
     )
-    if modpack_state != "1\thttps://example.invalid/pack":
+    if modpack_state != "7\thttps://example.invalid/pack":
         raise AssertionError(f"Migration did not preserve Technic data: {modpack_state}")
+
+    modpack_grant = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM user_modpack WHERE user_id = 7 AND modpack_id = 1;",
+    )
+    if modpack_grant != "1":
+        raise AssertionError("Migration did not preserve Technic modpack access")
 
     notes_state = mysql(
         database_container,

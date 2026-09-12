@@ -400,6 +400,20 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertIn("CHAR_LENGTH(TRIM(modversions.jarmd5)) = 32", query)
         self.assertIn("NOT REGEXP '[^0-9A-Fa-f]'", query)
 
+    def test_technic_modpack_permissions_are_migrated_without_duplicates(self):
+        cursor = Mock()
+
+        Database.migrate_technic_modpack_permissions(cursor)
+
+        queries = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertEqual(len(queries), 3)
+        self.assertIn("INSERT INTO user_modpack", queries[0])
+        self.assertIn("FIND_IN_SET", queries[0])
+        self.assertIn("WHERE user_modpack.id IS NULL", queries[0])
+        self.assertIn("MIN(user_id)", queries[1])
+        self.assertIn("SELECT MIN(id) FROM users", queries[2])
+        self.assertNotIn("user_id = 1", "\n".join(queries))
+
     def test_duplicate_mod_rolls_back_and_raises_a_specific_error(self):
         connection = Mock()
         cursor = connection.cursor.return_value
@@ -1073,16 +1087,19 @@ class ModelBehaviorTests(unittest.TestCase):
             {
                 "membership_id": 11,
                 "current_version_id": 101,
+                "mod_id": 1,
                 "replacement_version_id": 103,
             },
             {
                 "membership_id": 11,
                 "current_version_id": 101,
+                "mod_id": 1,
                 "replacement_version_id": 102,
             },
             {
                 "membership_id": 12,
                 "current_version_id": 201,
+                "mod_id": 2,
                 "replacement_version_id": 201,
             },
         ]
@@ -1105,6 +1122,38 @@ class ModelBehaviorTests(unittest.TestCase):
         connection.rollback.assert_not_called()
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
+
+    def test_update_all_prefers_provider_version_over_newer_local_id(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [
+            {
+                "membership_id": 11,
+                "current_version_id": 101,
+                "mod_id": 9,
+                "replacement_version_id": 103,
+            },
+            {
+                "membership_id": 11,
+                "current_version_id": 101,
+                "mod_id": 9,
+                "replacement_version_id": 102,
+            },
+        ]
+
+        with patch(
+            "models.build_modversion.Database.get_connection",
+            return_value=connection,
+        ):
+            updated = Build_modversion.update_all_compatible(7, {9: 102})
+
+        self.assertEqual(updated, 1)
+        cursor.executemany.assert_called_once_with(
+            """UPDATE build_modversion
+                       SET modversion_id = %s
+                       WHERE id = %s""",
+            [(102, 11)],
+        )
 
     def test_empty_database_returns_empty_public_modpack_lists(self):
         connection = Mock()

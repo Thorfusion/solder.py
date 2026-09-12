@@ -94,7 +94,7 @@ def _boolean(data, field, default=_MISSING):
     value = data[field]
     if isinstance(value, bool):
         return value
-    if value in (0, 1):
+    if isinstance(value, int) and value in (0, 1):
         return bool(value)
     if isinstance(value, str):
         normalized = value.casefold()
@@ -109,9 +109,7 @@ def _integer(data, field, default=_MISSING, minimum=None):
     if field not in data:
         return default
     value = data[field]
-    if isinstance(value, bool):
-        _validation(field, f"The {field} field must be an integer.")
-    if isinstance(value, float) and not value.is_integer():
+    if isinstance(value, (bool, float)):
         _validation(field, f"The {field} field must be an integer.")
     if isinstance(value, str) and not re.fullmatch(r"[+-]?\d+", value.strip()):
         _validation(field, f"The {field} field must be an integer.")
@@ -646,7 +644,7 @@ def _client_modpacks(data):
         return None
     normalized = []
     for index, value in enumerate(modpacks):
-        if isinstance(value, bool):
+        if isinstance(value, (bool, float)):
             _validation(f"modpacks.{index}", "The modpack ID must be an integer.")
         try:
             modpack_id = int(value)

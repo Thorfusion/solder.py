@@ -1,8 +1,8 @@
 """Build MCInstanceLoader archives from Solder builds."""
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
-import io
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -23,6 +23,7 @@ from .modversion import Modversion
 _MD5_RE = re.compile(r"^[0-9a-fA-F]{32}$")
 _MAX_PACKAGE_SIZE = 512 * 1024 * 1024
 _MAX_EXPANDED_SIZE = 1024 * 1024 * 1024
+_SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
 
 
 class MCInstanceExportError(ValueError):
@@ -303,7 +304,10 @@ class MCInstanceExport:
                 "PUBLIC_REPO_LOCATION must be configured before exporting MCInstance files."
             )
 
-        archive_buffer = io.BytesIO()
+        archive_buffer = tempfile.SpooledTemporaryFile(
+            max_size=_SPOOL_MEMORY_LIMIT,
+            mode="w+b",
+        )
         resources = []
         optionals = []
         written_paths = {
@@ -315,70 +319,74 @@ class MCInstanceExport:
             "server-overrides/",
         }
 
-        with zipfile.ZipFile(
-            archive_buffer, "w", compression=zipfile.ZIP_DEFLATED
-        ) as target:
-            target.writestr("metadata.packconfig", cls._metadata(build))
-            for directory in (
-                "overrides/",
-                "client-overrides/",
-                "server-overrides/",
-            ):
-                target.writestr(directory, b"")
-
-            for package in packages:
-                modtype = package.modtype.upper()
-                if modtype in {"MCIL", "LAUNCHER"}:
-                    continue
-
-                if not version_is_compatible(
-                    package.minecraft,
-                    package.modloader,
-                    build.minecraft,
-                    build.modloader,
+        try:
+            with zipfile.ZipFile(
+                archive_buffer, "w", compression=zipfile.ZIP_DEFLATED
+            ) as target:
+                target.writestr("metadata.packconfig", cls._metadata(build))
+                for directory in (
+                    "overrides/",
+                    "client-overrides/",
+                    "server-overrides/",
                 ):
-                    raise MCInstanceExportError(
-                        f'Package "{package.pretty_name}" is not compatible '
-                        "with the build's modloader."
-                    )
+                    target.writestr(directory, b"")
 
-                if package.optional and cls._side(package.side) == "SERVER":
-                    raise MCInstanceExportError(
-                        f'Optional package "{package.pretty_name}" is server-only. '
-                        "MCInstanceLoader 2.7 only presents optional choices on clients."
-                    )
+                for package in packages:
+                    modtype = package.modtype.upper()
+                    if modtype in {"MCIL", "LAUNCHER"}:
+                        continue
 
-                raw_hash = cls._normal_hash(package.jarmd5)
-                if modtype == "MOD" and raw_hash:
-                    resource_name = f"{package.name}"
-                    resources.append(
-                        cls._resource(
-                            package,
-                            resource_name,
-                            raw_hash,
-                            public_repo_url,
+                    if not version_is_compatible(
+                        package.minecraft,
+                        package.modloader,
+                        build.minecraft,
+                        build.modloader,
+                    ):
+                        raise MCInstanceExportError(
+                            f'Package "{package.pretty_name}" is not compatible '
+                            "with the build's modloader."
                         )
-                    )
+
+                    if package.optional and cls._side(package.side) == "SERVER":
+                        raise MCInstanceExportError(
+                            f'Optional package "{package.pretty_name}" is server-only. '
+                            "MCInstanceLoader 2.7 only presents optional choices on clients."
+                        )
+
+                    raw_hash = cls._normal_hash(package.jarmd5)
+                    if modtype == "MOD" and raw_hash:
+                        resource_name = f"{package.name}"
+                        resources.append(
+                            cls._resource(
+                                package,
+                                resource_name,
+                                raw_hash,
+                                public_repo_url,
+                            )
+                        )
+                        if package.optional:
+                            optionals.append((package, resource_name))
+                        continue
+
                     if package.optional:
-                        optionals.append((package, resource_name))
-                    continue
+                        raise MCInstanceExportError(
+                            f'Optional package "{package.pretty_name}" needs a verified raw JAR. '
+                            "MCInstanceLoader cannot toggle the contents of a bundled Solder ZIP."
+                        )
 
-                if package.optional:
-                    raise MCInstanceExportError(
-                        f'Optional package "{package.pretty_name}" needs a verified raw JAR. '
-                        "MCInstanceLoader cannot toggle the contents of a bundled Solder ZIP."
+                    cls._copy_package(
+                        target,
+                        package,
+                        local_repo_root,
+                        public_repo_url,
+                        written_paths,
                     )
 
-                cls._copy_package(
-                    target,
-                    package,
-                    local_repo_root,
-                    public_repo_url,
-                    written_paths,
-                )
-
-            target.writestr("resources.packconfig", "\n".join(resources))
-            target.writestr("optionals.packconfig", cls._optionals(optionals))
+                target.writestr("resources.packconfig", "\n".join(resources))
+                target.writestr("optionals.packconfig", cls._optionals(optionals))
+        except Exception:
+            archive_buffer.close()
+            raise
 
         archive_buffer.seek(0)
         return archive_buffer
@@ -466,68 +474,68 @@ class MCInstanceExport:
         cls._validate_artifact_component(package.name, "mod slug")
         cls._validate_artifact_component(package.version, "mod version")
         filename = f"{package.name}-{package.version}.zip"
-        package_bytes = cls._package_bytes(
+        with cls._package_file(
             local_repo_root, public_repo_url, package.name, filename
-        )
-        expected_hash = cls._normal_hash(package.md5)
-        if expected_hash:
-            actual_hash = hashlib.md5(package_bytes, usedforsecurity=False).hexdigest()
-            if actual_hash != expected_hash:
-                raise MCInstanceExportError(
-                    f'The stored ZIP for "{package.pretty_name}" does not match its MD5.'
-                )
-
-        prefix = {
-            "BOTH": "overrides",
-            "CLIENT": "client-overrides",
-            "SERVER": "server-overrides",
-        }[cls._side(package.side)]
-
-        try:
-            source = zipfile.ZipFile(io.BytesIO(package_bytes), "r")
-        except zipfile.BadZipFile as error:
-            raise MCInstanceExportError(
-                f'The stored package for "{package.pretty_name}" is not a valid ZIP.'
-            ) from error
-
-        expanded_size = 0
-        try:
-            with source:
-                for info in source.infolist():
-                    if info.is_dir():
-                        continue
-                    expanded_size += info.file_size
-                    if expanded_size > _MAX_EXPANDED_SIZE:
-                        raise MCInstanceExportError(
-                            f'The stored package for "{package.pretty_name}" expands beyond the export limit.'
-                        )
-
-                    relative = cls._safe_archive_path(
-                        info.filename, package.pretty_name
+        ) as package_file:
+            expected_hash = cls._normal_hash(package.md5)
+            if expected_hash:
+                actual_hash = cls._file_md5(package_file)
+                if actual_hash != expected_hash:
+                    raise MCInstanceExportError(
+                        f'The stored ZIP for "{package.pretty_name}" does not match its MD5.'
                     )
-                    mode = (info.external_attr >> 16) & 0o170000
-                    if mode == stat.S_IFLNK:
-                        raise MCInstanceExportError(
-                            f'The stored package for "{package.pretty_name}" contains a symbolic link.'
+
+            prefix = {
+                "BOTH": "overrides",
+                "CLIENT": "client-overrides",
+                "SERVER": "server-overrides",
+            }[cls._side(package.side)]
+
+            try:
+                source = zipfile.ZipFile(package_file, "r")
+            except zipfile.BadZipFile as error:
+                raise MCInstanceExportError(
+                    f'The stored package for "{package.pretty_name}" is not a valid ZIP.'
+                ) from error
+
+            expanded_size = 0
+            try:
+                with source:
+                    for info in source.infolist():
+                        if info.is_dir():
+                            continue
+                        expanded_size += info.file_size
+                        if expanded_size > _MAX_EXPANDED_SIZE:
+                            raise MCInstanceExportError(
+                                f'The stored package for "{package.pretty_name}" expands beyond the export limit.'
+                            )
+
+                        relative = cls._safe_archive_path(
+                            info.filename, package.pretty_name
                         )
-                    destination = f"{prefix}/{relative.as_posix()}"
-                    if destination in written_paths:
-                        raise MCInstanceExportError(
-                            f'Multiple packages export the same path: "{destination}".'
-                        )
-                    written_paths.add(destination)
-                    with source.open(info, "r") as source_file, target.open(
-                        destination, "w"
-                    ) as destination_file:
-                        shutil.copyfileobj(
-                            source_file, destination_file, 1024 * 1024
-                        )
-        except MCInstanceExportError:
-            raise
-        except (OSError, RuntimeError, zipfile.BadZipFile) as error:
-            raise MCInstanceExportError(
-                f'The stored package for "{package.pretty_name}" could not be unpacked.'
-            ) from error
+                        mode = (info.external_attr >> 16) & 0o170000
+                        if mode == stat.S_IFLNK:
+                            raise MCInstanceExportError(
+                                f'The stored package for "{package.pretty_name}" contains a symbolic link.'
+                            )
+                        destination = f"{prefix}/{relative.as_posix()}"
+                        if destination in written_paths:
+                            raise MCInstanceExportError(
+                                f'Multiple packages export the same path: "{destination}".'
+                            )
+                        written_paths.add(destination)
+                        with source.open(info, "r") as source_file, target.open(
+                            destination, "w"
+                        ) as destination_file:
+                            shutil.copyfileobj(
+                                source_file, destination_file, 1024 * 1024
+                            )
+            except MCInstanceExportError:
+                raise
+            except (OSError, RuntimeError, zipfile.BadZipFile) as error:
+                raise MCInstanceExportError(
+                    f'The stored package for "{package.pretty_name}" could not be unpacked.'
+                ) from error
 
     @staticmethod
     def _safe_archive_path(name, package_name):
@@ -578,7 +586,8 @@ class MCInstanceExport:
         )
 
     @classmethod
-    def _package_bytes(cls, local_repo_root, public_repo_url, mod_name, filename):
+    @contextmanager
+    def _package_file(cls, local_repo_root, public_repo_url, mod_name, filename):
         root = Path(local_repo_root).resolve()
         local_path = (root / mod_name / filename).resolve()
         try:
@@ -589,9 +598,20 @@ class MCInstanceExport:
         if local_path.is_file():
             if local_path.stat().st_size > _MAX_PACKAGE_SIZE:
                 raise MCInstanceExportError("A package exceeds the MCInstance export limit.")
-            return local_path.read_bytes()
+            try:
+                with local_path.open("rb") as source:
+                    yield source
+            except OSError as error:
+                raise MCInstanceExportError(
+                    f'Unable to read the stored package "{filename}".'
+                ) from error
+            return
 
         url = cls._artifact_url(public_repo_url, mod_name, filename)
+        result = tempfile.SpooledTemporaryFile(
+            max_size=_SPOOL_MEMORY_LIMIT,
+            mode="w+b",
+        )
         try:
             with requests.get(url, stream=True, timeout=(5, 60)) as response:
                 response.raise_for_status()
@@ -600,7 +620,6 @@ class MCInstanceExport:
                     raise MCInstanceExportError(
                         "A package exceeds the MCInstance export limit."
                     )
-                result = io.BytesIO()
                 size = 0
                 for chunk in response.iter_content(chunk_size=1024 * 1024):
                     if not chunk:
@@ -611,10 +630,22 @@ class MCInstanceExport:
                             "A package exceeds the MCInstance export limit."
                         )
                     result.write(chunk)
-                return result.getvalue()
+            result.seek(0)
+            yield result
         except MCInstanceExportError:
             raise
-        except (requests.RequestException, ValueError) as error:
+        except (OSError, requests.RequestException, ValueError) as error:
             raise MCInstanceExportError(
                 f'Unable to read the stored package "{filename}".'
             ) from error
+        finally:
+            result.close()
+
+    @staticmethod
+    def _file_md5(source):
+        digest = hashlib.md5(usedforsecurity=False)
+        source.seek(0)
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+        source.seek(0)
+        return digest.hexdigest()

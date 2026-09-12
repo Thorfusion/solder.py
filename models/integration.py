@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import hashlib
 import hmac
 import json
@@ -401,6 +402,21 @@ class ModrinthProvider(ExternalProvider):
             ),
         )
 
+    @staticmethod
+    def _published_at(version):
+        """Return a stable UTC sort key for Modrinth's publication date."""
+        if not version.date_published:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        try:
+            published = datetime.fromisoformat(
+                str(version.date_published).replace("Z", "+00:00")
+            )
+        except ValueError:
+            return datetime.min.replace(tzinfo=timezone.utc)
+        if published.tzinfo is None:
+            published = published.replace(tzinfo=timezone.utc)
+        return published.astimezone(timezone.utc)
+
     def list_versions(self, project_id, minecraft, modloader=None):
         project_id = external_id(project_id)
         params = {
@@ -422,6 +438,13 @@ class ModrinthProvider(ExternalProvider):
             if normalized_loader and normalized_loader not in version.loaders:
                 continue
             versions.append(version)
+        versions.sort(
+            key=lambda version: (
+                self._published_at(version),
+                version.version_id,
+            ),
+            reverse=True,
+        )
         return versions
 
     def get_version(self, project_id, version_id, minecraft, modloader=None):

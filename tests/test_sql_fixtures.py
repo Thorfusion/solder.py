@@ -21,6 +21,13 @@ class SanitizedSqlFixtureTests(unittest.TestCase):
             "technic_solder.sql": 10,
             "solderpy.sql": 12,
         }
+        expected_emails = {
+            "technic_solder.sql": [
+                "ci-user@example.invalid",
+                "ci-pack-manager@example.invalid",
+            ],
+            "solderpy.sql": ["ci-user@example.invalid"],
+        }
 
         for name, expected_count in expected_insert_counts.items():
             with self.subTest(fixture=name):
@@ -47,7 +54,7 @@ class SanitizedSqlFixtureTests(unittest.TestCase):
                     r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
                     synthetic_data,
                 )
-                self.assertEqual(emails, ["ci-user@example.invalid"])
+                self.assertEqual(emails, expected_emails[name])
 
     def test_source_auto_increment_values_are_normalized(self):
         for fixture in FIXTURES.glob("*.sql"):

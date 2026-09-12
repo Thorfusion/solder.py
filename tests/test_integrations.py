@@ -132,6 +132,45 @@ class ProviderTests(unittest.TestCase):
             "/project/AABBCCDD/members", http.get.call_args_list[1].args[0]
         )
 
+    def test_modrinth_versions_are_sorted_by_publication_not_provider_id(self):
+        def version(version_id, published):
+            return {
+                "id": version_id,
+                "project_id": "PROJECT",
+                "name": version_id,
+                "version_number": version_id,
+                "game_versions": ["1.21.1"],
+                "loaders": ["fabric"],
+                "version_type": "release",
+                "date_published": published,
+                "files": [
+                    {
+                        "filename": "example.jar",
+                        "url": "https://cdn.modrinth.com/data/example.jar",
+                        "primary": True,
+                        "size": 123,
+                        "hashes": {"sha512": "a" * 128},
+                    }
+                ],
+            }
+
+        http = Mock()
+        http.get.return_value = json_response(
+            [
+                version("ZZZZ-OLDER", "2025-01-01T00:00:00Z"),
+                version("AAAA-NEWER", "2026-01-01T00:00:00Z"),
+            ]
+        )
+
+        versions = ModrinthProvider(http=http).list_versions(
+            "PROJECT", "1.21.1", "FABRIC"
+        )
+
+        self.assertEqual(
+            [version.version_id for version in versions],
+            ["AAAA-NEWER", "ZZZZ-OLDER"],
+        )
+
     def test_untrusted_provider_download_url_is_rejected(self):
         provider = ModrinthProvider(http=Mock())
         version = ExternalVersion(

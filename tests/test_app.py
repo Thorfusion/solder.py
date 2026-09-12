@@ -257,7 +257,10 @@ class ApplicationSmokeTests(unittest.TestCase):
             patch(
                 "asite.ModIntegration.list_versions", return_value=[latest]
             ),
-            patch("asite._materialize_integration_version") as materialize,
+            patch(
+                "asite._materialize_integration_version",
+                return_value=SimpleNamespace(version=SimpleNamespace(id=33)),
+            ) as materialize,
             patch(
                 "asite.Build_modversion.update_all_compatible", return_value=2
             ) as update_all,
@@ -268,7 +271,7 @@ class ApplicationSmokeTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         materialize.assert_called_once_with(9, "7", "LATEST")
-        update_all.assert_called_once_with("7")
+        update_all.assert_called_once_with("7", {9: 33})
 
     def test_unknown_route_uses_the_solder_404_page(self):
         response = self.client.get("/this-route-does-not-exist")

@@ -215,9 +215,11 @@ INSERT INTO `modpacks` (`id`, `name`, `slug`, `recommended`, `latest`, `url`, `c
 (1, 'CI Example Pack', 'ci-example-pack', '1.0', '1.0', 'https://example.invalid/pack', '2024-01-01 00:00:00', '2024-01-01 00:00:00', 0, 0, 0);
 
 INSERT INTO `users` (`id`, `username`, `email`, `password`, `created_ip`, `last_ip`, `created_at`, `updated_at`, `remember_token`, `updated_by_ip`, `created_by_user_id`, `updated_by_user_id`) VALUES
-(1, 'ci-user', 'ci-user@example.invalid', '59e423d8ee3b20da4266e8d80366b6b610975cfd405a75bfb05cf0b1850247fdf767cd96a6eb70ef18c496d83fdb21e6b1df0c1b846540a76de31baee15eaebc', '127.0.0.1', '127.0.0.1', '2024-01-01 00:00:00', '2024-01-01 00:00:00', '', '127.0.0.1', 1, 1);
+(1, 'ci-user', 'ci-user@example.invalid', '59e423d8ee3b20da4266e8d80366b6b610975cfd405a75bfb05cf0b1850247fdf767cd96a6eb70ef18c496d83fdb21e6b1df0c1b846540a76de31baee15eaebc', '127.0.0.1', '127.0.0.1', '2024-01-01 00:00:00', '2024-01-01 00:00:00', '', '127.0.0.1', 1, 1),
+(7, 'ci-pack-manager', 'ci-pack-manager@example.invalid', '59e423d8ee3b20da4266e8d80366b6b610975cfd405a75bfb05cf0b1850247fdf767cd96a6eb70ef18c496d83fdb21e6b1df0c1b846540a76de31baee15eaebc', '127.0.0.1', '127.0.0.1', '2024-01-01 00:00:00', '2024-01-01 00:00:00', '', '127.0.0.1', 1, 1);
 INSERT INTO `user_permissions` (`id`, `user_id`, `solder_full`, `solder_users`, `mods_create`, `mods_manage`, `mods_delete`, `modpacks`, `created_at`, `updated_at`, `solder_keys`, `solder_clients`, `modpacks_create`, `modpacks_manage`, `modpacks_delete`) VALUES
-(1, 1, 1, 1, 1, 1, 1, '1', '2024-01-01 00:00:00', '2024-01-01 00:00:00', 1, 1, 1, 1, 1);
+(1, 1, 1, 1, 1, 1, 1, NULL, '2024-01-01 00:00:00', '2024-01-01 00:00:00', 1, 1, 1, 1, 1),
+(7, 7, 0, 0, 0, 0, 0, '1', '2024-01-01 00:00:00', '2024-01-01 00:00:00', 0, 0, 0, 1, 0);
 INSERT INTO `keys` (`id`, `name`, `api_key`, `created_at`, `updated_at`) VALUES
 (1, 'CI key', 'ci-api-key-not-a-secret', '2024-01-01 00:00:00', '2024-01-01 00:00:00');
 INSERT INTO `clients` (`id`, `name`, `uuid`, `created_at`, `updated_at`) VALUES

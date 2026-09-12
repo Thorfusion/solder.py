@@ -220,6 +220,41 @@ class WriteApiRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertIn("md5", response.get_json()["error"])
 
+    def test_integer_fields_reject_json_floats(self):
+        with (
+            patch("api_write.WriteApiStore.get_mod", return_value=mod_row()),
+            patch("api_write.WriteApiStore.create_modversion") as create,
+        ):
+            response = self.client.post(
+                "/api/mod/example-mod/version",
+                headers=self.headers,
+                json={
+                    "version": "1.0",
+                    "md5": "a" * 32,
+                    "filesize": 123.0,
+                },
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("filesize", response.get_json()["error"])
+        create.assert_not_called()
+
+    def test_boolean_fields_reject_json_floats(self):
+        with patch("api_write.WriteApiStore.create_modpack") as create:
+            response = self.client.post(
+                "/api/modpack",
+                headers=self.headers,
+                json={
+                    "name": "Example Pack",
+                    "slug": "example-pack",
+                    "hidden": 1.0,
+                },
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("hidden", response.get_json()["error"])
+        create.assert_not_called()
+
     def test_add_build_mod_persists_optional_and_reports_dependencies(self):
         with (
             patch("api_write.WriteApiStore.get_modpack", return_value=modpack_row()),
@@ -297,6 +332,28 @@ class WriteApiRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(update.call_args.args[2], [1, 2])
+
+    def test_client_modpack_assignment_rejects_fractional_ids(self):
+        client = {
+            "id": 12,
+            "name": "Client",
+            "uuid": "client-uuid",
+            "created_at": None,
+            "updated_at": None,
+        }
+        with (
+            patch("api_write.WriteApiStore.get_client", return_value=client),
+            patch("api_write.WriteApiStore.update_client") as update,
+        ):
+            response = self.client.put(
+                "/api/client/client-uuid",
+                headers=self.headers,
+                json={"modpacks": [1.5]},
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("modpacks.0", response.get_json()["error"])
+        update.assert_not_called()
 
     def test_tokens_are_scoped_to_the_authenticated_user(self):
         with patch("api_write.ApiToken.get_all", return_value=[]) as get_all:

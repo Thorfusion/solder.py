@@ -250,6 +250,39 @@ class Database:
         )
 
     @staticmethod
+    def migrate_technic_modpack_permissions(cur) -> None:
+        """Preserve Technic's CSV modpack grants in solder.py's relation."""
+        cur.execute(
+            """INSERT INTO user_modpack (user_id, modpack_id)
+               SELECT user_permissions.user_id, modpacks.id
+               FROM user_permissions
+               INNER JOIN modpacks
+                   ON FIND_IN_SET(
+                       CAST(modpacks.id AS CHAR),
+                       REPLACE(COALESCE(user_permissions.modpacks, ''), ' ', '')
+                   ) > 0
+               LEFT JOIN user_modpack
+                   ON user_modpack.user_id = user_permissions.user_id
+                  AND user_modpack.modpack_id = modpacks.id
+               WHERE user_modpack.id IS NULL"""
+        )
+        cur.execute(
+            """UPDATE modpacks
+               INNER JOIN (
+                   SELECT modpack_id, MIN(user_id) AS user_id
+                   FROM user_modpack
+                   GROUP BY modpack_id
+               ) AS assignments ON assignments.modpack_id = modpacks.id
+               SET modpacks.user_id = assignments.user_id
+               WHERE modpacks.user_id IS NULL"""
+        )
+        cur.execute(
+            """UPDATE modpacks
+               SET user_id = (SELECT MIN(id) FROM users)
+               WHERE user_id IS NULL"""
+        )
+
+    @staticmethod
     def normalize_legacy_timestamps(cur) -> None:
         """Replace only obsolete zero-date defaults left by older databases.
 
@@ -601,7 +634,10 @@ class Database:
             Database.migrate_legacy_mod_notes(cur)
             Database.migrate_jar_hash_mod_types(cur)
 
-            cur.execute("UPDATE modpacks SET user_id = 1 WHERE user_id IS NULL")
+            # Technic has no user_modpack table. Create it before migrating
+            # its CSV permissions or attempting the related index migrations.
+            cur.execute(Database.USER_MODPACK_TABLE_SQL)
+            Database.migrate_technic_modpack_permissions(cur)
             cur.execute("ALTER TABLE modpacks MODIFY user_id INT NOT NULL")
             cur.execute(
                 "UPDATE builds SET modloader = 'FORGE' "
@@ -623,7 +659,6 @@ class Database:
                     user_id INT NOT NULL
                 )"""
             )
-            cur.execute(Database.USER_MODPACK_TABLE_SQL)
             con.commit()
             print("technic database migrated!")
             return True

@@ -173,14 +173,16 @@ class Build_modversion:
             conn.close()
 
     @staticmethod
-    def update_all_compatible(build_id):
+    def update_all_compatible(build_id, preferred_versions=None):
         """Move each build entry to its newest compatible stored version."""
+        preferred_versions = preferred_versions or {}
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
             cur.execute(
                 """SELECT build_modversion.id AS membership_id,
                           build_modversion.modversion_id AS current_version_id,
+                          current.mod_id,
                           candidate.id AS replacement_version_id
                    FROM build_modversion
                    INNER JOIN modversions AS current
@@ -203,9 +205,18 @@ class Build_modversion:
             for row in cur.fetchall() or []:
                 membership_id = row["membership_id"]
                 current_versions[membership_id] = row["current_version_id"]
-                replacements.setdefault(
-                    membership_id, row["replacement_version_id"]
-                )
+                preferred_id = preferred_versions.get(row["mod_id"])
+                if preferred_id is not None:
+                    if row["replacement_version_id"] == preferred_id:
+                        replacements[membership_id] = preferred_id
+                    else:
+                        replacements.setdefault(
+                            membership_id, row["replacement_version_id"]
+                        )
+                else:
+                    replacements.setdefault(
+                        membership_id, row["replacement_version_id"]
+                    )
 
             updates = [
                 (replacement_id, membership_id)

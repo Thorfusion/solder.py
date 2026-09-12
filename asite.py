@@ -764,6 +764,7 @@ def modpackbuild(id):
             return redirect(url_for("asite.modpackbuild", id=id))
         if "update_all_mods_submit" in request.form:
             integration_errors = []
+            preferred_versions = {}
             integrated_mods = Build_modversion.get_integrated_mods(id)
             if integrated_mods and User.get_permission_token(
                 session["token"], "mods_manage"
@@ -781,9 +782,10 @@ def modpackbuild(id):
                             mod, build, user_id
                         )
                         if versions:
-                            _materialize_integration_version(
+                            materialized = _materialize_integration_version(
                                 mod.id, id, versions[0].version_id
                             )
+                            preferred_versions[mod.id] = materialized.version.id
                     except IntegrationError as error:
                         integration_errors.append(
                             f'{integrated_mod["pretty_name"]}: {error}'
@@ -796,7 +798,9 @@ def modpackbuild(id):
                             f'{integrated_mod["pretty_name"]}: provider update failed'
                         )
 
-            updated = Build_modversion.update_all_compatible(id)
+            updated = Build_modversion.update_all_compatible(
+                id, preferred_versions
+            )
             if updated:
                 flash(f"updated {updated} mod(s)", "success")
             elif not integration_errors:

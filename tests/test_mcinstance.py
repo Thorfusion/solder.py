@@ -92,6 +92,7 @@ class MCInstanceExportTests(unittest.TestCase):
             result = MCInstanceExport.render(
                 self.build, packages, "https://cdn.example.test/mods/", directory
             )
+            self.addCleanup(result.close)
 
         with zipfile.ZipFile(result) as archive:
             self.assertEqual(
@@ -124,6 +125,7 @@ class MCInstanceExportTests(unittest.TestCase):
         result = MCInstanceExport.render(
             self.build, [], "https://cdn.example.test/mods", "unused"
         )
+        self.addCleanup(result.close)
 
         with zipfile.ZipFile(result) as archive:
             self.assertEqual(archive.read("resources.packconfig"), b"")
@@ -132,11 +134,25 @@ class MCInstanceExportTests(unittest.TestCase):
             self.assertIn("client-overrides/", archive.namelist())
             self.assertIn("server-overrides/", archive.namelist())
 
+    def test_large_export_spills_from_memory_to_a_temporary_file(self):
+        with patch("models.mcinstance._SPOOL_MEMORY_LIMIT", 1):
+            result = MCInstanceExport.render(
+                self.build, [], "https://cdn.example.test/mods", "unused"
+            )
+
+        try:
+            self.assertTrue(result._rolled)
+            with zipfile.ZipFile(result) as archive:
+                self.assertIn("metadata.packconfig", archive.namelist())
+        finally:
+            result.close()
+
     def test_build_modloader_is_written_to_metadata(self):
         build = replace(self.build, modloader="FABRIC", forge="0.16.14")
         result = MCInstanceExport.render(
             build, [], "https://cdn.example.test/mods", "unused"
         )
+        self.addCleanup(result.close)
 
         with zipfile.ZipFile(result) as archive:
             metadata = archive.read("metadata.packconfig").decode()
@@ -221,6 +237,44 @@ class MCInstanceExportTests(unittest.TestCase):
                     "https://cdn.example.test/mods",
                     directory,
                 )
+
+    def test_local_package_is_streamed_without_reading_the_whole_file(self):
+        package_zip = io.BytesIO()
+        with zipfile.ZipFile(package_zip, "w") as package:
+            package.writestr("config/test.cfg", b"value")
+        data = package_zip.getvalue()
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "streamed-config")
+            package_dir.mkdir()
+            Path(package_dir, "streamed-config-1.zip").write_bytes(data)
+            package = self.package(
+                name="streamed-config",
+                version="1",
+                md5=md5(data),
+                jarmd5="0",
+                modtype="CONFIG",
+            )
+
+            with patch.object(
+                Path,
+                "read_bytes",
+                side_effect=AssertionError("whole-file read used"),
+            ):
+                result = MCInstanceExport.render(
+                    self.build,
+                    [package],
+                    "https://cdn.example.test/mods",
+                    directory,
+                )
+
+        try:
+            with zipfile.ZipFile(result) as archive:
+                self.assertEqual(
+                    archive.read("overrides/config/test.cfg"), b"value"
+                )
+        finally:
+            result.close()
 
     def test_load_uses_one_query_and_closes_database_resources(self):
         row = {
