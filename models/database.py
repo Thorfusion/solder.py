@@ -246,7 +246,10 @@ class Database:
                SET mods.modtype = 'MOD'
                WHERE CHAR_LENGTH(TRIM(modversions.jarmd5)) = 32
                  AND TRIM(modversions.jarmd5) NOT REGEXP '[^0-9A-Fa-f]'
-                 AND (mods.modtype IS NULL OR mods.modtype <> 'MOD')"""
+                 AND (
+                     mods.modtype IS NULL
+                     OR mods.modtype NOT IN ('MOD', 'MCIL', 'LAUNCHER')
+                 )"""
         )
 
     @staticmethod
@@ -258,8 +261,14 @@ class Database:
                FROM user_permissions
                INNER JOIN modpacks
                    ON FIND_IN_SET(
-                       CAST(modpacks.id AS CHAR),
-                       REPLACE(COALESCE(user_permissions.modpacks, ''), ' ', '')
+                       CAST(modpacks.id AS BINARY),
+                       CAST(
+                           REPLACE(
+                               COALESCE(user_permissions.modpacks, ''),
+                               ' ',
+                               ''
+                           ) AS BINARY
+                       )
                    ) > 0
                LEFT JOIN user_modpack
                    ON user_modpack.user_id = user_permissions.user_id

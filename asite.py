@@ -365,7 +365,7 @@ def integrations():
     ):
         return redirect(url_for("alogin.login"))
     if User.get_permission_token(session["token"], "mods_create") == 0:
-        return redirect(request.referrer or url_for("asite.index"))
+        return redirect(url_for("asite.index"))
 
     user_id = Session.get_user_id(session["token"])
     if request.method == "POST":
@@ -953,7 +953,8 @@ def integration_versions(build_id, mod_id):
             }
         )
     except IntegrationError as error:
-        return jsonify({"error": str(error)}), 400
+        ErrorPrinter.message("failed to list compatible provider versions", error)
+        return jsonify({"error": "Compatible provider versions could not be loaded."}), 400
 
 
 @asite.route("/modpackbuild/<int:id>/mcinstance", methods=["GET"])
@@ -964,13 +965,13 @@ def export_mcinstance(id):
         return redirect(url_for("alogin.login"))
 
     if User.get_permission_token(session["token"], "modpacks_manage") == 0:
-        return redirect(request.referrer or url_for("asite.modpacklibrary"))
+        return redirect(url_for("asite.modpacklibrary"))
 
     modpack_id = Build.get_modpackid_by_id(id)
     if not modpack_id or not User_modpack.get_user_modpackpermission(
         session["token"], modpack_id
     ):
-        return redirect(request.referrer or url_for("asite.modpacklibrary"))
+        return redirect(url_for("asite.modpacklibrary"))
 
     try:
         build, packages = MCInstanceExport.load(id)
@@ -1046,15 +1047,30 @@ def modlibrary_post():
                 )
                 return redirect(url_for("asite.modlibrary"))
             version = request.form["mcversion"] + "-" + request.form["version"]
-            filename = f"{mod_name}-{version}.zip"
-            jarfilename = f"{mod_name}-{version}.jar"
+            safe_mod_name = secure_filename(mod.name)
+            safe_version = secure_filename(version)
             if (
-                secure_filename(mod_name) != mod_name
-                or secure_filename(version) != version
+                not safe_mod_name
+                or safe_mod_name != mod.name
+                or not safe_version
+                or safe_version != version
             ):
                 flash("The mod slug or version contains unsafe filename characters.", "error")
                 return redirect(url_for("asite.modlibrary"))
-            destination_folder = Path(UPLOAD_FOLDER, mod_name)
+
+            # Build every filesystem path from secure_filename output and
+            # verify the resolved mod folder remains below the repository root.
+            # The equality checks above intentionally reject, rather than
+            # silently rename, unsafe database slugs and submitted versions.
+            filename = f"{safe_mod_name}-{safe_version}.zip"
+            jarfilename = f"{safe_mod_name}-{safe_version}.jar"
+            repository_root = Path(UPLOAD_FOLDER).resolve()
+            destination_folder = (repository_root / safe_mod_name).resolve()
+            try:
+                destination_folder.relative_to(repository_root)
+            except ValueError:
+                flash("The selected mod has an unsafe repository path.", "error")
+                return redirect(url_for("asite.modlibrary"))
             destination_folder.mkdir(parents=True, exist_ok=True)
             jarmd5 = request.form.get("jarmd5", "0").strip() or "0"
 
@@ -1103,7 +1119,7 @@ def modlibrary_post():
                 return redirect(url_for("asite.modlibrary"))
 
             if R2_BUCKET != None:
-                keyname = "mods/" + request.form["mod"] + "/" + filename
+                keyname = "mods/" + safe_mod_name + "/" + filename
                 try:
                     R2.upload_file(str(final_zip), R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
                 except Exception as e:
@@ -1111,7 +1127,7 @@ def modlibrary_post():
                     flash("failed to upload zipfile to bucket", "error")
             if jarmd5 != "0":
                 if R2_BUCKET != None:
-                    jarkeyname = "mods/" + request.form["mod"] + "/" + jarfilename
+                    jarkeyname = "mods/" + safe_mod_name + "/" + jarfilename
                     try:
                         R2.upload_file(str(final_jar), R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/jar'})
                     except Exception as e:

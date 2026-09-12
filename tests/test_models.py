@@ -399,6 +399,7 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertIn("SET mods.modtype = 'MOD'", query)
         self.assertIn("CHAR_LENGTH(TRIM(modversions.jarmd5)) = 32", query)
         self.assertIn("NOT REGEXP '[^0-9A-Fa-f]'", query)
+        self.assertIn("NOT IN ('MOD', 'MCIL', 'LAUNCHER')", query)
 
     def test_technic_modpack_permissions_are_migrated_without_duplicates(self):
         cursor = Mock()
@@ -519,9 +520,11 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertEqual(parameters[3], "FABRIC")
         self.assertEqual(parameters[6], jar_md5)
         self.assertEqual(
-            calls[1].args,
-            ("UPDATE mods SET modtype = 'MOD' WHERE id = %s", (3,)),
+            calls[1].args[1],
+            (3,),
         )
+        self.assertIn("SET modtype = 'MOD'", calls[1].args[0])
+        self.assertIn("NOT IN ('MOD', 'MCIL', 'LAUNCHER')", calls[1].args[0])
         self.assertEqual(version.id, 42)
         self.assertEqual(version.modloader, "FABRIC")
         connection.cursor.return_value.close.assert_called_once_with()
@@ -750,6 +753,20 @@ class ModelBehaviorTests(unittest.TestCase):
                 )
 
             self.assertFalse(Path(directory, "example.jar").exists())
+
+    def test_uploaded_jar_rejects_an_unsafe_output_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory, "example.zip")
+            with zipfile.ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("mods/example.jar", b"jar contents")
+
+            with self.assertRaisesRegex(UploadVerificationError, "filename"):
+                Mod.extract_jar_from_zip(
+                    archive,
+                    output_name="../outside.jar",
+                )
+
+            self.assertFalse((Path(directory).parent / "outside.jar").exists())
 
     def test_empty_build_returns_an_empty_mod_list(self):
         connection = Mock()

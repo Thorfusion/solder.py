@@ -125,7 +125,9 @@ class Modversion:
         if not cls.JAR_MD5_PATTERN.fullmatch(str(jarmd5 or "").strip()):
             return False
         cur.execute(
-            "UPDATE mods SET modtype = 'MOD' WHERE id = %s",
+            """UPDATE mods SET modtype = 'MOD'
+               WHERE id = %s
+                 AND (modtype IS NULL OR modtype NOT IN ('MOD', 'MCIL', 'LAUNCHER'))""",
             (mod_id,),
         )
         return True

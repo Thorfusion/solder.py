@@ -137,6 +137,7 @@ jobs:
         run: python tests/database_container_smoke.py solderpy:security-${{ github.sha }}
 
       - name: Scan image for high and critical vulnerabilities
+        if: always()
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: solderpy:security-${{ github.sha }}
@@ -151,7 +152,7 @@ jobs:
           limit-severities-for-sarif: true
 
       - name: Upload scan results to GitHub Security
-        if: always()
+        if: always() && hashFiles('trivy-results.sarif') != ''
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results.sarif

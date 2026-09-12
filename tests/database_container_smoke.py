@@ -866,6 +866,7 @@ def exercise_write_api(base_url: str, database_container: str, token: str) -> No
             "version": "1.0",
             "minecraft": "1.21.1",
             "modloader": "FABRIC",
+            "is_published": True,
         },
     )
     if status != 201 or created_build.get("modloader") != "FABRIC":
@@ -1306,7 +1307,8 @@ def exercise_synthetic_user_login(
            FROM build_modversion
            INNER JOIN modversions
                ON build_modversion.modversion_id = modversions.id
-           WHERE build_modversion.build_id = 1;""",
+           WHERE build_modversion.build_id = 1
+             AND modversions.mod_id IN (1, 2, 3);""",
     )
     if selected_build_mods != "1:1:0,2:4:0,3:3:0":
         raise AssertionError(

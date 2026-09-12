@@ -375,8 +375,11 @@ def modpack_slug_build(slugstring: str, buildstring: str):
 
     try:
         target, include_optional = _manifest_options(buildtag)
-    except ValueError as error:
-        return jsonify({"error": str(error)}), 400
+    except ValueError:
+        # The parser raises only for invalid public query arguments. Do not
+        # serialize exception objects into an HTTP response: keeping the
+        # response static also prevents future parser errors leaking details.
+        return jsonify({"error": "Invalid manifest options"}), 400
 
     if target == "server" and not current_modpack.enable_server:
         return jsonify({"error": "Server manifests are not enabled"}), 404

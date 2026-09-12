@@ -13,6 +13,7 @@ from tests.environment import configure_test_environment
 
 configure_test_environment()
 
+from models.integration import IntegrationError  # noqa: E402
 from models.mod import DuplicateModError  # noqa: E402
 
 
@@ -200,6 +201,61 @@ class ApplicationSmokeTests(unittest.TestCase):
             "example-pack-2.0.mcinstance",
             response.headers["Content-Disposition"],
         )
+
+    def test_management_permission_redirects_do_not_trust_referer(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=0),
+        ):
+            integration_response = self.client.get(
+                "/integrations",
+                headers={"Referer": "https://attacker.example/redirect"},
+            )
+            export_response = self.client.get(
+                "/modpackbuild/7/mcinstance",
+                headers={"Referer": "https://attacker.example/redirect"},
+            )
+
+        self.assertEqual(integration_response.status_code, 302)
+        self.assertEqual(integration_response.headers["Location"], "/")
+        self.assertEqual(export_response.status_code, 302)
+        self.assertEqual(export_response.headers["Location"], "/modpacklibrary")
+
+    def test_integration_version_error_does_not_expose_exception_details(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.Session.get_user_id", return_value=4),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Build.get_modpackid_by_id", return_value=3),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch("asite.Mod.get_by_id", return_value=SimpleNamespace(id=9)),
+            patch("asite.Build.get_by_id", return_value=SimpleNamespace(id=7)),
+            patch(
+                "asite.ModIntegration.list_versions",
+                side_effect=IntegrationError("private upstream detail"),
+            ),
+            patch("asite.ErrorPrinter.message") as log_error,
+        ):
+            response = self.client.get(
+                "/modpackbuild/7/integration-versions/9"
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.get_json(),
+            {"error": "Compatible provider versions could not be loaded."},
+        )
+        self.assertNotIn(b"private upstream detail", response.data)
+        log_error.assert_called_once()
 
     def test_authenticated_user_can_create_legacy_mcil_jar(self):
         with self.client.session_transaction() as flask_session:
@@ -430,6 +486,40 @@ class ApplicationSmokeTests(unittest.TestCase):
                     "example-mod-1.7.10-1.0.jar",
                 ).exists()
             )
+
+    def test_mod_upload_rejects_an_unsafe_stored_slug(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.client.session_transaction() as flask_session:
+                flask_session["token"] = "valid-test-token"
+            with (
+                patch("asite.Session.verify_session", return_value=True),
+                patch("asite.User.get_permission_token", return_value=1),
+                patch(
+                    "asite.Mod.get_by_id",
+                    return_value=SimpleNamespace(
+                        name="../escape", integration_provider=None
+                    ),
+                ),
+                patch("asite.Modversion.new") as new_version,
+                patch("asite.UPLOAD_FOLDER", directory),
+                patch("asite.R2_BUCKET", None),
+            ):
+                response = self.client.post(
+                    "/modlibrary",
+                    data={
+                        "form-submit": "1",
+                        "modid": "9",
+                        "mod": "../escape",
+                        "mcversion": "1.7.10",
+                        "version": "1.0",
+                        "file": (io.BytesIO(b"unused"), "upload.zip"),
+                    },
+                    content_type="multipart/form-data",
+                )
+
+            self.assertEqual(response.status_code, 302)
+            new_version.assert_not_called()
+            self.assertFalse((Path(directory).parent / "escape").exists())
 
     def test_provider_managed_mod_rejects_manual_upload(self):
         with self.client.session_transaction() as flask_session:

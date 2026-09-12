@@ -613,6 +613,12 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(target_response.status_code, 400)
         self.assertEqual(optional_response.status_code, 400)
+        self.assertEqual(
+            target_response.get_json(), {"error": "Invalid manifest options"}
+        )
+        self.assertEqual(
+            optional_response.get_json(), {"error": "Invalid manifest options"}
+        )
 
     @patch.object(api_module.Mod, "get_all_api")
     def test_mod_catalog_matches_technic_read_api(self, get_mods):

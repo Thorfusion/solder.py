@@ -5,6 +5,7 @@ from pathlib import Path, PurePosixPath
 import re
 
 from mysql.connector import IntegrityError, errorcode
+from werkzeug.utils import secure_filename
 
 from .database import Database
 from .modversion import Modversion
@@ -358,10 +359,21 @@ class Mod:
                     )
 
                 jar_name = output_name or PurePosixPath(jar_files[0].filename).name
-                if Path(jar_name).name != jar_name or not jar_name.lower().endswith(".jar"):
+                safe_jar_name = secure_filename(jar_name)
+                if (
+                    not safe_jar_name
+                    or safe_jar_name != jar_name
+                    or not safe_jar_name.lower().endswith(".jar")
+                ):
                     raise UploadVerificationError("The output JAR filename is invalid.")
 
-                output_path = base_dir / jar_name
+                output_path = (base_dir / safe_jar_name).resolve()
+                try:
+                    output_path.relative_to(base_dir.resolve())
+                except ValueError as error:
+                    raise UploadVerificationError(
+                        "The output JAR path is invalid."
+                    ) from error
                 try:
                     with zip_ref.open(jar_files[0], "r") as source, open(
                         output_path, "wb"
@@ -379,7 +391,7 @@ class Mod:
                 except Exception:
                     output_path.unlink(missing_ok=True)
                     raise
-                return jar_name
+                return safe_jar_name
         except UploadVerificationError:
             raise
         except (OSError, RuntimeError, zipfile.BadZipFile) as error:
