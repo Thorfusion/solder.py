@@ -1,0 +1,58 @@
+{%extends "layout.html"%} {% set active_page = "integrations" %}
+{%block head%}
+<title>Browse mods - solder.py</title>
+{%endblock%}
+{%block main%}
+<div class="container-fluid">
+    <h2>Browse mods</h2>
+    <p class="text-muted">Link a Modrinth project now. Files are downloaded and packaged only when you select a compatible version for a build.</p>
+
+    <form method="get" action="{{url_for('asite.integrations')}}" class="row g-2 mb-4">
+        <input type="hidden" name="provider" value="modrinth">
+        <div class="col-md-10">
+            <label for="q" class="form-label">Search</label>
+            <input type="search" class="form-control" name="q" id="q" value="{{query}}" maxlength="100" placeholder="Search Minecraft mods" required>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-primary w-100" type="submit">Search</button>
+        </div>
+    </form>
+
+    {%if query and projects%}
+    <div class="list-group">
+        {%for project, imported in projects%}
+        <div class="list-group-item">
+            <div class="d-flex w-100 justify-content-between gap-3">
+                <div>
+                    <h5 class="mb-1">{{project.title}}</h5>
+                    <p class="mb-1">{{project.description}}</p>
+                    <small class="text-muted">
+                        {{project.author}}
+                        {%if project.license%} &middot; License: {{project.license}}{%endif%}
+                        &middot; <a href="{{project.link}}" target="_blank" rel="noopener noreferrer">Provider page</a>
+                    </small>
+                </div>
+                <div class="flex-shrink-0">
+                    {%if imported%}
+                    <button class="btn btn-secondary" type="button" disabled>Already added</button>
+                    {%elif not project.available%}
+                    <button class="btn btn-secondary" type="button" disabled>Unavailable</button>
+                    {%elif not project.distribution_allowed%}
+                    <button class="btn btn-secondary" type="button" disabled>Distribution disabled</button>
+                    {%else%}
+                    <form method="post" action="{{url_for('asite.integrations')}}">
+                        <input type="hidden" name="provider" value="{{project.provider}}">
+                        <input type="hidden" name="project_id" value="{{project.project_id}}">
+                        <button class="btn btn-success" type="submit" name="import_project" value="1">Add mod</button>
+                    </form>
+                    {%endif%}
+                </div>
+            </div>
+        </div>
+        {%endfor%}
+    </div>
+    {%elif query%}
+    <p>No matching mods were found.</p>
+    {%endif%}
+</div>
+{%endblock%}

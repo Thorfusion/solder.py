@@ -7,10 +7,26 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 class SanitizedSqlFixtureTests(unittest.TestCase):
+    def test_technic_fixture_comes_from_current_official_migrations(self):
+        contents = (FIXTURES / "technic_solder.sql").read_text(encoding="utf-8")
+
+        self.assertIn("TechnicPack/TechnicSolder v1.3.1", contents)
+        self.assertIn(
+            "Generated from the official migrations against MySQL 8.4", contents
+        )
+        self.assertNotIn("47709427f96e85865bcc4d0c5fbfbeab1b79ffe4", contents)
+
     def test_fixtures_contain_only_synthetic_data_rows(self):
         expected_insert_counts = {
             "technic_solder.sql": 10,
             "solderpy.sql": 12,
+        }
+        expected_emails = {
+            "technic_solder.sql": [
+                "ci-user@example.invalid",
+                "ci-pack-manager@example.invalid",
+            ],
+            "solderpy.sql": ["ci-user@example.invalid"],
         }
 
         for name, expected_count in expected_insert_counts.items():
@@ -38,7 +54,7 @@ class SanitizedSqlFixtureTests(unittest.TestCase):
                     r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
                     synthetic_data,
                 )
-                self.assertEqual(emails, ["ci-user@example.invalid"])
+                self.assertEqual(emails, expected_emails[name])
 
     def test_source_auto_increment_values_are_normalized(self):
         for fixture in FIXTURES.glob("*.sql"):

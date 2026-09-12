@@ -68,7 +68,8 @@ class Build_modversion:
             cur.execute(
                 """SELECT builds.id, builds.modpack_id, builds.version,
                           builds.created_at, builds.updated_at, builds.minecraft,
-                          builds.forge, builds.is_published, builds.private,
+                          builds.forge, builds.modloader,
+                          builds.is_published, builds.private,
                           builds.min_java, builds.min_memory, builds.marked,
                           modpacks.name AS modpack_name
                    FROM builds
@@ -87,7 +88,8 @@ class Build_modversion:
             cur.execute(
                 """SELECT build_modversion.id, build_modversion.optional,
                           modversions.version, modversions.id AS modverid,
-                          mods.name, mods.pretty_name, mods.id AS modid
+                          mods.name, mods.pretty_name, mods.id AS modid,
+                          mods.integration_provider
                    FROM build_modversion
                    INNER JOIN modversions
                        ON build_modversion.modversion_id = modversions.id
@@ -98,15 +100,23 @@ class Build_modversion:
             )
             build_rows = cur.fetchall() or []
 
-            cur.execute("SELECT id, pretty_name FROM mods ORDER BY name")
+            cur.execute(
+                """SELECT id, name, pretty_name, integration_provider
+                   FROM mods ORDER BY name"""
+            )
             mod_rows = cur.fetchall() or []
 
             cur.execute(
-                """SELECT id, mod_id, version, mcversion
+                """SELECT id, mod_id, version, mcversion, modloader
                    FROM modversions
-                   WHERE mcversion = %s OR mcversion IS NULL
+                   WHERE (mcversion = %s OR mcversion IS NULL)
+                     AND (%s IS NULL OR modloader = %s OR modloader IS NULL)
                    ORDER BY mod_id, id DESC""",
-                (packbuild.minecraft,),
+                (
+                    packbuild.minecraft,
+                    packbuild.modloader,
+                    packbuild.modloader,
+                ),
             )
             version_rows = cur.fetchall() or []
         finally:
@@ -138,6 +148,96 @@ class Build_modversion:
             listmodversions=available_versions,
             buildlist=buildlist,
         )
+
+    @staticmethod
+    def get_integrated_mods(build_id):
+        """Return integration-managed mods currently assigned to a build."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT DISTINCT mods.id, mods.name, mods.pretty_name
+                   FROM build_modversion
+                   INNER JOIN modversions
+                       ON build_modversion.modversion_id = modversions.id
+                   INNER JOIN mods ON modversions.mod_id = mods.id
+                   WHERE build_modversion.build_id = %s
+                     AND mods.integration_provider IS NOT NULL
+                     AND mods.integration_project_id IS NOT NULL
+                   ORDER BY mods.name""",
+                (build_id,),
+            )
+            return cur.fetchall() or []
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
+    def update_all_compatible(build_id, preferred_versions=None):
+        """Move each build entry to its newest compatible stored version."""
+        preferred_versions = preferred_versions or {}
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT build_modversion.id AS membership_id,
+                          build_modversion.modversion_id AS current_version_id,
+                          current.mod_id,
+                          candidate.id AS replacement_version_id
+                   FROM build_modversion
+                   INNER JOIN modversions AS current
+                       ON build_modversion.modversion_id = current.id
+                   INNER JOIN builds ON build_modversion.build_id = builds.id
+                   INNER JOIN modversions AS candidate
+                       ON candidate.mod_id = current.mod_id
+                      AND (candidate.mcversion = builds.minecraft
+                           OR candidate.mcversion IS NULL)
+                      AND (builds.modloader IS NULL
+                           OR candidate.modloader = builds.modloader
+                           OR candidate.modloader IS NULL)
+                   WHERE build_modversion.build_id = %s
+                   ORDER BY build_modversion.id, candidate.id DESC
+                   FOR UPDATE""",
+                (build_id,),
+            )
+            replacements = {}
+            current_versions = {}
+            for row in cur.fetchall() or []:
+                membership_id = row["membership_id"]
+                current_versions[membership_id] = row["current_version_id"]
+                preferred_id = preferred_versions.get(row["mod_id"])
+                if preferred_id is not None:
+                    if row["replacement_version_id"] == preferred_id:
+                        replacements[membership_id] = preferred_id
+                    else:
+                        replacements.setdefault(
+                            membership_id, row["replacement_version_id"]
+                        )
+                else:
+                    replacements.setdefault(
+                        membership_id, row["replacement_version_id"]
+                    )
+
+            updates = [
+                (replacement_id, membership_id)
+                for membership_id, replacement_id in replacements.items()
+                if replacement_id != current_versions[membership_id]
+            ]
+            if updates:
+                cur.executemany(
+                    """UPDATE build_modversion
+                       SET modversion_id = %s
+                       WHERE id = %s""",
+                    updates,
+                )
+            conn.commit()
+            return len(updates)
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def get_changelog(previd, id):

@@ -3,9 +3,23 @@
 <link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" /> {%endblock%}{%block main%}
 
 <div class="">
+    {%if mod.integration_provider%}
+    <div class="alert alert-info">
+        Versions for this mod are managed by {{mod.integration_provider|title}} and are imported when selected in a build.
+    </div>
+    {%endif%}
     <table class="table table-striped table-hover maxheighttable">
         <thead class="table-light sticky-md-top">
             <tr>
+                {%if mod.integration_provider%}
+                <th scope="col">Version</th>
+                <th scope="col">Minecraft version</th>
+                <th scope="col">Modloader</th>
+                <th scope="col">MD5</th>
+                <th scope="col">Download URL</th>
+                <th scope="col">Filesize</th>
+                <th scope="col">Actions</th>
+                {%else%}
                 <th scope="col">
                     <label for="version" class="form-label">MC_Version-MOD_Version</label>
                     <input type="text" class="form-control" name="version" id="version" required>
@@ -15,14 +29,27 @@
                     <input type="text" class="form-control" name="mcversion" id="mcversion" required>
                 </th>
                 <th scope="col">
+                    <label for="modloader" class="form-label">Modloader</label>
+                    <select class="form-select" name="modloader" id="modloader">
+                        <option value="">No loader restriction</option>
+                        <option value="FORGE">Forge</option>
+                        <option value="NEOFORGE">NeoForge</option>
+                        <option value="FABRIC">Fabric</option>
+                        <option value="QUILT">Quilt</option>
+                        <option value="LITELOADER">LiteLoader</option>
+                        <option value="VANILLA">Vanilla</option>
+                    </select>
+                </th>
+                <th scope="col">
                     <label for="md5" class="form-label">md5</label>
                     <input type="text" class="form-control md5_width" name="md5" id="md5">
                 </th>
                 <th scope="col">Download URL</th>
                 <th scope="col">Filesize</th>
                 <th>
-                    <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitbuttonpresswithurl('version', '{{ mod.name }}', 'newmodvermanual_url', 'newmodvermanual_submit')">Add Version</button>
+                    <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_modloader', 'modloader');copyformtext('newmodvermanual_md5', 'md5');submitform('newmodvermanual_submit')">Add Version</button>
                 </th>
+                {%endif%}
             </tr>
         </thead>
         <tbody class="">
@@ -30,13 +57,21 @@
             <tr>
                 <td>{{versions.version}}</td>
                 <td>{{versions.mcversion}}</td>
+                <td>{{versions.modloader or ''}}</td>
                 <td><input type="text" class="form-control md5_width" placeholder="{{versions.md5}}" name="md5_{{versions.id}}" id="md5_{{versions.id}}">
                 </td>
                 <td><a class="link-primary" href="{{mirror_url}}{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip">{{ mod.name }}-{{versions.version}}.zip</a></td>
                 <td>{{versions.filesize}} bytes</td>
                 <td>
                     <div class="maxcont">
-                        <button type="button" class="btn btn-primary buttonwidth" onclick="buttonpress('rehash_url', '{{ mod.name }}/{{ mod.name }}-{{versions.version}}.zip'); copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
+                        <button type="button" class="btn btn-primary buttonwidth" onclick="copyformtext('rehash_md5', 'md5_{{versions.id}}'); submitbuttonpress('rehash_id', '{{versions.id}}', 'rehash_submit')">Rehash</button>
+                        {%if mod.modtype == "MOD"%}
+                        {%if versions.mcil_ready%}
+                        <span class="btn btn-success align-self-center">JAR ready</span>
+                        {%else%}
+                        <button type="button" class="btn btn-info" onclick="submitbuttonpress('createmciljar_id', '{{versions.id}}', 'createmciljar_submit')">Create JAR</button>
+                        {%endif%}
+                        {%endif%}
                         <button type="button" class="btn btn-danger" onclick="submitbuttonpress('delete_id', '{{versions.id}}', 'deleteversion_submit')">Delete</button>
                         <button type="button" class="btn btn-secondary" onclick="submitbuttonpress('addtoselbuild_id', '{{versions.id}}', 'addtoselbuild_submit')">AddToMarked</button>
                     </div>
@@ -45,6 +80,52 @@
             {%endfor%}
         </tbody>
     </table>
+
+            <div class="divider"></div>
+            <h5>Required dependencies</h5>
+            {%if dependencies%}
+            <ul class="list-group mb-3">
+                {%for dependency in dependencies%}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>{{dependency.pretty_name}} ({{dependency.name}})</span>
+                    <form method="post" action="">
+                        <input type="hidden" name="dependency_id" value="{{dependency.id}}">
+                        <button class="btn btn-sm btn-danger" type="submit" name="deletedependency_submit" value="1">Remove</button>
+                    </form>
+                </li>
+                {%endfor%}
+            </ul>
+            {%else%}
+            <p>No required dependencies configured.</p>
+            {%endif%}
+
+            {%if available_dependencies%}
+            <form method="post" action="">
+                <div class="mb-3">
+                    <label for="dependency_dropdown" class="form-label">Add required dependency</label>
+                    <div class="dropdown">
+                        <button class="form-select text-start" type="button" id="dependency_dropdown" aria-haspopup="listbox" aria-expanded="false" onclick="togglesearchabledropdown(this);">
+                            <span id="dependency_selection">Select mod</span>
+                        </button>
+                        <div class="dropdown-menu position-absolute top-100 start-0 w-100 p-2" aria-labelledby="dependency_dropdown">
+                            <input type="search" class="form-control mb-2" id="dependency_search" placeholder="Search dependencies" autocomplete="off" oninput="dropdownsearches('dependency_search', 'dependency_dropdown_options', 'dependency_no_results');">
+                            <div class="overflow-auto" id="dependency_dropdown_options" style="max-height: 18rem;">
+                                {%for dependency in available_dependencies%}
+                                <button type="button" class="dropdown-item" data-searchable-option data-value="{{dependency.id}}" onclick="selectsearchabledropdown(this, 'dependency_mod_id', 'dependency_selection', 'dependency_dropdown', 'adddependency_submit');">{{dependency.pretty_name}} ({{dependency.name}}){%if dependency.integration_provider%} <span class="badge bg-info text-dark">{{dependency.integration_provider|title}}</span>{%endif%}</button>
+                                {%endfor%}
+                                <p class="dropdown-item-text text-muted mb-0" id="dependency_no_results" hidden>No matching mods</p>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="hidden" name="dependency_mod_id" id="dependency_mod_id" value="">
+                </div>
+                <button class="btn btn-success" type="submit" name="adddependency_submit" id="adddependency_submit" value="1" disabled>Add dependency</button>
+            </form>
+            {%endif%}
+    <form method="post" action="">
+        <input type="text" class="form-control invisible" name="createmciljar_id" id="createmciljar_id" readonly>
+        <input class="btn btn-info invisible" type="submit" name="createmciljar_submit" id="createmciljar_submit" value="Create MCIL JAR">
+    </form>
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="delete_id" id="delete_id" readonly>
         <input class="btn btn-danger invisible" type="submit" name="deleteversion_submit" id="deleteversion_submit" value="Delete">
@@ -56,16 +137,17 @@
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="rehash_md5" id="rehash_md5" readonly>
         <input type="text" class="form-control invisible" name="rehash_id" id="rehash_id" readonly>
-        <input type="text" class="form-control invisible" name="rehash_url" id="rehash_url" readonly>
         <input class="btn btn-danger invisible" type="submit" name="rehash_submit" id="rehash_submit" value="Delete">
     </form>
+    {%if not mod.integration_provider%}
     <form method="post" action="">
         <input type="text" class="form-control invisible" name="newmodvermanual_md5" id="newmodvermanual_md5" readonly>
         <input type="text" class="form-control invisible" name="newmodvermanual_version" id="newmodvermanual_version" readonly>
         <input type="text" class="form-control invisible" name="newmodvermanual_mcversion" id="newmodvermanual_mcversion" readonly>
-        <input type="text" class="form-control invisible" name="newmodvermanual_url" id="newmodvermanual_url" readonly>
+        <input type="text" class="form-control invisible" name="newmodvermanual_modloader" id="newmodvermanual_modloader" readonly>
         <input class="btn btn-danger invisible" type="submit" name="newmodvermanual_submit" id="newmodvermanual_submit" value="Delete">
     </form>
+    {%endif%}
 </div>
 {% endblock %}
 {%block aside%}
@@ -154,8 +236,8 @@
             </div>
         </div>
         <div class="mb-3">
-            <label for="internal_note" class="form-label">Internal note</label>
-            <textarea name="internal_note" id="internal_note" class="form-control" rows="5">{{ mod.note }}</textarea>
+            <label for="notes" class="form-label">Notes (private)</label>
+            <textarea name="notes" id="notes" class="form-control" rows="5">{{ mod.notes }}</textarea>
         </div>
         <input class="btn btn-success" type="submit" value="Save changes" name="form-submit" id="form-submit">
         <button type="button" id="deletemod" class="btn btn-danger" disabled onclick="submitbuttonpress('mod_delete_id', '{{ mod.id }}', 'deletemod_submit')">Delete Mod</button> <input class="form-check-input" type="checkbox" value="1" id="delete_disable" name="delete_disable" onchange="undisable('deletemod')">

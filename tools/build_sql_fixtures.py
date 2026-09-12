@@ -1,22 +1,20 @@
-"""Create deterministic, synthetic SQL fixtures from the two private dumps.
+"""Create the deterministic solder.py fixture from a private local dump.
 
 The source dumps contain production-like data and remain ignored. This script
 keeps their table definitions, removes every data row, normalizes table counters,
-and inserts a tiny set of clearly synthetic records.
+and inserts a tiny set of clearly synthetic records. The Technic fixture is
+generated from Technic Solder's official current migrations and is intentionally
+not rebuilt from the removed 2022 backup.
 """
 
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
-TECHNIC_OBJECT = (
-    "47709427f96e85865bcc4d0c5fbfbeab1b79ffe4:docu/solder.sql"
-)
 PASSWORD_HASH = (
     "59e423d8ee3b20da4266e8d80366b6b610975cfd405a75bfb05cf0b1850247f"
     "df767cd96a6eb70ef18c496d83fdb21e6b1df0c1b846540a76de31baee15eaebc"
@@ -46,13 +44,6 @@ INSERT INTO `build_modversion` (`id`, `modversion_id`, `build_id`, `created_at`,
 """
 
 
-TECHNIC_SEED = f"""
--- Synthetic CI records. These values are deliberately non-production.
-INSERT INTO `modpacks` (`id`, `name`, `slug`, `recommended`, `latest`, `url`, `created_at`, `updated_at`, `order`, `hidden`, `private`) VALUES
-(1, 'CI Example Pack', 'ci-example-pack', '1.0', '1.0', 'https://example.invalid/pack', '{TIMESTAMP}', '{TIMESTAMP}', 0, 0, 0);
-""" + COMMON_SEED
-
-
 SOLDERPY_SEED = f"""
 -- Synthetic CI records. These values are deliberately non-production.
 INSERT INTO `modpacks` (`id`, `name`, `slug`, `user_id`, `recommended`, `latest`, `url`, `created_at`, `updated_at`, `order`, `hidden`, `private`, `pinned`, `enable_optionals`, `enable_server`) VALUES
@@ -65,17 +56,6 @@ INSERT INTO `sessions` (`token`, `ip`, `expiry`, `user_id`) VALUES
 INSERT INTO `user_modpack` (`id`, `user_id`, `modpack_id`, `created_at`, `updated_at`) VALUES
 (1, 1, 1, '{TIMESTAMP}', '{TIMESTAMP}');
 """
-
-
-def read_git_object(specification: str) -> str:
-    return subprocess.run(
-        ["git", "show", specification],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    ).stdout
 
 
 def sanitize(source: str, seed: str, provenance: str) -> str:
@@ -100,11 +80,7 @@ def sanitize(source: str, seed: str, provenance: str) -> str:
 
 def main() -> None:
     current_dump = (ROOT / "solder.sql").read_text(encoding="utf-8")
-    technic_dump = read_git_object(TECHNIC_OBJECT)
     FIXTURES.mkdir(parents=True, exist_ok=True)
-    (FIXTURES / "technic_solder.sql").write_text(
-        sanitize(technic_dump, TECHNIC_SEED, TECHNIC_OBJECT), encoding="utf-8"
-    )
     (FIXTURES / "solderpy.sql").write_text(
         sanitize(current_dump, SOLDERPY_SEED, "local ignored solder.sql"),
         encoding="utf-8",

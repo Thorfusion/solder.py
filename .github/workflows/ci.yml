@@ -1,0 +1,191 @@
+name: CI
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches:
+      - main
+      - dev
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # Keep this name stable: branch protection requires this exact status check.
+    name: solder.py tests
+    runs-on: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ubuntu-latest' || 'self-hosted' }}
+    timeout-minutes: 20
+    env:
+      PIPENV_DONT_LOAD_ENV: "1"
+      PIPENV_NOSPIN: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: Pipfile
+          cache: pipenv
+
+      - name: Install Pipenv
+        run: python -m pip install --upgrade pip pipenv
+
+      - name: Verify lock file
+        run: pipenv verify
+
+      - name: Install locked dependencies
+        run: pipenv sync
+
+      - name: Check installed dependencies
+        run: pipenv run python -m pip check
+
+      - name: Compile Python sources
+        run: pipenv run python -m compileall -q app.py api.py api_write.py alogin.py asetup.py asite.py audit_dependencies.py models tests
+
+      - name: Run test suite
+        run: pipenv run python -m unittest discover -s tests -v
+
+  python-security:
+    # Keep this name stable if it is selected as a required status check.
+    name: Python security
+    runs-on: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ubuntu-latest' || 'self-hosted' }}
+    timeout-minutes: 20
+    env:
+      PIPENV_DONT_LOAD_ENV: "1"
+      PIPENV_NOSPIN: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: Pipfile
+          cache: pipenv
+
+      - name: Install Pipenv
+        run: python -m pip install --upgrade pip pipenv
+
+      - name: Install locked security tools
+        run: pipenv sync --dev
+
+      - name: Audit production dependencies
+        run: pipenv run python audit_dependencies.py
+
+      - name: Scan Python source
+        run: pipenv run bandit --recursive app.py api.py api_write.py alogin.py asetup.py asite.py models --severity-level medium --confidence-level medium
+
+  dependency-review:
+    name: Review dependency changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Check dependency changes
+        uses: actions/dependency-review-action@v5
+
+  container-security:
+    # Keep this name stable if it is selected as a required status check.
+    name: Container security
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ubuntu-latest' || 'self-hosted' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          push: false
+          tags: solderpy:security-${{ github.sha }}
+
+      - name: Smoke test running container
+        run: python tests/container_smoke.py solderpy:security-${{ github.sha }}
+
+      - name: Test current and migrated MySQL databases
+        run: python tests/database_container_smoke.py solderpy:security-${{ github.sha }}
+
+      - name: Scan image for high and critical vulnerabilities
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: solderpy:security-${{ github.sha }}
+          version: v0.74.0
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: "1"
+          scanners: vuln
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+
+      - name: Upload scan results to GitHub Security
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: solderpy-container
+
+  codeql:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ubuntu-latest' || 'self-hosted' }}
+    timeout-minutes: 90
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language:
+          - javascript-typescript
+          - python
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}

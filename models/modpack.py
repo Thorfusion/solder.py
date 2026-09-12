@@ -5,7 +5,22 @@ from .database import Database
 
 
 class Modpack:
-    def __init__(self, id, name, slug, recommended, latest, created_at, updated_at, order, hidden, private, pinned, enable_optionals=0, enable_server=0):
+    def __init__(
+        self,
+        id,
+        name,
+        slug,
+        recommended,
+        latest,
+        created_at,
+        updated_at,
+        order,
+        hidden,
+        private,
+        pinned,
+        enable_optionals=0,
+        enable_server=0,
+    ):
         self.id = id
         self.name = name
         self.slug = slug
@@ -19,6 +34,25 @@ class Modpack:
         self.pinned = pinned
         self.enable_optionals = enable_optionals
         self.enable_server = enable_server
+
+    @classmethod
+    def _from_row(cls, row):
+        """Create a modpack from either a Technic Solder or solder.py row."""
+        return cls(
+            row["id"],
+            row["name"],
+            row["slug"],
+            row["recommended"],
+            row["latest"],
+            row["created_at"],
+            row["updated_at"],
+            row["order"],
+            row["hidden"],
+            row["private"],
+            row.get("pinned", 0),
+            row.get("enable_optionals", 0),
+            row.get("enable_server", 0),
+        )
 
     @staticmethod
     def new(name, slug, hidden, private, user_id):
@@ -49,7 +83,7 @@ class Modpack:
         cur.execute("SELECT * FROM modpacks WHERE id = %s", (id,))
         row = cur.fetchone()
         if row:
-            return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"])
+            return cls._from_row(row)
         return None
 
     @staticmethod
@@ -62,45 +96,81 @@ class Modpack:
             return rows
         return []
 
-    @staticmethod
-    def get_by_cid_api(cid):
+    @classmethod
+    def get_by_cid_api(cls, cid):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modpacks WHERE hidden = 0 AND (private = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))", (cid,))
-        rows = cur.fetchall()
-        if rows:
-            return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"]) for row in rows]
-        return []
+        try:
+            cur.execute(
+                """SELECT *
+                   FROM modpacks
+                   WHERE (hidden = 0 AND private = 0)
+                      OR EXISTS (
+                           SELECT 1
+                           FROM client_modpack cm
+                           INNER JOIN clients c ON cm.client_id = c.id
+                           WHERE cm.modpack_id = modpacks.id
+                             AND c.uuid = %s
+                      )
+                   ORDER BY id ASC""",
+                (cid,),
+            )
+            return [cls._from_row(row) for row in cur.fetchall()]
+        finally:
+            cur.close()
+            conn.close()
     
-    @staticmethod
-    def get_all_api():
+    @classmethod
+    def get_all_api(cls):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modpacks")
-        rows = cur.fetchall()
-        if rows:
-            return [Modpack(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"]) for row in rows]
-        return []
+        try:
+            cur.execute("SELECT * FROM modpacks ORDER BY id ASC")
+            return [cls._from_row(row) for row in cur.fetchall()]
+        finally:
+            cur.close()
+            conn.close()
 
     @classmethod
     def get_by_cid_slug_api(cls, cid, slug):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modpacks WHERE slug = %s AND (hidden = 0 OR id IN (SELECT modpack_id FROM client_modpack cm JOIN clients c ON cm.client_id = c.id WHERE c.uuid = %s))", (slug, cid))
-        row = cur.fetchone()
-        if row:
-            return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"], row["enable_optionals"], row["enable_server"])
-        return None
+        try:
+            # Hidden packs are unlisted, not private. They remain directly
+            # addressable by slug, matching the Technic Launcher contract.
+            cur.execute(
+                """SELECT *
+                   FROM modpacks
+                   WHERE slug = %s
+                     AND (
+                          private = 0
+                          OR EXISTS (
+                              SELECT 1
+                              FROM client_modpack cm
+                              INNER JOIN clients c ON cm.client_id = c.id
+                              WHERE cm.modpack_id = modpacks.id
+                                AND c.uuid = %s
+                          )
+                     )""",
+                (slug, cid),
+            )
+            row = cur.fetchone()
+            return cls._from_row(row) if row else None
+        finally:
+            cur.close()
+            conn.close()
     
     @classmethod
     def get_all_by_slug_api(cls, slug):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
-        row = cur.fetchone()
-        if row:
-            return cls(row["id"], row["name"], row["slug"], row["recommended"], row["latest"], row["created_at"], row["updated_at"], row["order"], row["hidden"], row["private"], row["pinned"], row["enable_optionals"], row["enable_server"])
-        return None
+        try:
+            cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
+            row = cur.fetchone()
+            return cls._from_row(row) if row else None
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def get_all() -> list:
@@ -116,35 +186,42 @@ class Modpack:
         return Build.get_by_modpack(self)
     
     def get_builds_cid_api(self, cid):
-        return Build.get_by_modpack_cid(self, cid)
+        return self.get_builds_api(cid=cid)
     
-    def get_builds_api(self):
-        return Build.get_by_modpack_api(self)
+    def get_builds_api(self, cid=None, api_key=False):
+        return Build.get_by_modpack_api(self, cid=cid, api_key=api_key)
 
-    def get_build_api(self, version):
-        return Build.get_by_modpack_version(self, version)
+    def get_build_api(self, version, cid=None, api_key=False):
+        return Build.get_by_modpack_version_api(
+            self, version, cid=cid, api_key=api_key
+        )
     
     @staticmethod
     def to_modpack_json(cid, slug):
         modpackd = Modpack.get_by_cid_slug_api(cid, slug)
         if modpackd:
-            modpackd.builds = Build.get_by_modpack_cid(modpackd, cid)
+            modpackd.builds = modpackd.get_builds_api(cid=cid)
             return modpackd.to_json()
         
     @staticmethod
     def to_modpack_json_all(slug):
         modpackd = Modpack.get_all_by_slug_api(slug)
         if modpackd:
-            modpackd.builds = Build.get_by_modpack_api(modpackd)
+            modpackd.builds = modpackd.get_builds_api(api_key=True)
             return modpackd.to_json()
         
 
     def to_json(self):
         data = {
+            "id": self.id,
             "name": self.slug,
             "display_name": self.name,
             "recommended": self.recommended,
             "latest": self.latest,
+            "capabilities": {
+                "optional": bool(self.enable_optionals),
+                "server": bool(self.enable_server),
+            },
         }
 
         if self.builds is not None:

@@ -12,6 +12,13 @@
 
 solder.py is solder written in python with major features over technic's solder.
 
+The complete read API, including Technic-compatible routes and solder.py server
+and optional-manifest extensions, is documented in the
+[API reference](docs/api.md).
+
+Management-side Modrinth imports are documented in the
+[Modrinth integration guide](docs/integrations.md).
+
 + **Easy install with docker**
 
 + **Efficient user experience**
@@ -29,6 +36,19 @@ solder.py is solder written in python with major features over technic's solder.
 + **Mod uploading**
 
   + **S3 bucket compatbility**
+
+  + **Required mod dependencies**
+
+    Configure one or more dependencies on a mod's version page. Adding that mod
+    to a build also adds the newest matching dependency version, including
+    transitive dependencies, while preserving versions already in the build.
+
+  + **Modrinth integration**
+
+    Search Modrinth from the management interface and link a project to
+    the mod library without downloading every release. Selecting a compatible
+    version in a build downloads, verifies and packages it on demand. Modrinth
+    does not require an API key.
 
 + **API only mode**
 
@@ -50,9 +70,10 @@ solder.py is solder written in python with major features over technic's solder.
 
 + **Generate changelog**
 
-+ **MCInstance Loader Support (in dev)**
++ **MCInstanceLoader export support**
 
-  Multi launcher support
+  Export a build from its management page as an MCInstanceLoader
+  `.mcinstance` archive.
 
 + **Database compatbility with technic solder**
 
@@ -61,11 +82,104 @@ solder.py is solder written in python with major features over technic's solder.
 # Features to be added in the future
 
 + Maven integration
-+ Modrinth integration
 
-## Unfinished Features in dev
+## Modrinth imports
 
-+ MCInstance Loader support
+Open **Browse mods** in the management menu to search and add provider-managed
+mods. No project file is downloaded at this stage. In a modpack build, select
+the linked mod and then a compatible provider version. solder.py downloads the
+upstream JAR, verifies the provider hash and file size, packages the JAR as a
+normal Solder ZIP, and records the local version. Re-selecting it reuses the
+stored version.
+
+See the [Modrinth integration guide](docs/integrations.md) for storage,
+permissions and operational details.
+
+## MCInstanceLoader exports
+
+The **Export MCIL** action on a modpack's build list creates the
+[MCInstanceLoader 2.7 archive format](https://github.com/HRudyPlayZ/MCInstanceLoader/tree/1.7.10).
+`PUBLIC_REPO_LOCATION` must be configured because the generated resource list
+uses the public repository URLs. Build create/edit forms store the modloader
+and its optional version (in Technic's existing `forge` version column) for
+`metadata.packconfig`.
+
+The export maps Solder packages as follows:
+
+- A `MOD` uploaded from a JAR becomes a downloadable MCIL resource in `mods/`,
+  including its side, optional status and verified raw-JAR MD5.
+- `CONFIG`, `RES`, `NONE`, and older mandatory `MOD` packages without a raw JAR
+  are unpacked into `overrides`, `client-overrides`, or `server-overrides`
+  according to their configured side.
+- `MCIL` identifies the MCInstanceLoader package itself and is excluded from
+  the payload. `LAUNCHER` packages are also excluded because their Technic
+  `bin/` contents are launcher-specific.
+- Optional bundled ZIPs are rejected because MCInstanceLoader can only toggle
+  individual download resources. Optional server-only packages are rejected
+  because MCInstanceLoader 2.7 presents optional choices only on clients.
+
+The browser still calculates upload MD5 values so the interface remains
+responsive. Before adding the version to the database, solder.py independently
+hashes the received Solder ZIP and its extracted raw JAR and rejects a mismatch.
+It also gives the raw JAR its canonical `<slug>-<version>.jar` repository name.
+
+For versions imported from Technic Solder or created before raw JAR storage was
+available, use **Create MCIL JAR** on the mod's version page. Solder.py verifies
+the existing ZIP against its stored MD5, extracts the single JAR under `mods/`,
+stores the canonical raw JAR locally and in S3/R2 when configured, and records
+the verified JAR MD5. It reads the ZIP from the local repository first and falls
+back to `MD5_REPO_LOCATION`, so remotely hosted legacy repositories can be
+upgraded without re-uploading each mod.
+
+Mod versions can be assigned a modloader in both upload flows. Leaving it blank
+makes the version loader-agnostic, just as a null mod Minecraft version is
+universal. Build management lists and accepts only versions matching both the
+build's Minecraft version and modloader; required dependencies use the same
+matching rules. Existing Technic builds with a Forge version are identified as
+`FORGE` automatically.
+
+## Server and optional API manifests
+
+solder.py keeps the Technic read API paths and response defaults. A normal
+launcher request remains unchanged:
+
+```text
+GET /api/modpack/example-pack/1.0
+```
+
+Clients that understand solder.py's shadow-build features can request a target
+and optional packages with query arguments:
+
+```text
+GET /api/modpack/example-pack/1.0?target=server
+GET /api/modpack/example-pack/1.0?optional=true
+GET /api/modpack/example-pack/1.0?target=server&optional=true
+```
+
+`target=client` includes `CLIENT` and `BOTH` packages. `target=server` includes
+`SERVER` and `BOTH` packages. Optional packages are excluded unless
+`optional=true` is supplied. The existing `-optional` and `-server` build
+suffixes remain supported as aliases.
+
+Server updaters can use `recommended` or `latest` in place of a build version.
+Extended manifests report the resolved version, target, optional mode and a
+stable SHA-256 manifest hash. Their mod entries also report `side`, `modtype`,
+build-specific optional status and declared dependencies:
+
+```text
+GET /api/modpack/example-pack/recommended?target=server
+```
+
+Supplying an installed build in `from` also returns package-level additions,
+updates and removals:
+
+```text
+GET /api/modpack/example-pack/latest?target=server&from=1.0
+```
+
+The comparison describes Solder packages. A server updater remains responsible
+for tracking which files were extracted from each package when removing an old
+package.
 
 # Installation/Updating
 
@@ -138,6 +252,140 @@ proxy_set_header X-Forwarded-For $http_x_forwarded_for;
 
 You can use the same nginx/apache server for both reverse proxy and filehosting.
 
+### Hosting the repository and reverse proxying with Caddy
+
+If you do not want to use S3 or R2, the recommended Docker setup is to let
+[Caddy](https://hub.docker.com/_/caddy) serve the local mod repository and
+reverse proxy the rest of the site to solder.py. Only Caddy is exposed to the
+internet. The solder.py container writes files to the shared repository while
+Caddy mounts that repository read-only.
+
+This example uses `solder.example.com`. Before starting it:
+
+1. Point the domain's DNS record at the Docker host.
+2. Allow inbound TCP ports 80 and 443. UDP port 443 is optional and enables
+   HTTP/3.
+3. Create the repository directory and make sure the user running the
+   solder.py container can write to it:
+
+```bash
+sudo mkdir -p /srv/solder/mods
+```
+
+Create a file named `Caddyfile` beside the Compose file:
+
+```caddyfile
+solder.example.com {
+    # handle_path removes /mods before looking in /srv/solder-mods. A request
+    # for /mods/example/example-1.0.zip therefore maps to
+    # /srv/solder-mods/example/example-1.0.zip.
+    handle_path /mods/* {
+        root * /srv/solder-mods
+        file_server
+    }
+
+    handle {
+        reverse_proxy solderpy:5000
+    }
+}
+```
+
+Directory browsing is not enabled, so requests to repository directories do
+not produce file listings.
+
+Create `compose.yml`, filling in the existing database values for your
+installation. Replace `mysql` with the database hostname or service name used
+by your deployment:
+
+```yaml
+services:
+  solderpy:
+    image: thorfusion/solderpy:latest
+    restart: unless-stopped
+    expose:
+      - "5000"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_USER: solderpy
+      DB_PASSWORD: change-me
+      DB_DATABASE: solderpy
+      PUBLIC_REPO_LOCATION: https://solder.example.com/mods/
+      MD5_REPO_LOCATION: /app/mods/
+      # Caddy has a fixed address so only it is trusted as the reverse proxy.
+      PROXY_IP: 172.30.50.2
+    volumes:
+      - /srv/solder/mods:/app/mods
+    networks:
+      solder_frontend:
+        ipv4_address: 172.30.50.3
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - solderpy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - /srv/solder/mods:/srv/solder-mods:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      solder_frontend:
+        ipv4_address: 172.30.50.2
+
+networks:
+  solder_frontend:
+    ipam:
+      config:
+        - subnet: 172.30.50.0/24
+
+volumes:
+  caddy_data:
+  caddy_config:
+```
+
+If MySQL is another service in the same Compose file, attach `solderpy` to its
+database network as well. Do not publish solder.py's port `5000`; Caddy should
+be its only public entry point. If `172.30.50.0/24` overlaps an existing Docker
+or LAN network, choose another private subnet and update both fixed addresses.
+
+Start or update the installation with:
+
+```bash
+docker compose up -d
+```
+
+Caddy automatically obtains and renews HTTPS certificates when the domain
+resolves to the server and ports 80 and 443 are reachable. The `caddy_data`
+volume must remain persistent because it stores Caddy's certificates and other
+state.
+
+With this layout, the important solder.py repository settings are:
+
+```ini
+PUBLIC_REPO_LOCATION=https://solder.example.com/mods/
+MD5_REPO_LOCATION=/app/mods/
+```
+
+`PUBLIC_REPO_LOCATION` is the URL used by launchers. `MD5_REPO_LOCATION` is the
+local path used by solder.py for hashing and file inspection, so those internal
+operations do not need to download the file again through Caddy.
+
+After uploading a mod version, verify both services through Caddy:
+
+```bash
+curl -I https://solder.example.com/api/
+curl -I https://solder.example.com/mods/example-mod/example-mod-1.0.zip
+```
+
+Back up `/srv/solder/mods` along with the database. The mod repository is user
+data and is not stored inside either Docker image.
+
 ## Install solder.py with python (Limited support)
 
 You need to set the enviroment variables either through host or as a .env file, see the .env.example for further use
@@ -191,10 +439,21 @@ You dont actually need to store the files in mods but solder.py own hosting fold
 -e PUBLIC_REPO_LOCATION=https://solder.example.com/mods/
 ```
 
-This is the url solder.py uses to calculate md5 and filesize when rehashing or adding a mod manually. This is currently only url, so use localhost or local ip address if on the same network, else use same url as public repo url.
+This is the internal repository source solder.py uses to calculate MD5 hashes and file sizes when rehashing or adding a mod manually. It is separate from the public launcher URL and accepts either:
+
+- A direct HTTP(S) repository URL. Redirects are not followed, so configure the final URL.
+- An absolute local repository path, which avoids an HTTP request and is faster. Inside the Docker image, use the container path (normally `/app/mods/`), not the host-side volume path.
+
+Both forms must point to the repository root containing `<mod-slug>/<mod-slug>-<version>.zip`.
 
 ```bash
 -e MD5_REPO_LOCATION=https://solder.example.com/mods/
+```
+
+or:
+
+```bash
+-e MD5_REPO_LOCATION=/app/mods/
 ```
 
 #### Volumes
@@ -263,7 +522,10 @@ Enables the /setup page if the database already exists and you need to add a new
 
 #### Upgrading technic solder database to solder.py, keeps compability to technic solder
 
-If new user is enabled, you can enable this migration tool for technic solder database, to migrate it to solder.py, mainly fixes mysql database bugs and adds columns and is reverse compatible with original technic solder
+Enable this while starting a management instance against a Technic Solder
+database. The current Technic schema is detected and the solder.py columns and
+tables are added without removing or rewriting Technic fields. Migration runs
+once during application startup; `/setup` no longer performs database changes.
 
 ```bash
 -e TECHNIC_MIGRATION=True
@@ -285,6 +547,21 @@ solder.py will run everything except api part of solder, quite rare usecase.
 -e MANAGEMENT_ONLY=True
 ```
 
+#### Writable API
+
+The authenticated write API is disabled by default. Enable it only on the
+trusted management deployment, such as the instance behind your VPN:
+
+```bash
+-e WRITE_API=True
+```
+
+Create the initial bearer token from **Settings → API Tokens** after logging
+in. Tokens use the owner's existing solder.py permissions and modpack access.
+`API_ONLY=True` remains read-only unless `WRITE_API=True` is also set; an API
+instance with writes enabled requires a database user with write permissions.
+See the [write API reference](docs/write-api.md) for routes and examples.
+
 #### Example
 
 ```bash
@@ -295,8 +572,8 @@ docker run -d \
   -e DB_USER=solderpyuser \
   -e DB_PASSWORD=solderpypassword \
   -e DB_DATABASE=solderpydb \
-  -e MD5_REPO_LOCATION=http://example.com/mods/ \
-  -e SOLDER_REPO_LOCATION=https://localhost/mods/ \
+  -e PUBLIC_REPO_LOCATION=https://solder.example.com/mods/ \
+  -e MD5_REPO_LOCATION=/app/mods/ \
   -e PROXY_IP=192.168.1.2\
   -p 80:5000 \
   -v /solderpy/mods:/app/mods \
@@ -308,7 +585,9 @@ NOTE: The docker image does not and will not support https, therefore it is requ
 
 ### docker container installed, setup on website
 
-Remember to set NEW_USER and TECHNIC_MIGRATION if using existing technic database, if clean install leave both.
+Set `NEW_USER=True` and `TECHNIC_MIGRATION=True` for an existing Technic
+database. Wait for startup migration to complete before starting a separate
+read-only API instance. For a clean installation, leave both disabled.
 
 #### Step 1 Login screen
 
@@ -380,9 +659,12 @@ Pull requests and trusted branch pushes run several complementary checks:
   repository Security tab. The same workflow boots the image and verifies the
   `/api/` health endpoint before the scan.
 - Container integration tests restore sanitized, synthetic versions of both a
-  Technic Solder backup and the current solder.py backup. They verify the
-  Technic migration twice for idempotency, then exercise API keys, clients,
-  modpacks, builds, and mod versions against a real MySQL server.
+  Technic Solder v1.3.1 database and a solder.py 1.7.4 database. They verify the
+  Technic migration twice for idempotency, create a fresh database, and prove
+  API-only startup works with read-only database credentials. They then exercise
+  API keys, clients, modpacks, builds, and mod versions against a real MySQL
+  server. The API checks cover public, hidden, private, unpublished, optional,
+  server, and hyphenated build cases.
 - GitHub dependency review checks dependency changes made by pull requests.
 
 Run the Python checks locally with:

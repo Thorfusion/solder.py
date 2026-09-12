@@ -1,17 +1,275 @@
-from flask import Blueprint, jsonify, request
+import hashlib
+import json
+from threading import RLock
+
 from cachetools import cached, TTLCache
+from flask import Blueprint, g, jsonify, request
+
+from models.common import (
+    cache_size,
+    cache_ttl,
+    public_repo_url,
+    solderpy_version,
+    write_api,
+)
+from models.api_token import ApiToken
 from models.key import Key
 from models.mod import Mod
+from models.mod_dependency import ModDependency
 from models.modpack import Modpack
-from models.common import solderpy_version, public_repo_url
-from models.common import cache_size, cache_ttl
 
 api = Blueprint("api", __name__)
+_api_caches = []
+
+
+def _api_cached(key):
+    # Gunicorn serves this application with multiple threads, while cachetools
+    # cache objects require external synchronization for shared access.
+    cache = TTLCache(cache_size, cache_ttl)
+    _api_caches.append(cache)
+    return cached(cache, key=key, lock=RLock())
+
+
+def clear_api_caches():
+    """Discard read responses after a successful write in this process."""
+    for cache in _api_caches:
+        cache.clear()
+
+
+def _cache_key(*path_parts):
+    # Include every query argument that can influence a response. This keeps
+    # extension arguments such as target/optional/from from sharing a cached
+    # response, while also making argument order irrelevant.
+    query_arguments = tuple(
+        (name, tuple(request.args.getlist(name)))
+        for name in sorted(request.args.keys())
+    )
+    principal = _read_principal()
+    bearer_identity = principal.cache_identity if principal else None
+    return (*path_parts, query_arguments, bearer_identity)
+
+
+def _read_principal():
+    """Authenticate Technic-style read requests when write API is enabled."""
+    if not write_api:
+        return None
+    if not hasattr(g, "read_api_principal"):
+        g.read_api_principal = ApiToken.authenticate(
+            request.headers.get("Authorization"), touch=False
+        )
+    return g.read_api_principal
+
+
+def _has_valid_api_key():
+    supplied_key = request.args.get("k")
+    return bool(supplied_key and Key.get_key(supplied_key))
+
+
+def _principal_can_access(principal, modpack):
+    return bool(principal and principal.can_access_modpack(modpack.id))
+
+
+def _get_accessible_modpack(slug, cid, api_key, principal=None):
+    if api_key:
+        return Modpack.get_all_by_slug_api(slug)
+    if principal:
+        if principal.permissions.get("solder_full"):
+            return Modpack.get_all_by_slug_api(slug)
+        client_visible = Modpack.get_by_cid_slug_api(cid, slug)
+        if client_visible:
+            return client_visible
+        modpack = Modpack.get_all_by_slug_api(slug)
+        if modpack and _principal_can_access(principal, modpack):
+            return modpack
+        return None
+    return Modpack.get_by_cid_slug_api(cid, slug)
+
+
+def _get_build_by_version_or_channel(modpack, requested_version, cid, api_key):
+    build = modpack.get_build_api(requested_version, cid=cid, api_key=api_key)
+    if build:
+        return build
+
+    if requested_version in {"recommended", "latest"}:
+        channel_version = getattr(modpack, requested_version, None)
+        if channel_version:
+            return modpack.get_build_api(
+                channel_version, cid=cid, api_key=api_key
+            )
+    return None
+
+
+def _get_requested_build(modpack, requested_version, cid, api_key):
+    # Prefer a real build whose name ends in -optional or -server. The virtual
+    # solder.py variants are only considered when no exact build exists.
+    build = _get_build_by_version_or_channel(
+        modpack, requested_version, cid, api_key
+    )
+    if build:
+        return build, ""
+
+    variants = (
+        ("-optional", "optional", modpack.enable_optionals),
+        ("-server", "server", modpack.enable_server),
+    )
+    for suffix, tag, enabled in variants:
+        if enabled and requested_version.endswith(suffix):
+            base_version = requested_version[: -len(suffix)]
+            if not base_version:
+                break
+            build = _get_build_by_version_or_channel(
+                modpack, base_version, cid, api_key
+            )
+            if build:
+                return build, tag
+    return None, ""
+
+
+def _boolean_argument(name, default=False):
+    value = request.args.get(name)
+    if value is None:
+        return default
+    normalized = value.casefold()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{name} must be true or false")
+
+
+def _manifest_options(legacy_variant):
+    requested_target = request.args.get("target")
+    target = (requested_target or "client").casefold()
+    if target not in {"client", "server"}:
+        raise ValueError("target must be client or server")
+
+    optional_was_requested = request.args.get("optional") is not None
+    include_optional = _boolean_argument("optional", default=False)
+
+    if legacy_variant == "server":
+        if requested_target is not None and target != "server":
+            raise ValueError("The -server build suffix requires target=server")
+        target = "server"
+    elif legacy_variant == "optional":
+        if requested_target is not None and target != "client":
+            raise ValueError("The -optional build suffix requires target=client")
+        if optional_was_requested and not include_optional:
+            raise ValueError("The -optional build suffix requires optional=true")
+        include_optional = True
+
+    return target, include_optional
+
+
+def _mod_download_url(mod_name, version):
+    return f"{public_repo_url}{mod_name}/{mod_name}-{version}.zip"
+
+
+def _optional_string_attribute(value):
+    return value if isinstance(value, str) else None
+
+
+def _mod_manifest_entry(
+    modversion, expanded=False, extended=False, dependencies=None
+):
+    entry = {
+        "id": modversion.id,
+        "name": modversion.modname,
+        "version": modversion.version,
+        "md5": modversion.md5,
+        "filesize": modversion.filesize,
+        "url": _mod_download_url(modversion.modname, modversion.version),
+    }
+    if expanded:
+        entry.update(
+            {
+                "pretty_name": modversion.pretty_name,
+                "author": modversion.author,
+                "description": modversion.description,
+                "link": modversion.link,
+            }
+        )
+    if expanded or extended:
+        entry.update(
+            {
+                "side": getattr(modversion, "side", "BOTH"),
+                "type": getattr(modversion, "modtype", "MOD"),
+                "modtype": getattr(modversion, "modtype", "MOD"),
+                "modloader": _optional_string_attribute(
+                    getattr(modversion, "modloader", None)
+                ),
+                "optional": bool(getattr(modversion, "optional", 0)),
+                "dependencies": dependencies or [],
+            }
+        )
+    return entry
+
+
+def _mod_manifest_entries(modversions, build_id, expanded=False, extended=False):
+    dependencies = {}
+    if expanded or extended:
+        dependencies = ModDependency.get_for_build_api(build_id)
+    return [
+        _mod_manifest_entry(
+            modversion,
+            expanded=expanded,
+            extended=extended,
+            dependencies=dependencies.get(getattr(modversion, "mod_id", None), []),
+        )
+        for modversion in modversions
+    ]
+
+
+def _manifest_changes(previous, current, from_version, to_version):
+    previous_by_name = {mod["name"]: mod for mod in previous}
+    current_by_name = {mod["name"]: mod for mod in current}
+
+    added = [
+        mod for mod in current if mod["name"] not in previous_by_name
+    ]
+    removed = [
+        mod for mod in previous if mod["name"] not in current_by_name
+    ]
+    updated = []
+    for current_mod in current:
+        old_mod = previous_by_name.get(current_mod["name"])
+        if old_mod and (
+            old_mod["version"] != current_mod["version"]
+            or old_mod["md5"] != current_mod["md5"]
+        ):
+            updated.append({"from": old_mod, "to": current_mod})
+
+    return {
+        "from": from_version,
+        "to": to_version,
+        "added": added,
+        "updated": updated,
+        "removed": removed,
+    }
+
+
+def _add_manifest_hash(manifest):
+    serialized = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+    manifest["manifest_hash"] = hashlib.sha256(serialized).hexdigest()
 
 
 @api.route("/api/")
 def api_info():
-    return jsonify({"api": "solder.py", "version": "v" + solderpy_version, "stream": "DEV"})
+    return jsonify(
+        {
+            "api": "solder.py",
+            "version": "v" + solderpy_version,
+            "stream": "DEV",
+            "capabilities": {
+                "build_channels": True,
+                "build_comparison": True,
+                "optional_manifests": True,
+                "server_manifests": True,
+                "write_api": write_api,
+            },
+        }
+    )
 
 
 @api.route("/api/verify")
@@ -30,122 +288,222 @@ def verify_key(key: str = None):
                 "created_at": "1970-01-01T00:00:00+00:00",
             }
         )
-    else:
-        return jsonify({"error": "Invalid key provided."})
+    return jsonify({"error": "Invalid key provided."})
 
 
 @api.route("/api/modpack")
-@cached(TTLCache(cache_size, cache_ttl), key=lambda: str(request.args.get("cid")) + str(request.args.get('include')) + str(request.args.get('k')))
+@_api_cached(key=lambda: _cache_key())
 def modpack():
     cid = request.args.get("cid")
-    keys = request.args.get("k")
-    key = Key.get_key(keys)
-    if key:
+    api_key = _has_valid_api_key()
+    principal = _read_principal()
+    if api_key:
         modpacks = Modpack.get_all_api()
+    elif principal and principal.permissions.get("solder_full"):
+        modpacks = Modpack.get_all_api()
+    elif principal:
+        client_visible = {
+            current.id: current for current in Modpack.get_by_cid_api(cid)
+        }
+        for current in Modpack.get_all_api():
+            if _principal_can_access(principal, current):
+                client_visible[current.id] = current
+        modpacks = sorted(client_visible.values(), key=lambda current: current.id)
     else:
         modpacks = Modpack.get_by_cid_api(cid)
-    if request.args.get('include') == "full":
-        if key:
-            return jsonify({"modpacks": {modpack.slug: Modpack.to_modpack_json_all(modpack.slug) for modpack in modpacks}, "mirror_url": public_repo_url})
-        else:
-            return jsonify({"modpacks": {modpack.slug: Modpack.to_modpack_json(cid, modpack.slug) for modpack in modpacks}, "mirror_url": public_repo_url})
-    else:
-        return jsonify({"modpacks": {modpack.slug: modpack.name for modpack in modpacks}, "mirror_url": public_repo_url})
+    if request.args.get("include") == "full":
+        full_modpacks = {}
+        for current_modpack in modpacks:
+            privileged = api_key or _principal_can_access(
+                principal, current_modpack
+            )
+            current_modpack.builds = current_modpack.get_builds_api(
+                cid=cid, api_key=privileged
+            )
+            full_modpacks[current_modpack.slug] = current_modpack.to_json()
+        return jsonify({"modpacks": full_modpacks, "mirror_url": public_repo_url})
+    return jsonify(
+        {
+            "modpacks": {
+                current_modpack.slug: current_modpack.name
+                for current_modpack in modpacks
+            },
+            "mirror_url": public_repo_url,
+        }
+    )
+
 
 @api.route("/api/modpack/<slug>")
-@cached(TTLCache(cache_size, cache_ttl), key=lambda slug: str(request.args.get("cid")) + str(request.args.get('k')) + slug)
+@_api_cached(key=lambda slug: _cache_key(slug))
 def modpack_slug(slug: str):
     cid = request.args.get("cid")
-    keys = request.args.get("k")
-    key = Key.get_key(keys)
-    if key:
-        modpack = Modpack.get_all_by_slug_api(slug)
-        if modpack:
-            modpack.builds = modpack.get_builds_api()
-            return jsonify(modpack.to_json())
-    else:
-        modpack = Modpack.get_by_cid_slug_api(cid, slug)
-        if modpack:
-            modpack.builds = modpack.get_builds_cid_api(cid)
-            return jsonify(modpack.to_json())
-    return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
+    api_key = _has_valid_api_key()
+    principal = _read_principal()
+    current_modpack = _get_accessible_modpack(
+        slug, cid, api_key, principal
+    )
+    if not current_modpack:
+        return jsonify({"error": "Modpack does not exist"}), 404
+
+    privileged = api_key or _principal_can_access(principal, current_modpack)
+    current_modpack.builds = current_modpack.get_builds_api(
+        cid=cid, api_key=privileged
+    )
+    return jsonify(current_modpack.to_json())
+
 
 @api.route("/api/modpack/<slugstring>/<buildstring>")
-@cached(TTLCache(cache_size, cache_ttl), key=lambda slugstring, buildstring: str(request.args.get("cid")) + str(request.args.get("include")) + str(request.args.get("k")) + slugstring + buildstring)
+@_api_cached(
+    key=lambda slugstring, buildstring: _cache_key(slugstring, buildstring),
+)
 def modpack_slug_build(slugstring: str, buildstring: str):
-    keys = request.args.get("k")
-    key = Key.get_key(keys)
-    # Todo, add api key verification that bypass cid verification
-    modpack = Modpack.get_by_cid_slug_api(request.args.get("cid"), slugstring)
-    if not modpack:
-        return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
-    
-    buildsplit = buildstring.split("-")
-    buildsplit.append("")
-    buildnumber = buildsplit[0]
-    buildtag = buildsplit[1]
-    build = modpack.get_build_api(buildnumber)
+    cid = request.args.get("cid")
+    api_key = _has_valid_api_key()
+    principal = _read_principal()
+    current_modpack = _get_accessible_modpack(
+        slugstring, cid, api_key, principal
+    )
+    if not current_modpack:
+        return jsonify({"error": "Modpack does not exist"}), 404
+
+    privileged = api_key or _principal_can_access(principal, current_modpack)
+    build, buildtag = _get_requested_build(
+        current_modpack, buildstring, cid, privileged
+    )
     if not build:
-        return jsonify({"error": "Modpack does not exist/Build does not exist"}), 404
-    modversions = build.get_modversions_api(buildtag)
-    moddata = []
-    if request.args.get('include') == "mods":
-        for mv in modversions:
-            moddata.append(
-                {
-                    "name": mv.modname,
-                    "version": mv.version,
-                    "md5": mv.md5,
-                    "url": f"{public_repo_url}{mv.modname}/{mv.modname}-{mv.version}.zip",
-                    "pretty_name": mv.pretty_name,
-                    "author": mv.author,
-                    "description": mv.description,
-                    "link": mv.link,
-                }
-            )
-    else:
-        for mv in modversions:
-            moddata.append(
-                {
-                    "name": mv.modname,
-                    "version": mv.version,
-                    "md5": mv.md5,
-                    "url": f"{public_repo_url}{mv.modname}/{mv.modname}-{mv.version}.zip",
-                }
-            )
-    return {"minecraft": build.minecraft, "java": build.min_java, "memory": build.min_memory, "forge": None, "mods": moddata}
+        return jsonify({"error": "Build does not exist"}), 404
+
+    try:
+        target, include_optional = _manifest_options(buildtag)
+    except ValueError:
+        # The parser raises only for invalid public query arguments. Do not
+        # serialize exception objects into an HTTP response: keeping the
+        # response static also prevents future parser errors leaking details.
+        return jsonify({"error": "Invalid manifest options"}), 400
+
+    if target == "server" and not current_modpack.enable_server:
+        return jsonify({"error": "Server manifests are not enabled"}), 404
+    if include_optional and not current_modpack.enable_optionals:
+        return jsonify({"error": "Optional manifests are not enabled"}), 404
+
+    expanded = request.args.get("include") == "mods"
+    extended = (
+        request.args.get("target") is not None
+        or request.args.get("optional") is not None
+        or request.args.get("from") is not None
+        or buildstring in {"recommended", "latest"}
+    )
+    modversions = build.get_modversions_api(
+        target=target, include_optional=include_optional
+    )
+    moddata = _mod_manifest_entries(
+        modversions, build.id, expanded=expanded, extended=extended
+    )
+    manifest = {
+        "id": build.id,
+        "minecraft": build.minecraft,
+        "java": build.min_java,
+        "memory": build.min_memory,
+        "forge": build.forge,
+        "mods": moddata,
+    }
+
+    if extended:
+        build_modloader = _optional_string_attribute(
+            getattr(build, "modloader", None)
+        )
+        manifest.update(
+            {
+                "modpack": current_modpack.slug,
+                "version": build.version,
+                "modloader": build_modloader,
+                "target": target,
+                "optional": include_optional,
+            }
+        )
+        _add_manifest_hash(manifest)
+
+    from_version = request.args.get("from")
+    if from_version:
+        previous_build = _get_build_by_version_or_channel(
+            current_modpack, from_version, cid, privileged
+        )
+        if not previous_build:
+            return jsonify({"error": "Comparison build does not exist"}), 404
+        previous_versions = previous_build.get_modversions_api(
+            target=target, include_optional=include_optional
+        )
+        previous_data = _mod_manifest_entries(
+            previous_versions,
+            previous_build.id,
+            expanded=expanded,
+            extended=True,
+        )
+        manifest["changes"] = _manifest_changes(
+            previous_data, moddata, previous_build.version, build.version
+        )
+
+    response = jsonify(manifest)
+    if extended:
+        response.set_etag(manifest["manifest_hash"])
+    return response
 
 
 @api.route("/api/mod")
+@_api_cached(key=lambda: _cache_key())
 def mod():
+    mods = Mod.get_all_api()
     return jsonify(
-        {"error": "Mod does not exist"}
-    ), 404
-    Mods = Mod.get_all()
-    return jsonify({"mods": {Mods.name: Mods.pretty_name for Mods in Mods}})
+        {
+            "mods": {
+                current_mod.name: current_mod.pretty_name for current_mod in mods
+            }
+        }
+    )
+
 
 @api.route("/api/mod/<name>")
-@cached(TTLCache(cache_size, cache_ttl), key=lambda name: name)
+@_api_cached(key=lambda name: _cache_key(name))
 def mod_name(name: str):
     mods = Mod.get_by_name_api(name)
     if not mods:
         return jsonify({"error": "Mod does not exist"}), 404
-    else:
-        versions = Mod.get_versions_api(mods)
-        res = mods.to_json()
-        res["versions"] = [v["version"] for v in versions]
-        return jsonify(res)
+
+    versions = mods.get_versions_api()
+    res = mods.to_json()
+    res["id"] = mods.id
+    res["versions"] = [version["version"] for version in versions]
+    res["dependencies"] = ModDependency.get_by_mod_api(mods.id)
+    return jsonify(res)
+
 
 @api.route("/api/mod/<name>/<version>")
-@cached(TTLCache(cache_size, cache_ttl), key=lambda name, version: name + version)
+@_api_cached(key=lambda name, version: _cache_key(name, version))
 def mod_name_version(name: str, version: str):
     mod = Mod.get_by_name_api(name)
     if not mod:
         return jsonify({"error": "Mod does not exist"}), 404
-    version = mod.get_version_api(version)
-    if not version:
+    modversion = mod.get_version_api(version)
+    if not modversion:
         return jsonify({"error": "Mod version does not exist"}), 404
-    else:
-        res = version.to_json()
-        res["url"] = f"{public_repo_url}{name}/{version.version}.zip"
-        return jsonify(res)
+
+    res = modversion.to_json()
+    res["id"] = modversion.id
+    res["url"] = _mod_download_url(name, modversion.version)
+    res["side"] = mod.side
+    res["type"] = mod.modtype
+    res["modtype"] = mod.modtype
+    res["modloader"] = _optional_string_attribute(
+        getattr(modversion, "modloader", None)
+    )
+    res["dependencies"] = ModDependency.get_by_mod_api(mod.id)
+    principal = _read_principal()
+    build_query = {
+        "cid": request.args.get("cid"),
+        "api_key": _has_valid_api_key()
+        or bool(principal and principal.permissions.get("solder_full")),
+    }
+    if principal and not principal.permissions.get("solder_full"):
+        build_query["modpack_ids"] = principal.accessible_modpack_ids
+    res["builds"] = modversion.get_builds_api(**build_query)
+    return jsonify(res)

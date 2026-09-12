@@ -26,7 +26,7 @@ def main(image: str) -> None:
             "--name",
             container,
             "--publish",
-            "127.0.0.1::5000",
+            "127.0.0.1:0:5000",
             "--env",
             "AWS_EC2_METADATA_DISABLED=true",
             "--env",
@@ -68,7 +68,11 @@ def main(image: str) -> None:
             try:
                 with urllib.request.urlopen(endpoint, timeout=3) as response:
                     payload = json.load(response)
-                if response.status == 200 and payload.get("api") == "solder.py":
+                if (
+                    response.status == 200
+                    and payload.get("api") == "solder.py"
+                    and payload.get("capabilities", {}).get("write_api") is False
+                ):
                     print(f"Container smoke test passed: {payload}")
                     return
                 last_error = RuntimeError(

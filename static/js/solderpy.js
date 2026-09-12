@@ -20,6 +20,69 @@ function tablesearches(column) {
     }
 }
 
+// Filters the entries inside a Bootstrap dropdown.
+function dropdownsearches(inputId, optionsId, noResultsId) {
+    const input = document.getElementById(inputId);
+    const options = document.getElementById(optionsId);
+    const noResults = document.getElementById(noResultsId);
+    if (!input || !options || !noResults) {
+        return;
+    }
+
+    const filter = input.value.trim().toUpperCase();
+    let matches = 0;
+    options.querySelectorAll("[data-searchable-option]").forEach(option => {
+        const text = option.textContent || "";
+        option.hidden = !text.toUpperCase().includes(filter);
+        if (!option.hidden) {
+            matches += 1;
+        }
+    });
+    noResults.hidden = matches !== 0;
+}
+
+function togglesearchabledropdown(toggle) {
+    const menu = toggle.nextElementSibling;
+    if (!menu) {
+        return;
+    }
+
+    const opening = !menu.classList.contains("show");
+    menu.classList.toggle("show", opening);
+    toggle.setAttribute("aria-expanded", opening ? "true" : "false");
+    if (opening) {
+        menu.querySelector('input[type="search"]').focus();
+    }
+}
+
+function selectsearchabledropdown(option, valueId, labelId, toggleId, submitId) {
+    const value = document.getElementById(valueId);
+    const label = document.getElementById(labelId);
+    const toggle = document.getElementById(toggleId);
+    const submit = document.getElementById(submitId);
+    if (!option || !value || !label || !toggle || !submit) {
+        return false;
+    }
+
+    value.value = option.dataset.value;
+    label.textContent = option.textContent.trim();
+    submit.disabled = false;
+    const menu = option.closest(".dropdown-menu");
+    if (menu) {
+        menu.classList.remove("show");
+    }
+    toggle.setAttribute("aria-expanded", "false");
+    return true;
+}
+
+function selectbuildmod(option, valueId, labelId, toggleId, submitId) {
+    if (selectsearchabledropdown(
+        option, valueId, labelId, toggleId, submitId
+    )) {
+        hideoptions(valueId, option.dataset.integrationUrl || "");
+    }
+}
+
 
 // sleep function
 // https://stackoverflow.com/questions/16873323/javascript-sleep-wait-before-continuing
@@ -51,11 +114,7 @@ function submitbuttonpress(id, val, submitid) {
     document.querySelector(submit2).click();
 }
 
-function submitbuttonpresswithurl(version, name, urlform, submitid) {
-    versionname = document.getElementById(version).value;
-    urllink = name + '/' + name + '-' + versionname + '.zip';
-    document.getElementById(urlform).value = urllink;
-
+function submitform(submitid) {
     submit2 = '[name="' + submitid + '"]';
     document.querySelector(submit2).click();
 }
@@ -141,22 +200,93 @@ function string_to_slug(str) {
     return str;
 }
 
-function hideoptions(optiontoshow) {
-    // gets the value of selected option
-    selected = document.getElementById(optiontoshow).value;
-    // gets all that has the name modlist and makes then hidden
-    let modlist = document.querySelectorAll('[name="' + "modlist" + '"]');
-    modlist.forEach(el => {
-        el.setAttribute('hidden', 'true')
-    })
-    // uses the selected options value to only show matching id's
-    let modversion = document.querySelectorAll('[id="' + "modversion_" + selected + '"]');
-    modversion.forEach(el => {
-        el.removeAttribute("hidden")
-    })
-    // hides select a mod first option as that is an invalid answer
-    document.querySelector('[name="' + "modfirst" + '"]').setAttribute('hidden', 'true');
-    document.querySelector('[name="' + "modfirst" + '"]').selected = true;
+function hideoptions(optiontoshow, integrationUrl) {
+    const modSelect = document.getElementById(optiontoshow);
+    const versionSelect = document.getElementById("modversion");
+    if (!modSelect || !versionSelect) {
+        return;
+    }
+
+    const selected = modSelect.value;
+
+    versionSelect.querySelectorAll('[data-integration-version]').forEach(option => {
+        option.remove();
+    });
+    versionSelect.removeAttribute("data-integration-loaded");
+
+    document.querySelectorAll('[name="modlist"]').forEach(option => {
+        option.setAttribute("hidden", "true");
+    });
+    document.querySelectorAll('[id="modversion_' + selected + '"]').forEach(option => {
+        option.removeAttribute("hidden");
+    });
+
+    const placeholder = versionSelect.querySelector('[name="modfirst"]');
+    placeholder.setAttribute("hidden", "true");
+    placeholder.selected = true;
+
+    if (integrationUrl) {
+        loadintegrationversions("modversion", integrationUrl);
+    }
+}
+
+function integrationversionlabel(version) {
+    let label = version.version;
+    if (version.name && version.name !== version.version) {
+        label += " - " + version.name;
+    }
+    if (version.loaders && version.loaders.length) {
+        label += " (" + version.loaders.join(", ") + ")";
+    }
+    return label;
+}
+
+async function loadintegrationversions(selectId, endpoint) {
+    const select = document.getElementById(selectId);
+    if (!select || !endpoint || select.dataset.integrationLoaded === endpoint) {
+        return;
+    }
+    select.querySelectorAll('[data-integration-version="status"]').forEach(option => {
+        option.remove();
+    });
+    select.dataset.integrationLoaded = endpoint;
+
+    const status = document.createElement("option");
+    status.disabled = true;
+    status.textContent = "Loading provider versions...";
+    status.setAttribute("data-integration-version", "status");
+    select.appendChild(status);
+
+    try {
+        const response = await fetch(endpoint, {
+            headers: {"Accept": "application/json"}
+        });
+        const payload = await response.json();
+        status.remove();
+        if (!response.ok) {
+            throw new Error(payload.error || "Unable to load provider versions.");
+        }
+
+        if (!payload.versions.length) {
+            status.textContent = "No additional compatible versions";
+            select.appendChild(status);
+            return;
+        }
+
+        payload.versions.forEach(version => {
+            const option = document.createElement("option");
+            option.value = "integration:" + version.id;
+            option.textContent = integrationversionlabel(version);
+            option.setAttribute("data-integration-version", version.id);
+            select.appendChild(option);
+        });
+    } catch (error) {
+        status.textContent = error.message || "Unable to load provider versions.";
+        if (!status.parentNode) {
+            select.appendChild(status);
+        }
+        select.removeAttribute("data-integration-loaded");
+    }
 }
 
 function undisable(id) {
@@ -169,6 +299,9 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     dataSelect = document.getElementById(input)
     let datas = dataSelect.files
     let data = datas[0]
+    let lowerName = data.name.toLowerCase();
+    let isZip = lowerName.endsWith(".zip");
+    let isJson = lowerName.endsWith(".json") || data.type == "application/json";
 
     if (verchange == "1") {
         // Adds the version number in the file provided to minecraft version and mod version boxes
@@ -186,10 +319,10 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
     mcversionname = document.getElementById(mcversion).value;
     modversionname = document.getElementById(modversion).value;
 
-    if (data.type != "application/x-zip-compressed") { // if uploaded file is not a zip file
+    if (!isZip) { // Browsers report several different MIME types for ZIP files.
         // starts a new zipfile
         var zip = new JSZip();
-        if (data.type != "application/json" && data.name != "modpack.jar") { // if the file is not modpack.jar or filetye json
+        if (!isJson && data.name != "modpack.jar") { // if the file is not modpack.jar or filetype json
 
             hashjarmd5("file")
             // adds a folder "mods" inside zipfile
@@ -207,7 +340,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             document.getElementById('jarmd5').value = "0";
             document.getElementById("filetypelauncher").checked = true;
         }
-        if (data.type == "application/json") { // if the filetype is detected to be json
+        if (isJson) { // if the filetype is detected to be json
             // adds a folder "bin" inside zipfile
             var bin = zip.folder("bin");
             // adds the file uploaded inside bin folder with correct naming scheme
@@ -223,7 +356,7 @@ function zipfile_mods(modslug, mcversion, modversion, input, verchange) {
             });
 
     }
-    if (data.type == "application/x-zip-compressed") { // if the filetype is detected to be zip
+    if (isZip) { // if the filetype is detected to be zip
         zipfile_md5(data)
         document.getElementById('jarmd5').value = "0";
         document.getElementById("filetypezip").checked = true;

@@ -59,6 +59,11 @@ class User:
         cur = conn.cursor(dictionary=True)
         cur.execute("DELETE FROM users WHERE id=%s", (id,))
         cur.execute("DELETE FROM user_permissions WHERE user_id=%s", (id,))
+        cur.execute(
+            """DELETE FROM personal_access_tokens
+               WHERE tokenable_id = %s AND tokenable_type = %s""",
+            (id, r"App\Models\User"),
+        )
         conn.commit()
         return None
 
