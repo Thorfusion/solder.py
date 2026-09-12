@@ -88,10 +88,11 @@ class ApplicationSmokeTests(unittest.TestCase):
             },
             "recent": [
                 {
-                    "item_id": 7,
-                    "item_type": "build",
-                    "title": "Example Pack - 2.0",
-                    "detail": "Minecraft 1.21.1 / FABRIC",
+                    "item_id": 12,
+                    "item_type": "modversion",
+                    "title": "Example Mod - 2.0",
+                    "detail": "1.21.1 / FABRIC",
+                    "integration_provider": "MODRINTH",
                     "updated_at": changed_at,
                 }
             ],
@@ -118,6 +119,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(b"Latest build is unpublished", response.data)
         self.assertIn(b"Marked build", response.data)
         self.assertIn(b"Recent changes", response.data)
+        self.assertIn(b">Modrinth</span>", response.data)
         self.assertIn(b"Repository health", response.data)
         self.assertNotIn(b"<button", response.data)
         self.assertNotIn(b"solderpy.js", response.data)

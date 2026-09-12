@@ -19,6 +19,7 @@ from models.build import Build  # noqa: E402
 from models.build_modversion import Build_modversion  # noqa: E402
 from models.common import common  # noqa: E402
 from models.database import Database  # noqa: E402
+from models.dashboard import Dashboard  # noqa: E402
 from models.mod import DuplicateModError, Mod, UploadVerificationError  # noqa: E402
 from models.mod_dependency import CircularDependencyError, ModDependency  # noqa: E402
 from models.modpack import Modpack  # noqa: E402
@@ -131,6 +132,39 @@ class ModelSerializationTests(unittest.TestCase):
 
 
 class ModelBehaviorTests(unittest.TestCase):
+    def test_dashboard_checks_updates_only_on_each_modpacks_newest_build(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.side_effect = [
+            {"solder_full": 1, "mods_manage": 1, "modpacks_manage": 1},
+            {"modpacks": 0, "builds": 0, "unpublished_builds": 0},
+            None,
+            {"item_count": 0, "target_id": None},
+            {"item_count": 0, "target_id": None},
+            {"item_count": 0, "target_id": None},
+            {"mods": 0, "modversions": 0},
+            {"item_count": 0},
+            {"item_count": 0},
+        ]
+        cursor.fetchall.side_effect = [[], [], [], []]
+
+        with patch(
+            "models.dashboard.Database.get_connection", return_value=connection
+        ):
+            Dashboard.load(4)
+
+        update_query_calls = [
+            call
+            for call in cursor.execute.call_args_list
+            if "SELECT MAX(latest_build.id)" in call.args[0]
+        ]
+        self.assertEqual(len(update_query_calls), 1)
+        update_query, parameters = update_query_calls[0].args
+        self.assertIn(
+            "latest_build.modpack_id = builds.modpack_id", update_query
+        )
+        self.assertEqual(parameters, (1, 4))
+
     def test_dependency_read_api_exposes_public_mod_metadata(self):
         connection = Mock()
         cursor = connection.cursor.return_value

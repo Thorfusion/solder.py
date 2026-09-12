@@ -125,6 +125,9 @@
           {%else%}
           <a href="{{url_for('asite.modversion', id=item.item_id)}}">{{item.title}}</a>
           {%endif%}
+          {%if item.integration_provider%}
+          <span class="badge bg-info text-dark">{{item.integration_provider|title}}</span>
+          {%endif%}
           <div class="small text-muted mt-1">{{item.detail}}</div>
         </div>
         <time class="small text-muted text-nowrap" datetime="{{item.updated_at.isoformat() if item.updated_at else ''}}">

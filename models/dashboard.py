@@ -11,19 +11,6 @@ class Dashboard:
     """Build the small operational overview shown on the management home page."""
 
     @staticmethod
-    def _pack_scope(full_access):
-        if full_access:
-            return "", ()
-        return (
-            """AND EXISTS (
-                   SELECT 1 FROM user_modpack dashboard_access
-                   WHERE dashboard_access.user_id = %s
-                     AND dashboard_access.modpack_id = modpacks.id
-               )""",
-            None,
-        )
-
-    @staticmethod
     def _activity_sort_value(activity):
         value = activity.get("updated_at")
         return value if isinstance(value, datetime) else datetime.min
@@ -102,24 +89,27 @@ class Dashboard:
 
             recent = []
             if can_manage_packs:
-                scope, scope_params = cls._pack_scope(full_access)
-                params = () if scope_params == () else (user_id,)
+                params = (int(full_access), user_id)
 
                 cur.execute(
-                    f"""SELECT COUNT(DISTINCT modpacks.id) AS modpacks,
+                    """SELECT COUNT(DISTINCT modpacks.id) AS modpacks,
                                COUNT(DISTINCT builds.id) AS builds,
                                COUNT(DISTINCT CASE WHEN builds.is_published = 0
                                                   THEN builds.id END)
                                    AS unpublished_builds
                         FROM modpacks
                         LEFT JOIN builds ON builds.modpack_id = modpacks.id
-                        WHERE 1 = 1 {scope}""",
+                        WHERE %s = 1 OR EXISTS (
+                            SELECT 1 FROM user_modpack dashboard_access
+                            WHERE dashboard_access.user_id = %s
+                              AND dashboard_access.modpack_id = modpacks.id
+                        )""",
                     params,
                 )
                 data["counts"].update(cur.fetchone() or {})
 
                 cur.execute(
-                    f"""SELECT modpacks.id, modpacks.name,
+                    """SELECT modpacks.id, modpacks.name,
                                modpacks.recommended, modpacks.latest,
                                CASE
                                    WHEN NULLIF(TRIM(modpacks.recommended), '')
@@ -152,8 +142,11 @@ class Dashboard:
                         ) latest
                             ON latest.modpack_id = modpacks.id
                            AND latest.version = modpacks.latest
-                        WHERE 1 = 1 {scope}
-                          AND (
+                        WHERE (%s = 1 OR EXISTS (
+                            SELECT 1 FROM user_modpack dashboard_access
+                            WHERE dashboard_access.user_id = %s
+                              AND dashboard_access.modpack_id = modpacks.id
+                        )) AND (
                               NULLIF(TRIM(modpacks.recommended), '') IS NULL
                               OR recommended.version IS NULL
                               OR recommended.is_published = 0
@@ -183,7 +176,7 @@ class Dashboard:
                     )
 
                 cur.execute(
-                    f"""SELECT builds.id, builds.version, builds.minecraft,
+                    """SELECT builds.id, builds.version, builds.minecraft,
                                builds.modloader, builds.forge,
                                builds.is_published, modpacks.name AS modpack_name,
                                COUNT(build_modversion.id) AS mod_count
@@ -191,7 +184,12 @@ class Dashboard:
                         INNER JOIN modpacks ON builds.modpack_id = modpacks.id
                         LEFT JOIN build_modversion
                             ON build_modversion.build_id = builds.id
-                        WHERE builds.marked = 1 {scope}
+                        WHERE builds.marked = 1
+                          AND (%s = 1 OR EXISTS (
+                              SELECT 1 FROM user_modpack dashboard_access
+                              WHERE dashboard_access.user_id = %s
+                                AND dashboard_access.modpack_id = modpacks.id
+                          ))
                         GROUP BY builds.id, builds.version, builds.minecraft,
                                  builds.modloader, builds.forge,
                                  builds.is_published, modpacks.name
@@ -201,7 +199,7 @@ class Dashboard:
                 data["marked_build"] = cur.fetchone()
 
                 cur.execute(
-                    f"""SELECT COUNT(DISTINCT builds.id) AS item_count,
+                    """SELECT COUNT(DISTINCT builds.id) AS item_count,
                                MIN(builds.id) AS target_id
                         FROM build_modversion
                         INNER JOIN modversions current_version
@@ -210,7 +208,16 @@ class Dashboard:
                             ON build_modversion.build_id = builds.id
                         INNER JOIN modpacks
                             ON builds.modpack_id = modpacks.id
-                        WHERE 1 = 1 {scope}
+                        WHERE (%s = 1 OR EXISTS (
+                            SELECT 1 FROM user_modpack dashboard_access
+                            WHERE dashboard_access.user_id = %s
+                              AND dashboard_access.modpack_id = modpacks.id
+                        ))
+                          AND builds.id = (
+                              SELECT MAX(latest_build.id)
+                              FROM builds latest_build
+                              WHERE latest_build.modpack_id = builds.modpack_id
+                          )
                           AND EXISTS (
                               SELECT 1 FROM modversions candidate
                               WHERE candidate.mod_id = current_version.mod_id
@@ -238,7 +245,7 @@ class Dashboard:
                     )
 
                 cur.execute(
-                    f"""SELECT COUNT(DISTINCT builds.id) AS item_count,
+                    """SELECT COUNT(DISTINCT builds.id) AS item_count,
                                MIN(builds.id) AS target_id
                         FROM build_modversion
                         INNER JOIN modversions
@@ -247,7 +254,11 @@ class Dashboard:
                             ON build_modversion.build_id = builds.id
                         INNER JOIN modpacks
                             ON builds.modpack_id = modpacks.id
-                        WHERE 1 = 1 {scope}
+                        WHERE (%s = 1 OR EXISTS (
+                            SELECT 1 FROM user_modpack dashboard_access
+                            WHERE dashboard_access.user_id = %s
+                              AND dashboard_access.modpack_id = modpacks.id
+                        ))
                           AND (
                               (modversions.mcversion IS NOT NULL
                                AND modversions.mcversion <> builds.minecraft)
@@ -272,7 +283,7 @@ class Dashboard:
                     )
 
                 cur.execute(
-                    f"""SELECT COUNT(DISTINCT builds.id) AS item_count,
+                    """SELECT COUNT(DISTINCT builds.id) AS item_count,
                                MIN(builds.id) AS target_id
                         FROM build_modversion parent_membership
                         INNER JOIN modversions parent_version
@@ -283,7 +294,11 @@ class Dashboard:
                             ON parent_membership.build_id = builds.id
                         INNER JOIN modpacks
                             ON builds.modpack_id = modpacks.id
-                        WHERE 1 = 1 {scope}
+                        WHERE (%s = 1 OR EXISTS (
+                            SELECT 1 FROM user_modpack dashboard_access
+                            WHERE dashboard_access.user_id = %s
+                              AND dashboard_access.modpack_id = modpacks.id
+                        ))
                           AND NOT EXISTS (
                               SELECT 1
                               FROM build_modversion dependency_membership
@@ -311,21 +326,26 @@ class Dashboard:
                     )
 
                 cur.execute(
-                    f"""SELECT modpacks.id AS item_id,
+                    """SELECT modpacks.id AS item_id,
                                'modpack' AS item_type,
                                modpacks.name AS title,
                                modpacks.slug AS detail,
+                               NULL AS integration_provider,
                                COALESCE(modpacks.updated_at,
                                         modpacks.created_at) AS updated_at
                         FROM modpacks
-                        WHERE 1 = 1 {scope}
+                        WHERE %s = 1 OR EXISTS (
+                            SELECT 1 FROM user_modpack dashboard_access
+                            WHERE dashboard_access.user_id = %s
+                              AND dashboard_access.modpack_id = modpacks.id
+                        )
                         ORDER BY updated_at DESC, modpacks.id DESC LIMIT 8""",
                     params,
                 )
                 recent.extend(cur.fetchall() or [])
 
                 cur.execute(
-                    f"""SELECT builds.id AS item_id,
+                    """SELECT builds.id AS item_id,
                                'build' AS item_type,
                                CONCAT(modpacks.name, ' - ', builds.version)
                                    AS title,
@@ -335,11 +355,16 @@ class Dashboard:
                                           THEN CONCAT(' / ', builds.modloader)
                                           ELSE ''
                                       END) AS detail,
+                               NULL AS integration_provider,
                                COALESCE(builds.updated_at,
                                         builds.created_at) AS updated_at
                         FROM builds
                         INNER JOIN modpacks ON builds.modpack_id = modpacks.id
-                        WHERE 1 = 1 {scope}
+                        WHERE %s = 1 OR EXISTS (
+                            SELECT 1 FROM user_modpack dashboard_access
+                            WHERE dashboard_access.user_id = %s
+                              AND dashboard_access.modpack_id = modpacks.id
+                        )
                         ORDER BY updated_at DESC, builds.id DESC LIMIT 8""",
                     params,
                 )
@@ -406,6 +431,7 @@ class Dashboard:
                                       ELSE ''
                                   END
                               ) AS detail,
+                              mods.integration_provider,
                               COALESCE(modversions.updated_at,
                                        modversions.created_at) AS updated_at
                        FROM modversions
