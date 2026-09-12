@@ -872,6 +872,46 @@ class ModelBehaviorTests(unittest.TestCase):
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
 
+    def test_update_all_uses_newest_compatible_version_per_build_entry(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [
+            {
+                "membership_id": 11,
+                "current_version_id": 101,
+                "replacement_version_id": 103,
+            },
+            {
+                "membership_id": 11,
+                "current_version_id": 101,
+                "replacement_version_id": 102,
+            },
+            {
+                "membership_id": 12,
+                "current_version_id": 201,
+                "replacement_version_id": 201,
+            },
+        ]
+
+        with patch(
+            "models.build_modversion.Database.get_connection",
+            return_value=connection,
+        ):
+            updated = Build_modversion.update_all_compatible(7)
+
+        self.assertEqual(updated, 1)
+        self.assertEqual(cursor.execute.call_args.args[1], (7,))
+        cursor.executemany.assert_called_once_with(
+            """UPDATE build_modversion
+                       SET modversion_id = %s
+                       WHERE id = %s""",
+            [(103, 11)],
+        )
+        connection.commit.assert_called_once_with()
+        connection.rollback.assert_not_called()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
     def test_empty_database_returns_empty_public_modpack_lists(self):
         connection = Mock()
         connection.cursor.return_value.fetchall.return_value = []

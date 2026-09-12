@@ -354,7 +354,7 @@ class ModrinthProvider(ExternalProvider):
         return hostname == "cdn.modrinth.com" or hostname.endswith(".modrinth.com")
 
     @staticmethod
-    def _project(payload):
+    def _project(payload, author=None):
         environment = payload.get("environment") or []
         if environment:
             client_side = "unsupported" if all(
@@ -379,7 +379,11 @@ class ModrinthProvider(ExternalProvider):
             slug=str(payload.get("slug") or payload.get("id") or ""),
             title=str(payload.get("title") or payload.get("name") or "Unnamed project"),
             description=str(payload.get("description") or ""),
-            author=str(payload.get("author") or payload.get("organization") or "Modrinth"),
+            author=str(
+                author
+                or payload.get("author")
+                or ""
+            ),
             link=f"https://modrinth.com/mod/{payload.get('slug') or payload.get('id')}",
             icon_url=payload.get("icon_url"),
             license=str(license_name) if license_name else None,
@@ -404,7 +408,26 @@ class ModrinthProvider(ExternalProvider):
         payload = self._request_json(f"/project/{project_id}")
         if payload.get("project_type") != "mod":
             raise IntegrationError("The selected Modrinth project is not a mod.")
-        project = self._project(payload)
+        members = self._request_json(f"/project/{project_id}/members")
+        members = sorted(
+            (
+                member for member in members
+                if member.get("accepted") is not False
+            ),
+            key=lambda member: int(member.get("ordering") or 0),
+        )
+        names = []
+        for member in members:
+            user = member.get("user") or {}
+            name = str(user.get("name") or user.get("username") or "").strip()
+            if name and name not in names:
+                names.append(name)
+        if not names:
+            raise IntegrationError(
+                "Modrinth did not return any accepted project team members."
+            )
+        author = ", ".join(names)
+        project = self._project(payload, author=author)
         if project.project_id != project_id:
             raise IntegrationError("Modrinth returned a different project.")
         return project
@@ -527,7 +550,7 @@ class CurseForgeProvider(ExternalProvider):
             description=str(payload.get("summary") or ""),
             author=", ".join(
                 str(author.get("name")) for author in authors if author.get("name")
-            ) or "CurseForge",
+            ),
             link=f"https://www.curseforge.com/minecraft/mc-mods/{slug}",
             icon_url=logo.get("thumbnailUrl") or logo.get("url"),
             license=None,
@@ -558,6 +581,8 @@ class CurseForgeProvider(ExternalProvider):
         if int(payload.get("classId") or 0) != self.minecraft_mod_class_id:
             raise IntegrationError("The selected CurseForge project is not a mod.")
         project = self._project(payload)
+        if not project.author:
+            raise IntegrationError("CurseForge did not return a project author.")
         if project.project_id != project_id:
             raise IntegrationError("CurseForge returned a different project.")
         return project

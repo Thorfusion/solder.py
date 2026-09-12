@@ -979,9 +979,9 @@ def exercise_synthetic_user_login(
         version_page = response.read()
         if (
             response.status != 200
-            or b">Create MCIL JAR</button>" not in version_page
+            or b">Create JAR</button>" not in version_page
         ):
-            raise AssertionError("The legacy MCIL JAR action was not shown")
+            raise AssertionError("The legacy JAR action was not shown")
 
     mcil_jar_request = urllib.request.Request(
         f"{base_url}/modversion/3",
@@ -1022,8 +1022,8 @@ def exercise_synthetic_user_login(
         raise AssertionError(f"The converted MCIL JAR was incorrect: {artifact_hash}")
 
     with opener.open(f"{base_url}/modversion/3", timeout=5) as response:
-        if b"MCIL ready" not in response.read():
-            raise AssertionError("The converted version was not shown as MCIL ready")
+        if b"JAR ready" not in response.read():
+            raise AssertionError("The converted version was not shown as JAR ready")
 
     dependency_request = urllib.request.Request(
         f"{base_url}/modversion/3",
@@ -1085,9 +1085,45 @@ def exercise_synthetic_user_login(
             f"dependency to the build: {selected_build_mods}"
         )
 
+    update_all_request = urllib.request.Request(
+        f"{base_url}/modpackbuild/1",
+        data=urllib.parse.urlencode(
+            {"update_all_mods_submit": "1"}
+        ).encode(),
+        method="POST",
+    )
+    try:
+        opener.open(update_all_request, timeout=5)
+    except urllib.error.HTTPError as error:
+        if error.code != 302 or error.headers.get("Location") != "/modpackbuild/1":
+            raise AssertionError(
+                f"Updating all build mods returned an unexpected response: {error}"
+            ) from error
+    else:
+        raise AssertionError("Updating all build mods did not redirect")
+
+    updated_dependency = mysql(
+        database_container,
+        """SELECT build_modversion.modversion_id
+           FROM build_modversion
+           INNER JOIN modversions
+               ON build_modversion.modversion_id = modversions.id
+           WHERE build_modversion.build_id = 1
+             AND modversions.mod_id = 2;""",
+    )
+    if updated_dependency != "5":
+        raise AssertionError(
+            "Update all did not select the newest compatible dependency "
+            f"version: {updated_dependency}"
+        )
+
     with opener.open(f"{base_url}/modpackbuild/1", timeout=5) as response:
         build_editor = response.read()
-        if response.status != 200 or b"CI Example Mod" not in build_editor:
+        if (
+            response.status != 200
+            or b"CI Example Mod" not in build_editor
+            or b">Update all mods</button>" not in build_editor
+        ):
             raise AssertionError("The authenticated build editor did not render")
 
     with opener.open(f"{base_url}/modpackbuild/20/mcinstance", timeout=5) as response:

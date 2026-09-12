@@ -697,6 +697,48 @@ def modpackbuild(id):
                 return redirect(url_for("asite.modpackbuild", id=id))
             flash("updated " + id, "success")
             return redirect(url_for("asite.modpackbuild", id=id))
+        if "update_all_mods_submit" in request.form:
+            integration_errors = []
+            integrated_mods = Build_modversion.get_integrated_mods(id)
+            if integrated_mods and User.get_permission_token(
+                session["token"], "mods_manage"
+            ) == 0:
+                integration_errors.append(
+                    "Provider-managed mods need mod management permission."
+                )
+            else:
+                build = Build.get_by_id(id)
+                user_id = Session.get_user_id(session["token"])
+                for integrated_mod in integrated_mods:
+                    try:
+                        mod = Mod.get_by_id(integrated_mod["id"])
+                        versions = ModIntegration.list_versions(
+                            mod, build, user_id
+                        )
+                        if versions:
+                            _materialize_integration_version(
+                                mod.id, id, versions[0].version_id
+                            )
+                    except IntegrationError as error:
+                        integration_errors.append(
+                            f'{integrated_mod["pretty_name"]}: {error}'
+                        )
+                    except Exception as error:
+                        ErrorPrinter.message(
+                            "failed to update provider-managed mod", error
+                        )
+                        integration_errors.append(
+                            f'{integrated_mod["pretty_name"]}: provider update failed'
+                        )
+
+            updated = Build_modversion.update_all_compatible(id)
+            if updated:
+                flash(f"updated {updated} mod(s)", "success")
+            elif not integration_errors:
+                flash("all mods are already up to date", "success")
+            if integration_errors:
+                flash("; ".join(integration_errors), "error")
+            return redirect(url_for("asite.modpackbuild", id=id))
         if "optional_submit" in request.form:
             Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"], id)
             flash("updated " + id, "success")

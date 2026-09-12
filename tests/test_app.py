@@ -74,19 +74,16 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         self.assertIn('id="dependency_search"', version_source)
         self.assertIn(
-            "filtersearchabledropdown('dependency_search', 'dependency_dropdown_options', 'dependency_no_results');",
+            "dropdownsearches('dependency_search', 'dependency_mod_id');",
             version_source,
         )
         self.assertIn(
-            'type="hidden" name="dependency_mod_id" id="dependency_mod_id"',
+            '<select class="form-select" name="dependency_mod_id" id="dependency_mod_id" required>',
             version_source,
         )
-        self.assertIn('class="form-select text-start"', version_source)
-        self.assertNotIn(
-            '<select class="form-select" name="dependency_mod_id"',
-            version_source,
-        )
-        self.assertIn("Create MCIL JAR", version_source)
+        self.assertNotIn("searchable-dropdown", version_source)
+        self.assertNotIn("filtersearchabledropdown", version_source)
+        self.assertIn(">Create JAR</button>", version_source)
         self.assertIn('id="createmciljar_submit"', version_source)
         self.assertNotIn('id="table"', version_source)
 
@@ -95,15 +92,25 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         self.assertIn('id="build_mod_search"', build_source)
         self.assertIn(
-            "filtersearchabledropdown('build_mod_search', 'build_mod_dropdown_options', 'build_mod_no_results');",
+            "dropdownsearches('build_mod_search', 'modnames');",
             build_source,
         )
         self.assertIn(
-            'type="hidden" name="modnames" id="modnames"', build_source
+            '<select class="form-select" name="modnames" id="modnames" onchange="hideoptions(\'modnames\');" required>',
+            build_source,
         )
-        self.assertNotIn(
-            '<select class="form-select" name="modnames"', build_source
-        )
+        self.assertIn("[{{lmod.integration_provider|title}}]", build_source)
+        self.assertIn('name="update_all_mods_submit"', build_source)
+        self.assertNotIn("searchable-dropdown", build_source)
+        self.assertNotIn("filtersearchabledropdown", build_source)
+
+        script_source = (
+            Path(__file__).resolve().parents[1] / "static" / "js" / "solderpy.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("function dropdownsearches(inputId, selectId)", script_source)
+        self.assertIn("function hideoptions(optiontoshow)", script_source)
+        self.assertNotIn("function togglesearchabledropdown", script_source)
+        self.assertNotIn('document.addEventListener("click"', script_source)
 
     def test_authenticated_user_can_download_mcinstance_export(self):
         with self.client.session_transaction() as flask_session:
@@ -161,6 +168,46 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIs(arguments[1], version)
         self.assertEqual(arguments[2], "https://cdn.example.test/mods/")
         self.assertEqual(arguments[3], "./mods/")
+
+    def test_update_all_mods_imports_latest_provider_version_then_updates_build(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        mod = SimpleNamespace(id=9)
+        build = SimpleNamespace(id=7, minecraft="1.21.1", modloader="FABRIC")
+        latest = SimpleNamespace(version_id="LATEST")
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.Session.get_user_id", return_value=4),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Build.get_modpackid_by_id", return_value=3),
+            patch("asite.Build.get_by_id", return_value=build),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch(
+                "asite.Build_modversion.get_integrated_mods",
+                return_value=[
+                    {"id": 9, "name": "example", "pretty_name": "Example"}
+                ],
+            ),
+            patch("asite.Mod.get_by_id", return_value=mod),
+            patch(
+                "asite.ModIntegration.list_versions", return_value=[latest]
+            ),
+            patch("asite._materialize_integration_version") as materialize,
+            patch(
+                "asite.Build_modversion.update_all_compatible", return_value=2
+            ) as update_all,
+        ):
+            response = self.client.post(
+                "/modpackbuild/7", data={"update_all_mods_submit": "1"}
+            )
+
+        self.assertEqual(response.status_code, 302)
+        materialize.assert_called_once_with(9, "7", "LATEST")
+        update_all.assert_called_once_with("7")
 
     def test_unknown_route_uses_the_solder_404_page(self):
         response = self.client.get("/this-route-does-not-exist")

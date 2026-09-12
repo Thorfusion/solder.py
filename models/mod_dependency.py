@@ -111,7 +111,8 @@ class ModDependency:
             dependencies = cur.fetchall() or []
 
             cur.execute(
-                """SELECT mods.id, mods.name, mods.pretty_name
+                """SELECT mods.id, mods.name, mods.pretty_name,
+                          mods.integration_provider
                    FROM mods
                    WHERE mods.id <> %s
                      AND NOT EXISTS (

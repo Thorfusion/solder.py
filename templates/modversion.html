@@ -102,24 +102,17 @@
             {%if available_dependencies%}
             <form method="post" action="">
                 <div class="mb-3">
-                    <label for="dependency_dropdown_toggle" class="form-label">Add required dependency</label>
-                    <div class="searchable-dropdown">
-                        <button class="form-select text-start" type="button" id="dependency_dropdown_toggle" aria-haspopup="listbox" aria-expanded="false" onclick="togglesearchabledropdown(event, 'dependency_dropdown_menu', 'dependency_search');">
-                            <span id="dependency_selection">Select mod</span>
-                        </button>
-                        <div class="dropdown-menu searchable-dropdown-menu w-100 p-2" id="dependency_dropdown_menu" data-searchable-menu hidden>
-                            <input type="search" class="form-control mb-2" id="dependency_search" placeholder="Search dependencies" autocomplete="off" oninput="filtersearchabledropdown('dependency_search', 'dependency_dropdown_options', 'dependency_no_results');" onclick="event.stopPropagation();">
-                            <div class="searchable-dropdown-options" id="dependency_dropdown_options" role="listbox" aria-labelledby="dependency_dropdown_toggle">
-                            {%for dependency in available_dependencies%}
-                                <button type="button" class="dropdown-item" role="option" aria-selected="false" data-searchable-option data-value="{{dependency.id}}" onclick="selectsearchabledropdown(this, 'dependency_mod_id', 'dependency_selection', 'dependency_dropdown_toggle', 'dependency_dropdown_menu', 'adddependency_submit');">{{dependency.pretty_name}} ({{dependency.name}})</button>
-                            {%endfor%}
-                                <p class="dropdown-item-text text-muted mb-0" id="dependency_no_results" hidden>No matching mods</p>
-                            </div>
-                        </div>
-                    </div>
-                    <input type="hidden" name="dependency_mod_id" id="dependency_mod_id" value="">
+                    <label for="dependency_search" class="form-label">Search dependencies</label>
+                    <input type="search" class="form-control mb-2" id="dependency_search" placeholder="Type to filter mods" autocomplete="off" oninput="dropdownsearches('dependency_search', 'dependency_mod_id');">
+                    <label for="dependency_mod_id" class="form-label">Add required dependency</label>
+                    <select class="form-select" name="dependency_mod_id" id="dependency_mod_id" required>
+                        <option value="" selected disabled>Select mod</option>
+                        {%for dependency in available_dependencies%}
+                        <option value="{{dependency.id}}">{{dependency.pretty_name}} ({{dependency.name}}){%if dependency.integration_provider%} [{{dependency.integration_provider|title}}]{%endif%}</option>
+                        {%endfor%}
+                    </select>
                 </div>
-                <button class="btn btn-success" type="submit" name="adddependency_submit" id="adddependency_submit" value="1" disabled>Add dependency</button>
+                <button class="btn btn-success" type="submit" name="adddependency_submit" id="adddependency_submit" value="1">Add dependency</button>
             </form>
             {%endif%}
     <form method="post" action="">

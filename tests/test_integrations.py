@@ -94,6 +94,64 @@ class ProviderTests(unittest.TestCase):
         self.assertEqual(version_params["game_versions"], '["1.21.1"]')
         self.assertEqual(version_params["loaders"], '["fabric"]')
 
+    def test_modrinth_project_uses_accepted_team_members_as_authors(self):
+        http = Mock()
+        http.get.side_effect = [
+            json_response(
+                {
+                    "id": "AABBCCDD",
+                    "project_type": "mod",
+                    "team": "MMNNOOPP",
+                    "slug": "example-mod",
+                    "title": "Example Mod",
+                    "description": "An example",
+                    "status": "approved",
+                }
+            ),
+            json_response(
+                [
+                    {
+                        "accepted": True,
+                        "ordering": 1,
+                        "user": {"username": "helper", "name": "Helper"},
+                    },
+                    {
+                        "accepted": True,
+                        "ordering": 0,
+                        "user": {"username": "owner", "name": None},
+                    },
+                    {
+                        "accepted": False,
+                        "user": {"username": "pending"},
+                    },
+                ]
+            ),
+        ]
+
+        project = ModrinthProvider(http=http).get_project("AABBCCDD")
+
+        self.assertEqual(project.author, "owner, Helper")
+        self.assertIn(
+            "/project/AABBCCDD/members", http.get.call_args_list[1].args[0]
+        )
+
+    def test_curseforge_project_uses_the_returned_authors(self):
+        project = CurseForgeProvider._project(
+            {
+                "id": 123,
+                "name": "Example Mod",
+                "slug": "example-mod",
+                "authors": [
+                    {"name": "Owner"},
+                    {"name": "Contributor"},
+                ],
+                "allowModDistribution": True,
+                "isAvailable": True,
+            }
+        )
+
+        self.assertEqual(project.author, "Owner, Contributor")
+
     def test_curseforge_requires_a_user_key(self):
         with self.assertRaisesRegex(IntegrationError, "API key"):
             CurseForgeProvider("")
@@ -110,7 +168,7 @@ class ProviderTests(unittest.TestCase):
                     "slug": "restricted-mod",
                     "summary": "No redistribution",
                     "links": {},
-                    "authors": [],
+                    "authors": [{"name": "Owner"}],
                     "allowModDistribution": False,
                     "isAvailable": True,
                 }
