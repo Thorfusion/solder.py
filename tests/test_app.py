@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import zipfile
 
 from tests.environment import configure_test_environment
@@ -74,42 +74,73 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         self.assertIn('id="dependency_search"', version_source)
         self.assertIn(
-            "dropdownsearches('dependency_search', 'dependency_mod_id');",
+            "dropdownsearches('dependency_search', 'dependency_dropdown_options', 'dependency_no_results');",
             version_source,
         )
         self.assertIn(
-            '<select class="form-select" name="dependency_mod_id" id="dependency_mod_id" required>',
+            'id="dependency_dropdown" aria-haspopup="listbox" aria-expanded="false" onclick="togglesearchabledropdown(this);"',
             version_source,
         )
-        self.assertNotIn("searchable-dropdown", version_source)
-        self.assertNotIn("filtersearchabledropdown", version_source)
+        self.assertIn(
+            'type="hidden" name="dependency_mod_id" id="dependency_mod_id"',
+            version_source,
+        )
+        self.assertIn("selectsearchabledropdown(this", version_source)
+        self.assertIn(
+            '<span class="badge bg-info text-dark">{{dependency.integration_provider|title}}</span>',
+            version_source,
+        )
+        self.assertIn(
+            '{{dependency.pretty_name}} ({{dependency.name}}){%if dependency.integration_provider%} '
+            '<span class="badge bg-info text-dark">',
+            version_source,
+        )
         self.assertIn(">Create JAR</button>", version_source)
         self.assertIn('id="createmciljar_submit"', version_source)
         self.assertNotIn('id="table"', version_source)
+        self.assertNotIn('name="rehash_url"', version_source)
+        self.assertNotIn('name="newmodvermanual_url"', version_source)
+        self.assertIn("submitform('newmodvermanual_submit')", version_source)
 
         build_source = (template_root / "modpackbuild.html").read_text(
             encoding="utf-8"
         )
         self.assertIn('id="build_mod_search"', build_source)
         self.assertIn(
-            "dropdownsearches('build_mod_search', 'modnames');",
+            "dropdownsearches('build_mod_search', 'build_mod_dropdown_options', 'build_mod_no_results');",
             build_source,
         )
         self.assertIn(
-            '<select class="form-select" name="modnames" id="modnames" onchange="hideoptions(\'modnames\');" required>',
+            'id="build_mod_dropdown" aria-haspopup="listbox" aria-expanded="false" onclick="togglesearchabledropdown(this);"',
             build_source,
         )
-        self.assertIn("[{{lmod.integration_provider|title}}]", build_source)
+        self.assertIn('type="hidden" name="modnames" id="modnames"', build_source)
+        self.assertIn("selectbuildmod(this", build_source)
+        self.assertIn(
+            '<span class="badge bg-info text-dark">{{lmod.integration_provider|title}}</span>',
+            build_source,
+        )
+        self.assertIn(
+            '<span class="badge bg-info text-dark">{{combo.integration_provider|title}}</span>',
+            build_source,
+        )
         self.assertIn('name="update_all_mods_submit"', build_source)
-        self.assertNotIn("searchable-dropdown", build_source)
-        self.assertNotIn("filtersearchabledropdown", build_source)
+        self.assertIn('form="update_all_mods_form"', build_source)
+        self.assertIn('id="update_all_mods_form"', build_source)
+        self.assertIn('<div class="d-flex gap-2 mt-3">', build_source)
 
         script_source = (
             Path(__file__).resolve().parents[1] / "static" / "js" / "solderpy.js"
         ).read_text(encoding="utf-8")
-        self.assertIn("function dropdownsearches(inputId, selectId)", script_source)
-        self.assertIn("function hideoptions(optiontoshow)", script_source)
-        self.assertNotIn("function togglesearchabledropdown", script_source)
+        self.assertIn(
+            "function dropdownsearches(inputId, optionsId, noResultsId)",
+            script_source,
+        )
+        self.assertIn(
+            "function hideoptions(optiontoshow, integrationUrl)", script_source
+        )
+        self.assertIn("function togglesearchabledropdown(toggle)", script_source)
+        self.assertNotIn("bootstrap.Dropdown", script_source)
         self.assertNotIn('document.addEventListener("click"', script_source)
 
     def test_authenticated_user_can_download_mcinstance_export(self):
@@ -395,6 +426,36 @@ class ApplicationSmokeTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         new_version.assert_not_called()
+
+    def test_rehash_ignores_a_client_supplied_repository_url(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        update_hash = Mock()
+        version = SimpleNamespace(mod_id=9, update_hash=update_hash)
+        mod = SimpleNamespace(id=9, name="example-mod")
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Mod.get_by_id", return_value=mod),
+            patch("asite.Modversion.get_by_id", return_value=version),
+        ):
+            response = self.client.post(
+                "/modversion/9",
+                data={
+                    "rehash_submit": "1",
+                    "rehash_id": "12",
+                    "rehash_md5": "a" * 32,
+                    "rehash_url": "http://127.0.0.1/private",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        update_hash.assert_called_once_with(
+            "a" * 32,
+            "https://cdn.example.test/mods/",
+            "example-mod",
+        )
 
 if __name__ == "__main__":
     unittest.main()

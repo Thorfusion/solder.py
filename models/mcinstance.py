@@ -156,14 +156,33 @@ class MCInstanceJar:
             raise MCInstanceJarError("The MCIL JAR could not be stored.") from error
 
     @staticmethod
-    def _download_package(repository_url, mod_name, filename, destination):
-        if not repository_url:
+    def _download_package(repository_location, mod_name, filename, destination):
+        if not repository_location:
             raise MCInstanceJarError(
                 "The ZIP is not stored locally and MD5_REPO_LOCATION is not configured."
             )
-        url = MCInstanceExport._artifact_url(repository_url, mod_name, filename)
         try:
-            with requests.get(url, stream=True, timeout=(5, 60)) as response:
+            source = Modversion.repository_artifact_source(
+                repository_location, mod_name, filename
+            )
+            if isinstance(source, Path):
+                if source.stat().st_size > _MAX_PACKAGE_SIZE:
+                    raise MCInstanceJarError(
+                        "The stored ZIP exceeds the 512 MiB conversion limit."
+                    )
+                shutil.copyfile(source, destination)
+                return
+
+            with requests.get(
+                source,
+                stream=True,
+                allow_redirects=False,
+                timeout=(5, 60),
+            ) as response:
+                if 300 <= response.status_code < 400:
+                    raise requests.RequestException(
+                        "Repository redirects are not allowed."
+                    )
                 response.raise_for_status()
                 content_length = int(response.headers.get("content-length", 0))
                 if content_length > _MAX_PACKAGE_SIZE:

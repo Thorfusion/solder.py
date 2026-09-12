@@ -20,30 +20,66 @@ function tablesearches(column) {
     }
 }
 
-// Filters a normal Bootstrap select without replacing its native behaviour.
-function dropdownsearches(inputId, selectId) {
+// Filters the entries inside a Bootstrap dropdown.
+function dropdownsearches(inputId, optionsId, noResultsId) {
     const input = document.getElementById(inputId);
-    const select = document.getElementById(selectId);
-    if (!input || !select) {
+    const options = document.getElementById(optionsId);
+    const noResults = document.getElementById(noResultsId);
+    if (!input || !options || !noResults) {
         return;
     }
 
     const filter = input.value.trim().toUpperCase();
-    for (const option of select.options) {
-        if (!option.value) {
-            option.hidden = false;
-            continue;
-        }
-        const text = option.textContent || option.innerText || "";
+    let matches = 0;
+    options.querySelectorAll("[data-searchable-option]").forEach(option => {
+        const text = option.textContent || "";
         option.hidden = !text.toUpperCase().includes(filter);
+        if (!option.hidden) {
+            matches += 1;
+        }
+    });
+    noResults.hidden = matches !== 0;
+}
+
+function togglesearchabledropdown(toggle) {
+    const menu = toggle.nextElementSibling;
+    if (!menu) {
+        return;
     }
 
-    const selected = select.options[select.selectedIndex];
-    if (selected && selected.hidden) {
-        select.value = "";
-        if (selectId === "modnames") {
-            hideoptions(selectId);
-        }
+    const opening = !menu.classList.contains("show");
+    menu.classList.toggle("show", opening);
+    toggle.setAttribute("aria-expanded", opening ? "true" : "false");
+    if (opening) {
+        menu.querySelector('input[type="search"]').focus();
+    }
+}
+
+function selectsearchabledropdown(option, valueId, labelId, toggleId, submitId) {
+    const value = document.getElementById(valueId);
+    const label = document.getElementById(labelId);
+    const toggle = document.getElementById(toggleId);
+    const submit = document.getElementById(submitId);
+    if (!option || !value || !label || !toggle || !submit) {
+        return false;
+    }
+
+    value.value = option.dataset.value;
+    label.textContent = option.textContent.trim();
+    submit.disabled = false;
+    const menu = option.closest(".dropdown-menu");
+    if (menu) {
+        menu.classList.remove("show");
+    }
+    toggle.setAttribute("aria-expanded", "false");
+    return true;
+}
+
+function selectbuildmod(option, valueId, labelId, toggleId, submitId) {
+    if (selectsearchabledropdown(
+        option, valueId, labelId, toggleId, submitId
+    )) {
+        hideoptions(valueId, option.dataset.integrationUrl || "");
     }
 }
 
@@ -78,11 +114,7 @@ function submitbuttonpress(id, val, submitid) {
     document.querySelector(submit2).click();
 }
 
-function submitbuttonpresswithurl(version, name, urlform, submitid) {
-    versionname = document.getElementById(version).value;
-    urllink = name + '/' + name + '-' + versionname + '.zip';
-    document.getElementById(urlform).value = urllink;
-
+function submitform(submitid) {
     submit2 = '[name="' + submitid + '"]';
     document.querySelector(submit2).click();
 }
@@ -168,7 +200,7 @@ function string_to_slug(str) {
     return str;
 }
 
-function hideoptions(optiontoshow) {
+function hideoptions(optiontoshow, integrationUrl) {
     const modSelect = document.getElementById(optiontoshow);
     const versionSelect = document.getElementById("modversion");
     if (!modSelect || !versionSelect) {
@@ -182,17 +214,19 @@ function hideoptions(optiontoshow) {
     });
     versionSelect.removeAttribute("data-integration-loaded");
 
-    versionSelect.querySelectorAll('[name="modlist"]').forEach(option => {
-        option.hidden = option.id !== "modversion_" + selected;
+    document.querySelectorAll('[name="modlist"]').forEach(option => {
+        option.setAttribute("hidden", "true");
+    });
+    document.querySelectorAll('[id="modversion_' + selected + '"]').forEach(option => {
+        option.removeAttribute("hidden");
     });
 
     const placeholder = versionSelect.querySelector('[name="modfirst"]');
-    placeholder.hidden = true;
+    placeholder.setAttribute("hidden", "true");
     placeholder.selected = true;
 
-    const selectedOption = modSelect.options[modSelect.selectedIndex];
-    if (selectedOption && selectedOption.dataset.integrationUrl) {
-        loadintegrationversions("modversion", selectedOption.dataset.integrationUrl);
+    if (integrationUrl) {
+        loadintegrationversions("modversion", integrationUrl);
     }
 }
 

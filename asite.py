@@ -3,6 +3,7 @@ from pathlib import Path
 import tempfile
 import threading
 import boto3
+import requests
 
 from api import solderpy_version
 from flask import Blueprint, app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -259,13 +260,29 @@ def newmodversion(id):
         if "rehash_id" not in request.form:
             return redirect(url_for('asite.clientlibrary'))
 
-        if request.form["rehash_md5"] != "":
-            version = Modversion.get_by_id(request.form["rehash_id"])
-            version.update_hash(request.form["rehash_md5"], md5_repo_url + request.form["rehash_url"])
-        else:
-            version = Modversion.get_by_id(request.form["rehash_id"])
-            t = threading.Thread(target=version.rehash, args=(md5_repo_url + request.form["rehash_url"],))
-            t.start()
+        mod = Mod.get_by_id(id)
+        version = Modversion.get_by_id(request.form["rehash_id"])
+        if (
+            mod is None
+            or version is None
+            or int(version.mod_id) != int(mod.id)
+        ):
+            flash("the selected mod version no longer exists", "error")
+            return redirect(url_for("asite.modversion", id=id))
+        try:
+            if request.form["rehash_md5"] != "":
+                version.update_hash(
+                    request.form["rehash_md5"], md5_repo_url, mod.name
+                )
+            else:
+                t = threading.Thread(
+                    target=version.rehash,
+                    args=(md5_repo_url, mod.name),
+                )
+                t.start()
+        except (OSError, requests.RequestException, ValueError) as error:
+            flash(str(error), "error")
+            return redirect(url_for("asite.modversion", id=id))
     if "newmodvermanual_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_create") == 0:
                 return redirect(request.referrer)
@@ -279,7 +296,15 @@ def newmodversion(id):
                 "error",
             )
             return redirect(url_for("asite.modversion", id=id))
-        filesie2 = Modversion.get_file_size(md5_repo_url + request.form["newmodvermanual_url"])
+        try:
+            filesie2 = Modversion.get_file_size(
+                md5_repo_url,
+                mod.name,
+                request.form["newmodvermanual_version"],
+            )
+        except (OSError, requests.RequestException, ValueError) as error:
+            flash(str(error), "error")
+            return redirect(url_for("asite.modversion", id=id))
         if request.form["newmodvermanual_md5"] != "":
             try:
                 Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0", modloader=request.form.get("newmodvermanual_modloader"))
@@ -288,7 +313,17 @@ def newmodversion(id):
         else:
             # Todo Add filesize rehash and md5 hash, if fails do not add
             try:
-                Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], "0", filesie2, "0", md5_repo_url + request.form["newmodvermanual_url"], modloader=request.form.get("newmodvermanual_modloader"))
+                Modversion.new(
+                    id,
+                    request.form["newmodvermanual_version"],
+                    request.form["newmodvermanual_mcversion"],
+                    "0",
+                    filesie2,
+                    "0",
+                    md5_repo_url,
+                    modloader=request.form.get("newmodvermanual_modloader"),
+                    repository_mod_slug=mod.name,
+                )
             except InvalidModloaderError as error:
                 flash(str(error), "error")
     return redirect(url_for("asite.modversion", id=id))

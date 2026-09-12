@@ -309,10 +309,21 @@ You dont actually need to store the files in mods but solder.py own hosting fold
 -e PUBLIC_REPO_LOCATION=https://solder.example.com/mods/
 ```
 
-This is the url solder.py uses to calculate md5 and filesize when rehashing or adding a mod manually. This is currently only url, so use localhost or local ip address if on the same network, else use same url as public repo url.
+This is the internal repository source solder.py uses to calculate MD5 hashes and file sizes when rehashing or adding a mod manually. It is separate from the public launcher URL and accepts either:
+
+- A direct HTTP(S) repository URL. Redirects are not followed, so configure the final URL.
+- An absolute local repository path, which avoids an HTTP request and is faster. Inside the Docker image, use the container path (normally `/app/mods/`), not the host-side volume path.
+
+Both forms must point to the repository root containing `<mod-slug>/<mod-slug>-<version>.zip`.
 
 ```bash
 -e MD5_REPO_LOCATION=https://solder.example.com/mods/
+```
+
+or:
+
+```bash
+-e MD5_REPO_LOCATION=/app/mods/
 ```
 
 #### Volumes
@@ -416,8 +427,8 @@ docker run -d \
   -e DB_USER=solderpyuser \
   -e DB_PASSWORD=solderpypassword \
   -e DB_DATABASE=solderpydb \
-  -e MD5_REPO_LOCATION=http://example.com/mods/ \
-  -e SOLDER_REPO_LOCATION=https://localhost/mods/ \
+  -e PUBLIC_REPO_LOCATION=https://solder.example.com/mods/ \
+  -e MD5_REPO_LOCATION=/app/mods/ \
   -e PROXY_IP=192.168.1.2\
   -p 80:5000 \
   -v /solderpy/mods:/app/mods \

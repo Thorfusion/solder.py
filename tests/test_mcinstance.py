@@ -311,6 +311,7 @@ class MCInstanceJarTests(unittest.TestCase):
         jar_data = b"legacy remote jar"
         package_data = self.legacy_package(jar_data)
         response = MagicMock()
+        response.status_code = 200
         response.headers = {"content-length": str(len(package_data))}
         response.iter_content.return_value = [package_data]
         response.__enter__ = Mock(return_value=response)
@@ -342,9 +343,47 @@ class MCInstanceJarTests(unittest.TestCase):
             "https://repo.example.test/mods/example-mod/"
             "example-mod-1.7.10-1.0.zip",
             stream=True,
+            allow_redirects=False,
             timeout=(5, 60),
         )
         response.raise_for_status.assert_called_once_with()
+        update_hash.assert_called_once_with(9, md5(jar_data))
+
+    def test_create_legacy_jar_reads_md5_repository_path(self):
+        jar_data = b"legacy repository jar"
+        package_data = self.legacy_package(jar_data)
+
+        with (
+            tempfile.TemporaryDirectory() as repository_directory,
+            tempfile.TemporaryDirectory() as local_directory,
+        ):
+            repository_mod = Path(repository_directory, "example-mod")
+            repository_mod.mkdir()
+            Path(
+                repository_mod, "example-mod-1.7.10-1.0.zip"
+            ).write_bytes(package_data)
+            with (
+                patch("models.mcinstance.requests.get") as get,
+                patch(
+                    "models.mcinstance.Modversion.update_modversion_jarmd5"
+                ) as update_hash,
+            ):
+                jar_hash = MCInstanceJar.create(
+                    self.mod(),
+                    self.version(package_data),
+                    repository_directory,
+                    local_directory,
+                )
+
+            final_jar = Path(
+                local_directory,
+                "example-mod",
+                "example-mod-1.7.10-1.0.jar",
+            )
+            self.assertEqual(final_jar.read_bytes(), jar_data)
+
+        self.assertEqual(jar_hash, md5(jar_data))
+        get.assert_not_called()
         update_hash.assert_called_once_with(9, md5(jar_data))
 
     def test_create_legacy_jar_rejects_a_changed_package(self):

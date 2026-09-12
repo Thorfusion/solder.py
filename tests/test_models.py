@@ -5,9 +5,10 @@ import unittest
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from mysql.connector import IntegrityError, errorcode
+from requests import RequestException
 
 from tests.environment import configure_test_environment
 
@@ -204,7 +205,14 @@ class ModelBehaviorTests(unittest.TestCase):
                     "pretty_name": "Library",
                 }
             ],
-            [{"id": 3, "name": "other", "pretty_name": "Other"}],
+            [
+                {
+                    "id": 3,
+                    "name": "other",
+                    "pretty_name": "Other",
+                    "integration_provider": "MODRINTH",
+                }
+            ],
         ]
 
         with patch(
@@ -215,6 +223,7 @@ class ModelBehaviorTests(unittest.TestCase):
 
         self.assertEqual(dependencies[0]["dependency_mod_id"], 2)
         self.assertEqual(available[0]["id"], 3)
+        self.assertEqual(available[0]["integration_provider"], "MODRINTH")
         self.assertEqual(cursor.execute.call_count, 2)
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
@@ -487,6 +496,151 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertEqual(version.modloader, "FABRIC")
         connection.cursor.return_value.close.assert_called_once_with()
         connection.close.assert_called_once_with()
+
+    def test_repository_file_source_keeps_the_configured_origin(self):
+        url = Modversion.repository_file_source(
+            "https://repo.example.test/mods/",
+            "@127.0.0.1",
+            "1.0+build #1",
+        )
+
+        self.assertEqual(
+            url,
+            "https://repo.example.test/mods/%40127.0.0.1/"
+            "%40127.0.0.1-1.0%2Bbuild%20%231.zip",
+        )
+
+    def test_repository_file_source_rejects_path_separators(self):
+        invalid_values = ("../admin", "..", "nested/path", "nested\\path")
+
+        for invalid in invalid_values:
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                Modversion.repository_file_source(
+                    "https://repo.example.test/mods/", invalid, "1.0"
+                )
+
+    def test_get_file_size_reads_a_confined_local_repository(self):
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory, "example", "example-1.0.zip")
+            package.parent.mkdir()
+            package.write_bytes(b"local package")
+
+            with patch("models.modversion.requests.head") as head:
+                file_size = Modversion.get_file_size(
+                    directory, "example", "1.0"
+                )
+
+        self.assertEqual(file_size, 13)
+        head.assert_not_called()
+
+    def test_get_file_size_uses_safe_url_without_redirects(self):
+        response = Mock(
+            status_code=200,
+            headers={"content-length": "123"},
+        )
+
+        with patch(
+            "models.modversion.requests.head", return_value=response
+        ) as head:
+            file_size = Modversion.get_file_size(
+                "https://repo.example.test/mods/", "example", "1.0"
+            )
+
+        self.assertEqual(file_size, 123)
+        head.assert_called_once_with(
+            "https://repo.example.test/mods/example/example-1.0.zip",
+            allow_redirects=False,
+            timeout=(5, 30),
+        )
+        response.raise_for_status.assert_called_once_with()
+        response.close.assert_called_once_with()
+
+    def test_get_file_size_rejects_repository_redirects(self):
+        response = Mock(
+            status_code=302,
+            headers={"location": "http://127.0.0.1/"},
+        )
+
+        with (
+            patch("models.modversion.requests.head", return_value=response),
+            self.assertRaisesRegex(RequestException, "redirects are not allowed"),
+        ):
+            Modversion.get_file_size(
+                "https://repo.example.test/mods/", "example", "1.0"
+            )
+
+        response.close.assert_called_once_with()
+
+    def test_rehash_uses_safe_url_and_does_not_follow_redirects(self):
+        response = MagicMock(status_code=200)
+        response.__enter__.return_value = response
+        response.iter_content.return_value = [b"file", b" contents"]
+        session = MagicMock()
+        session.__enter__.return_value = session
+        session.get.return_value = response
+        version = Modversion(
+            1,
+            2,
+            "1.0",
+            "1.20.1",
+            "0",
+            datetime.datetime.now(),
+            datetime.datetime.now(),
+            -1,
+        )
+
+        with (
+            patch("models.modversion.requests.Session", return_value=session),
+            patch.object(version, "update_hash") as update_hash,
+        ):
+            version.rehash(
+                "https://repo.example.test/mods/", "example"
+            )
+
+        session.get.assert_called_once_with(
+            "https://repo.example.test/mods/example/example-1.0.zip",
+            stream=True,
+            allow_redirects=False,
+            timeout=(5, 60),
+        )
+        response.raise_for_status.assert_called_once_with()
+        update_hash.assert_called_once_with(
+            hashlib.md5(b"file contents", usedforsecurity=False).hexdigest(),
+            "https://repo.example.test/mods/",
+            "example",
+            file_size=13,
+        )
+
+    def test_rehash_reads_a_local_repository_without_http(self):
+        version = Modversion(
+            1,
+            2,
+            "1.0",
+            "1.20.1",
+            "0",
+            datetime.datetime.now(),
+            datetime.datetime.now(),
+            -1,
+        )
+        package_data = b"local package"
+
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory, "example", "example-1.0.zip")
+            package.parent.mkdir()
+            package.write_bytes(package_data)
+            with (
+                patch("models.modversion.requests.Session") as session,
+                patch.object(version, "update_hash") as update_hash,
+            ):
+                version.rehash(directory, "example")
+
+        session.assert_not_called()
+        update_hash.assert_called_once_with(
+            hashlib.md5(package_data, usedforsecurity=False).hexdigest(),
+            directory,
+            "example",
+            file_size=len(package_data),
+        )
 
     def test_incompatible_modloader_is_rejected_before_adding_version(self):
         connection = Mock()
@@ -785,6 +939,7 @@ class ModelBehaviorTests(unittest.TestCase):
                     "name": "first",
                     "pretty_name": "First Mod",
                     "modid": 1,
+                    "integration_provider": "MODRINTH",
                 },
                 {
                     "id": 12,
@@ -843,6 +998,9 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertEqual(
             [version["id"] for version in editor.buildlist[0]["versions"]],
             [102, 101],
+        )
+        self.assertEqual(
+            editor.buildlist[0]["integration_provider"], "MODRINTH"
         )
         self.assertEqual(
             [version["id"] for version in editor.buildlist[1]["versions"]],

@@ -1,7 +1,10 @@
 from collections import deque
 import datetime
 import hashlib
+from pathlib import Path
+import re
 import threading
+from urllib.parse import quote, urlsplit, urlunsplit
 
 import requests
 
@@ -43,7 +46,24 @@ class Modversion:
         self.jarmd5 = jarmd5
 
     @classmethod
-    def new(cls, mod_id, version, mcversion, md5, filesize, markedbuild, url="0", jarmd5="0", modloader=None, integration_version_id=None):
+    def new(
+        cls,
+        mod_id,
+        version,
+        mcversion,
+        md5,
+        filesize,
+        markedbuild,
+        repository_base_url="0",
+        jarmd5="0",
+        modloader=None,
+        integration_version_id=None,
+        repository_mod_slug=None,
+    ):
+        if md5 == "0":
+            cls.repository_file_source(
+                repository_base_url, repository_mod_slug, version
+            )
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -77,7 +97,10 @@ class Modversion:
                 raise
         if md5 == "0":
             stored_version = Modversion.get_by_id(id)
-            t = threading.Thread(target=stored_version.rehash, args=(url,))
+            t = threading.Thread(
+                target=stored_version.rehash,
+                args=(repository_base_url, repository_mod_slug),
+            )
             t.start()
         return cls(
             id,
@@ -490,34 +513,164 @@ class Modversion:
             cur.close()
             conn.close()
 
-    def get_file_size(url):
-        response = requests.head(url)  # Only get headers, not content
-        file_size = int(response.headers.get('content-length', -1))  # Get file size from headers
+    @staticmethod
+    def _repository_component(component, label):
+        component = "" if component is None else str(component)
+        if (
+            component in {".", ".."}
+            or re.fullmatch(r"[^/\\\x00-\x1f]+", component) is None
+        ):
+            raise ValueError(f"Invalid repository {label}.")
+        return component
 
-        return file_size
-        # https://www.classace.io/answers/56cb76718f9932eba6153a625885309b
+    @classmethod
+    def repository_artifact_source(
+        cls, repository_location, mod_slug, filename
+    ):
+        """Return an authorized HTTP URL or confined local repository path."""
+        if not repository_location:
+            raise ValueError("MD5_REPO_LOCATION is not configured.")
 
-    def update_hash(self, md5, filesize_url):
+        mod_slug = cls._repository_component(mod_slug, "mod slug")
+        filename = cls._repository_component(filename, "filename")
+        location = str(repository_location)
+        base = urlsplit(location)
+        if base.scheme in {"http", "https"}:
+            if (
+                not base.hostname
+                or base.username is not None
+                or base.password is not None
+                or base.query
+                or base.fragment
+            ):
+                raise ValueError(
+                    "MD5_REPO_LOCATION must be a plain HTTP(S) URL."
+                )
+            repository_path = base.path.rstrip("/")
+            file_path = (
+                f"{repository_path}/{quote(mod_slug, safe='-._~')}/"
+                f"{quote(filename, safe='-._~')}"
+            )
+            return urlunsplit(
+                (base.scheme, base.netloc, file_path, "", "")
+            )
+
+        if "://" in location:
+            raise ValueError(
+                "MD5_REPO_LOCATION must be an HTTP(S) URL or local path."
+            )
+
+        repository_root = Path(location).expanduser().resolve()
+        source_path = (repository_root / mod_slug / filename).resolve()
+        try:
+            source_path.relative_to(repository_root)
+        except ValueError as error:
+            raise ValueError("Invalid local repository path.") from error
+        return source_path
+
+    @classmethod
+    def repository_file_source(
+        cls, repository_location, mod_slug, version
+    ):
+        mod_slug = cls._repository_component(mod_slug, "mod slug")
+        version = cls._repository_component(version, "version")
+        return cls.repository_artifact_source(
+            repository_location,
+            mod_slug,
+            f"{mod_slug}-{version}.zip",
+        )
+
+    @staticmethod
+    def get_file_size(repository_location, mod_slug, version):
+        source = Modversion.repository_file_source(
+            repository_location, mod_slug, version
+        )
+        if isinstance(source, Path):
+            return source.stat().st_size
+
+        response = requests.head(
+            source,
+            allow_redirects=False,
+            timeout=(5, 30),
+        )
+        try:
+            if 300 <= response.status_code < 400:
+                raise requests.RequestException(
+                    "Repository redirects are not allowed."
+                )
+            response.raise_for_status()
+            try:
+                file_size = int(response.headers.get("content-length", -1))
+            except (TypeError, ValueError):
+                return -1
+            return file_size if file_size >= 0 else -1
+        finally:
+            response.close()
+
+    def update_hash(self, md5, repository_location, mod_slug, file_size=None):
         conn = Database.get_connection()
         cur = conn.cursor()
-        file_size = Modversion.get_file_size(filesize_url)
-        if file_size != -1:
-            cur.execute("UPDATE modversions SET filesize = %s WHERE id = %s", (file_size, self.id))
-        cur.execute("UPDATE modversions SET md5 = %s WHERE id = %s", (md5, self.id))
-        conn.commit()
+        try:
+            if file_size is None:
+                file_size = Modversion.get_file_size(
+                    repository_location, mod_slug, self.version
+                )
+            if file_size != -1:
+                cur.execute(
+                    "UPDATE modversions SET filesize = %s WHERE id = %s",
+                    (file_size, self.id),
+                )
+            cur.execute(
+                "UPDATE modversions SET md5 = %s WHERE id = %s",
+                (md5, self.id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
         self.md5 = md5
         self.updated_at = datetime.datetime.now()
         print(f"Updated hash for {self.mod_id} {self.version} to {md5}")
         return self
 
-    def rehash(self, rehash_url):
-        with requests.Session() as s:
-            # Technic/Solder manifests require MD5 as a file checksum. It is not used for passwords, signatures, or another security purpose.
-            h = hashlib.md5(usedforsecurity=False)
-            resp = s.get(rehash_url, stream=True)
-            for chunk in resp.iter_content(chunk_size=8192):
-                h.update(chunk)
-            self.update_hash(h.hexdigest(), rehash_url)
+    def rehash(self, repository_location, mod_slug):
+        source = Modversion.repository_file_source(
+            repository_location, mod_slug, self.version
+        )
+        # Technic/Solder manifests require MD5 as a file checksum. It is not
+        # used for passwords, signatures, or another security purpose.
+        h = hashlib.md5(usedforsecurity=False)
+        file_size = 0
+        if isinstance(source, Path):
+            with source.open("rb") as repository_file:
+                while chunk := repository_file.read(8192):
+                    h.update(chunk)
+                    file_size += len(chunk)
+        else:
+            with requests.Session() as session:
+                with session.get(
+                    source,
+                    stream=True,
+                    allow_redirects=False,
+                    timeout=(5, 60),
+                ) as response:
+                    if 300 <= response.status_code < 400:
+                        raise requests.RequestException(
+                            "Repository redirects are not allowed."
+                        )
+                    response.raise_for_status()
+                    for chunk in response.iter_content(chunk_size=8192):
+                        h.update(chunk)
+                        file_size += len(chunk)
+        self.update_hash(
+            h.hexdigest(),
+            repository_location,
+            mod_slug,
+            file_size=file_size,
+        )
 
     def to_json(self):
         return {
