@@ -16,8 +16,8 @@ The complete read API, including Technic-compatible routes and solder.py server
 and optional-manifest extensions, is documented in the
 [API reference](docs/api.md).
 
-Management-side Modrinth and CurseForge imports are documented in the
-[provider integrations guide](docs/integrations.md).
+Management-side Modrinth imports are documented in the
+[Modrinth integration guide](docs/integrations.md).
 
 + **Easy install with docker**
 
@@ -43,13 +43,12 @@ Management-side Modrinth and CurseForge imports are documented in the
     to a build also adds the newest matching dependency version, including
     transitive dependencies, while preserving versions already in the build.
 
-  + **Modrinth and CurseForge integration**
+  + **Modrinth integration**
 
-    Search either provider from the management interface and link a project to
+    Search Modrinth from the management interface and link a project to
     the mod library without downloading every release. Selecting a compatible
-    provider version in a build downloads, verifies and packages it on demand.
-    Modrinth needs no key; every management user supplies their own CurseForge
-    API key.
+    version in a build downloads, verifies and packages it on demand. Modrinth
+    does not require an API key.
 
 + **API only mode**
 
@@ -84,7 +83,7 @@ Management-side Modrinth and CurseForge imports are documented in the
 
 + Maven integration
 
-## Modrinth and CurseForge imports
+## Modrinth imports
 
 Open **Browse mods** in the management menu to search and add provider-managed
 mods. No project file is downloaded at this stage. In a modpack build, select
@@ -93,11 +92,8 @@ upstream JAR, verifies the provider hash and file size, packages the JAR as a
 normal Solder ZIP, and records the local version. Re-selecting it reuses the
 stored version.
 
-CurseForge requires an API key. Each management user enters their own key on
-the Browse mods page; there is no shared key bundled with solder.py. Only
-available CurseForge projects whose authors allow third-party distribution can
-be imported. See the [provider integrations guide](docs/integrations.md) for
-storage, permissions and operational details.
+See the [Modrinth integration guide](docs/integrations.md) for storage,
+permissions and operational details.
 
 ## MCInstanceLoader exports
 
@@ -416,6 +412,21 @@ solder.py will run everything except api part of solder, quite rare usecase.
 ```bash
 -e MANAGEMENT_ONLY=True
 ```
+
+#### Writable API
+
+The authenticated write API is disabled by default. Enable it only on the
+trusted management deployment, such as the instance behind your VPN:
+
+```bash
+-e WRITE_API=True
+```
+
+Create the initial bearer token from **Settings → API Tokens** after logging
+in. Tokens use the owner's existing solder.py permissions and modpack access.
+`API_ONLY=True` remains read-only unless `WRITE_API=True` is also set; an API
+instance with writes enabled requires a database user with write permissions.
+See the [write API reference](docs/write-api.md) for routes and examples.
 
 #### Example
 

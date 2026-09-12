@@ -1,6 +1,6 @@
 # solder.py API reference
 
-This document describes the public, read-only HTTP API exposed by solder.py.
+This document describes the public read API exposed by solder.py.
 The standard routes and their default responses remain compatible with Technic
 Solder. solder.py-specific behavior is additive and uses query arguments or
 additional JSON fields.
@@ -14,20 +14,28 @@ For example:
 https://solder.example.com/api/modpack/example-pack/1.0
 ```
 
-All currently documented endpoints use `GET`. Unknown API routes and unsupported
-methods return JSON rather than the management interface's HTML error page.
+The optional authenticated write routes are documented separately in the
+[write API reference](write-api.md). Unknown API routes and unsupported methods
+return JSON rather than the management interface's HTML error page.
 
 Values placed in a path or query string must be URL encoded.
 
 ## Authentication and visibility
 
-The read API supports the two Technic-style credentials below. They are query
-arguments and can be used on modpack, build and mod-version requests.
+The read API supports the Technic-style credentials below on modpack, build
+and mod-version requests.
 
 | Argument | Meaning |
 | --- | --- |
 | `cid` | A launcher/client UUID. It grants access to private modpacks associated with that client. |
 | `k` | A configured Solder API key. A valid key grants read access to private modpacks and private published builds. |
+
+When `WRITE_API=True`, a personal token can also be sent in the
+`Authorization: Bearer {id}|{secret}` header. It grants read access to the
+modpacks assigned to that token's user, matching current Technic Solder.
+Users with `solder_full` access can read every published build. Invalid bearer
+credentials do not make otherwise-public read requests fail; they simply add
+no private access.
 
 If both are supplied and `k` is valid, API-key access is used.
 
@@ -45,8 +53,9 @@ Visibility is enforced as follows:
 An inaccessible private resource returns the same `404` response as a resource
 that does not exist.
 
-There is no public write API. `API_ONLY=True` can therefore be used on a public
-instance backed by a read-only database account.
+The write API is disabled by default. `API_ONLY=True` can therefore be used on
+a public instance backed by a read-only database account as long as
+`WRITE_API` remains disabled.
 
 ## Discover API capabilities
 
@@ -65,7 +74,8 @@ Example response:
     "build_channels": true,
     "build_comparison": true,
     "optional_manifests": true,
-    "server_manifests": true
+    "server_manifests": true,
+    "write_api": false
   }
 }
 ```

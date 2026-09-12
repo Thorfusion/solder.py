@@ -51,7 +51,7 @@ jobs:
         run: pipenv run python -m pip check
 
       - name: Compile Python sources
-        run: pipenv run python -m compileall -q app.py api.py alogin.py asetup.py asite.py audit_dependencies.py models tests
+        run: pipenv run python -m compileall -q app.py api.py api_write.py alogin.py asetup.py asite.py audit_dependencies.py models tests
 
       - name: Run test suite
         run: pipenv run python -m unittest discover -s tests -v
@@ -85,7 +85,7 @@ jobs:
         run: pipenv run python audit_dependencies.py
 
       - name: Scan Python source
-        run: pipenv run bandit --recursive app.py api.py alogin.py asetup.py asite.py models --severity-level medium --confidence-level medium
+        run: pipenv run bandit --recursive app.py api.py api_write.py alogin.py asetup.py asite.py models --severity-level medium --confidence-level medium
 
   dependency-review:
     name: Review dependency changes

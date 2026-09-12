@@ -13,6 +13,7 @@ new_user = False
 migratetechnic = False
 api_only = False
 management_only = False
+write_api = False
 debug = False
 reverse_proxy = False
 
@@ -31,6 +32,8 @@ if os.getenv("API_ONLY"):
     api_only = os.getenv("API_ONLY").lower() in ["true", "t", "1", "yes", "y"]
 if os.getenv("MANAGEMENT_ONLY"):
     management_only = os.getenv("MANAGEMENT_ONLY").lower() in ["true", "t", "1", "yes", "y"]
+if os.getenv("WRITE_API") or os.getenv("WRITABLE_API"):
+    write_api = (os.getenv("WRITE_API") or os.getenv("WRITABLE_API")).lower() in ["true", "t", "1", "yes", "y"]
 
 if os.getenv("APP_DEBUG"):
     debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]
@@ -58,7 +61,7 @@ R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
 R2_BUCKET = os.getenv("R2_BUCKET")
 
 DB_IS_UP = Database.is_setup()
-if DB_IS_UP == 1 and not api_only:
+if DB_IS_UP == 1 and (not api_only or write_api):
     if migratetechnic:
         schema_ready = Database.migratetechnic_tables()
     else:

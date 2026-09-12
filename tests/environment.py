@@ -17,6 +17,7 @@ TEST_ENVIRONMENT = {
     "DB_USER": "test",
     "DISABLE_is_setup": "true",
     "MANAGEMENT_ONLY": "false",
+    "WRITE_API": "false",
     "MD5_REPO_LOCATION": "https://cdn.example.test/mods/",
     "NEW_USER": "false",
     "PROXY_IP": "",

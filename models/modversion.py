@@ -443,7 +443,7 @@ class Modversion:
             return rows
         return []
 
-    def get_builds_api(self, cid=None, api_key=False):
+    def get_builds_api(self, cid=None, api_key=False, modpack_ids=None):
         """List published builds containing this version that the caller can read."""
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
@@ -466,6 +466,38 @@ class Modversion:
                          AND builds.is_published = 1
                        ORDER BY builds.id ASC""",
                     (self.id,),
+                )
+            elif modpack_ids:
+                placeholders = ", ".join(["%s"] * len(modpack_ids))
+                # Only the number of bound placeholders is dynamic.
+                cur.execute(
+                    f"""SELECT DISTINCT
+                              builds.id AS build_id,
+                              builds.version AS build_version,
+                              modpacks.id AS modpack_id,
+                              modpacks.slug AS modpack_slug,
+                              modpacks.name AS modpack_name,
+                              build_modversion.optional
+                       FROM build_modversion
+                       INNER JOIN builds
+                           ON build_modversion.build_id = builds.id
+                       INNER JOIN modpacks
+                           ON builds.modpack_id = modpacks.id
+                       WHERE build_modversion.modversion_id = %s
+                         AND builds.is_published = 1
+                         AND (
+                              (modpacks.private = 0 AND builds.private = 0)
+                              OR modpacks.id IN ({placeholders})
+                              OR EXISTS (
+                                  SELECT 1
+                                  FROM client_modpack cm
+                                  INNER JOIN clients c ON cm.client_id = c.id
+                                  WHERE cm.modpack_id = modpacks.id
+                                    AND c.uuid = %s
+                              )
+                         )
+                       ORDER BY builds.id ASC""",  # nosec B608
+                    (self.id, *modpack_ids, cid),
                 )
             else:
                 cur.execute(

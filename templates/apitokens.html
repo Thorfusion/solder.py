@@ -1,0 +1,45 @@
+{%extends "layout.html"%} {% set active_page = "apitokens" %}
+{%block head%}<title>API Tokens - solder.py</title>{%endblock%}
+{%block main%}
+<div class="container-fluid">
+    <h2>API Tokens</h2>
+    <p class="text-muted">Tokens use your existing solder.py permissions and modpack access.</p>
+    {%if new_token%}
+    <div class="alert alert-warning">
+        <strong>Copy this token now:</strong>
+        <code class="user-select-all">{{new_token.plaintext}}</code>
+    </div>
+    {%endif%}
+    <table class="table table-striped table-hover">
+        <thead class="table-light">
+            <tr><th>Name</th><th>Created</th><th>Last used</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+            {%for token in tokens%}
+            <tr>
+                <td>{{token.name}}</td>
+                <td>{{token.created_at or ''}}</td>
+                <td>{{token.last_used_at or 'Never'}}</td>
+                <td>
+                    <form method="post" action="{{url_for('asite.apitokens')}}">
+                        <input type="hidden" name="token_id" value="{{token.id}}">
+                        <button class="btn btn-danger" type="submit" name="delete_token" value="1">Revoke</button>
+                    </form>
+                </td>
+            </tr>
+            {%else%}
+            <tr><td colspan="4">No API tokens have been created.</td></tr>
+            {%endfor%}
+        </tbody>
+    </table>
+</div>
+{%endblock%}
+{%block aside%}
+<form method="post" action="{{url_for('asite.apitokens')}}">
+    <div class="mb-3">
+        <label class="form-label" for="token_name">Token name</label>
+        <input class="form-control" type="text" name="token_name" id="token_name" maxlength="255" required>
+    </div>
+    <button class="btn btn-success" type="submit" name="create_token" value="1">Create token</button>
+</form>
+{%endblock%}

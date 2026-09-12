@@ -9,6 +9,7 @@ from api import solderpy_version
 from flask import Blueprint, app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from models.build import Build
 from models.build_modversion import Build_modversion
+from models.api_token import ApiToken
 from models.client import Client
 from models.client_modpack import Client_modpack
 from models.compatibility import InvalidModloaderError
@@ -20,10 +21,7 @@ from models.mcinstance import (
     MCInstanceJar,
 )
 from models.integration import (
-    CURSEFORGE,
     MODRINTH,
-    CurseForgeProvider,
-    IntegrationCredential,
     IntegrationError,
     ModIntegration,
     external_id,
@@ -38,7 +36,7 @@ from models.session import Session
 from models.user import User
 from mysql import connector
 from werkzeug.utils import secure_filename
-from models.common import public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl
+from models.common import public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl, write_api
 from models.user_modpack import User_modpack
 from models.errorPrinter import ErrorPrinter
 
@@ -108,7 +106,12 @@ def inject_menu():
     markedbuildid2 = Build.get_marked_build()
     pinnedmodpacks = Modpack.get_by_pinned()
     
-    return dict(markedbuildid2=markedbuildid2, solderversion=solderpy_version, pinnedmodpacks=pinnedmodpacks)
+    return dict(
+        markedbuildid2=markedbuildid2,
+        solderversion=solderpy_version,
+        pinnedmodpacks=pinnedmodpacks,
+        write_api_enabled=write_api,
+    )
 
 
 @asite.route("/")
@@ -367,17 +370,7 @@ def integrations():
     user_id = Session.get_user_id(session["token"])
     if request.method == "POST":
         try:
-            if "save_curseforge_key" in request.form:
-                api_key = request.form.get("curseforge_api_key", "").strip()
-                provider = CurseForgeProvider(api_key)
-                if not provider.validate_credentials():
-                    raise IntegrationError("CurseForge rejected the API key.")
-                IntegrationCredential.set(user_id, CURSEFORGE, api_key)
-                flash("saved your CurseForge API key", "success")
-            elif "delete_curseforge_key" in request.form:
-                IntegrationCredential.delete(user_id, CURSEFORGE)
-                flash("removed your CurseForge API key", "success")
-            elif "import_project" in request.form:
+            if "import_project" in request.form:
                 mod, created = ModIntegration.import_project(
                     request.form.get("provider"),
                     request.form.get("project_id"),
@@ -404,9 +397,6 @@ def integrations():
     except IntegrationError:
         selected_provider = MODRINTH
     query = request.args.get("q", "").strip()[:100]
-    curseforge_configured = bool(
-        IntegrationCredential.get(user_id, CURSEFORGE)
-    )
     projects = []
     if query:
         try:
@@ -424,9 +414,7 @@ def integrations():
         provider=selected_provider,
         query=query,
         projects=projects,
-        curseforge_configured=curseforge_configured,
         modrinth=MODRINTH,
-        curseforge=CURSEFORGE,
     )
 
 
@@ -699,6 +687,48 @@ def userlibrary_post():
             return redirect(url_for('asite.userlibrary'))
 
     return redirect(url_for('asite.userlibrary'))
+
+
+@asite.route("/apitokens", methods=["GET", "POST"])
+def apitokens():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if not write_api:
+        return render_template("404.html", error="Not Found"), 404
+
+    user_id = Session.get_user_id(session["token"])
+    new_token = None
+    if request.method == "POST":
+        if "create_token" in request.form:
+            try:
+                new_token = ApiToken.create(
+                    user_id, request.form.get("token_name", "")
+                )
+                flash(
+                    "API token created. Copy it now; it will not be shown again.",
+                    "success",
+                )
+            except ValueError as error:
+                flash(str(error), "error")
+        elif "delete_token" in request.form:
+            try:
+                token_id = int(request.form.get("token_id", ""))
+            except (TypeError, ValueError):
+                flash("Invalid API token.", "error")
+            else:
+                if ApiToken.delete(token_id, user_id):
+                    flash("API token revoked.", "success")
+                else:
+                    flash("API token not found.", "error")
+            return redirect(url_for("asite.apitokens"))
+
+    return render_template(
+        "apitokens.html",
+        tokens=ApiToken.get_all(user_id),
+        new_token=new_token,
+    )
 
 
 @asite.route("/modpackbuild/<id>", methods=["GET", "POST"])

@@ -1,4 +1,4 @@
-"""CurseForge and Modrinth management-side mod integration."""
+"""Modrinth management-side mod integration."""
 
 from __future__ import annotations
 
@@ -18,14 +18,12 @@ import requests
 from werkzeug.utils import secure_filename
 
 from .compatibility import normalize_modloader
-from .database import Database
 from .mod import DuplicateModError, Mod
 from .modversion import Modversion
 
 
 MODRINTH = "MODRINTH"
-CURSEFORGE = "CURSEFORGE"
-SUPPORTED_PROVIDERS = (MODRINTH, CURSEFORGE)
+SUPPORTED_PROVIDERS = (MODRINTH,)
 SUPPORTED_LOADERS = (
     "FORGE",
     "NEOFORGE",
@@ -108,69 +106,6 @@ class MaterializedVersion:
     created: bool
 
 
-class IntegrationCredential:
-    """Store a provider API key for the management user who supplied it."""
-
-    @staticmethod
-    def get(user_id, provider):
-        conn = Database.get_connection()
-        cur = conn.cursor(dictionary=True)
-        try:
-            cur.execute(
-                """SELECT api_key FROM integration_credentials
-                   WHERE user_id = %s AND provider = %s""",
-                (user_id, normalize_provider(provider)),
-            )
-            row = cur.fetchone()
-            return row["api_key"] if row else None
-        finally:
-            cur.close()
-            conn.close()
-
-    @staticmethod
-    def set(user_id, provider, api_key):
-        provider = normalize_provider(provider)
-        api_key = str(api_key or "").strip()
-        if provider != CURSEFORGE:
-            raise IntegrationError("This provider does not require an API key.")
-        if not api_key or len(api_key) > 512:
-            raise IntegrationError("Enter a valid CurseForge API key.")
-
-        conn = Database.get_connection()
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                """INSERT INTO integration_credentials (user_id, provider, api_key)
-                   VALUES (%s, %s, %s)
-                   ON DUPLICATE KEY UPDATE api_key = VALUES(api_key)""",
-                (user_id, provider, api_key),
-            )
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cur.close()
-            conn.close()
-
-    @staticmethod
-    def delete(user_id, provider):
-        conn = Database.get_connection()
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                "DELETE FROM integration_credentials WHERE user_id = %s AND provider = %s",
-                (user_id, normalize_provider(provider)),
-            )
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            cur.close()
-            conn.close()
-
-
 def normalize_provider(provider):
     provider = str(provider or "").strip().upper()
     if provider not in SUPPORTED_PROVIDERS:
@@ -201,8 +136,7 @@ class ExternalProvider:
     provider = ""
     base_url = ""
 
-    def __init__(self, api_key=None, http=None):
-        self.api_key = api_key
+    def __init__(self, http=None):
         self.http = http or requests.Session()
 
     def _headers(self):
@@ -224,7 +158,7 @@ class ExternalProvider:
         try:
             if response.status_code in {401, 403}:
                 raise IntegrationError(
-                    f"{self.provider.title()} rejected the configured API key."
+                    f"{self.provider.title()} rejected the request."
                 )
             response.raise_for_status()
             payload = response.json()
@@ -237,9 +171,6 @@ class ExternalProvider:
         finally:
             response.close()
         return payload
-
-    def validate_credentials(self):
-        return True
 
     def resolve_download_url(self, version):
         return version.download_url
@@ -507,181 +438,9 @@ class ModrinthProvider(ExternalProvider):
         return version
 
 
-class CurseForgeProvider(ExternalProvider):
-    provider = CURSEFORGE
-    base_url = "https://api.curseforge.com/v1"
-    minecraft_game_id = 432
-    minecraft_mod_class_id = 6
-    loader_types = {
-        "FORGE": 1,
-        "LITELOADER": 3,
-        "FABRIC": 4,
-        "QUILT": 5,
-        "NEOFORGE": 6,
-    }
-
-    def __init__(self, api_key=None, http=None):
-        if not str(api_key or "").strip():
-            raise IntegrationError("Add your CurseForge API key before using CurseForge.")
-        super().__init__(str(api_key).strip(), http=http)
-
-    def _headers(self):
-        headers = super()._headers()
-        headers["x-api-key"] = self.api_key
-        return headers
-
-    def _download_host_allowed(self, hostname):
-        return hostname == "forgecdn.net" or hostname.endswith(".forgecdn.net")
-
-    def validate_credentials(self):
-        payload = self._request_json(f"/games/{self.minecraft_game_id}")
-        return int(payload.get("data", {}).get("id", 0)) == self.minecraft_game_id
-
-    @staticmethod
-    def _project(payload):
-        authors = payload.get("authors") or []
-        logo = payload.get("logo") or {}
-        slug = str(payload.get("slug") or payload.get("id") or "")
-        return ExternalProject(
-            provider=CURSEFORGE,
-            project_id=str(payload.get("id") or ""),
-            slug=slug,
-            title=str(payload.get("name") or "Unnamed project"),
-            description=str(payload.get("summary") or ""),
-            author=", ".join(
-                str(author.get("name")) for author in authors if author.get("name")
-            ),
-            link=f"https://www.curseforge.com/minecraft/mc-mods/{slug}",
-            icon_url=logo.get("thumbnailUrl") or logo.get("url"),
-            license=None,
-            side="BOTH",
-            distribution_allowed=payload.get("allowModDistribution") is True,
-            available=payload.get("isAvailable") is True,
-        )
-
-    def search(self, query, limit=30):
-        payload = self._request_json(
-            "/mods/search",
-            params={
-                "gameId": self.minecraft_game_id,
-                "classId": self.minecraft_mod_class_id,
-                "searchFilter": str(query or "").strip(),
-                "pageSize": min(max(int(limit), 1), 50),
-                "sortField": 2,
-                "sortOrder": "desc",
-            },
-        )
-        return [self._project(item) for item in payload.get("data", [])]
-
-    def get_project(self, project_id):
-        project_id = external_id(project_id)
-        payload = self._request_json(f"/mods/{project_id}").get("data") or {}
-        if int(payload.get("gameId", 0)) != self.minecraft_game_id:
-            raise IntegrationError("The selected CurseForge project is not for Minecraft.")
-        if int(payload.get("classId") or 0) != self.minecraft_mod_class_id:
-            raise IntegrationError("The selected CurseForge project is not a mod.")
-        project = self._project(payload)
-        if not project.author:
-            raise IntegrationError("CurseForge did not return a project author.")
-        if project.project_id != project_id:
-            raise IntegrationError("CurseForge returned a different project.")
-        return project
-
-    @classmethod
-    def _version(cls, payload):
-        hashes = {}
-        for item in payload.get("hashes", []):
-            algorithm = {1: "sha1", 2: "md5"}.get(item.get("algo"))
-            if algorithm and item.get("value"):
-                hashes[algorithm] = str(item["value"]).lower()
-        game_versions = tuple(str(value) for value in payload.get("gameVersions", []))
-        loaders = tuple(
-            loader for loader in SUPPORTED_LOADERS
-            if loader.lower() in {value.lower() for value in game_versions}
-        )
-        release_type = {1: "release", 2: "beta", 3: "alpha"}.get(
-            payload.get("releaseType"), "release"
-        )
-        return ExternalVersion(
-            provider=CURSEFORGE,
-            project_id=str(payload.get("modId") or ""),
-            version_id=str(payload.get("id") or ""),
-            name=str(payload.get("displayName") or payload.get("fileName") or "Unnamed version"),
-            version_number=str(payload.get("displayName") or payload.get("id") or "version"),
-            game_versions=game_versions,
-            loaders=loaders,
-            release_type=release_type,
-            date_published=payload.get("fileDate"),
-            filename=str(payload.get("fileName") or "mod.jar"),
-            download_url=payload.get("downloadUrl"),
-            hashes=hashes,
-            size=int(payload.get("fileLength") or payload.get("fileSizeOnDisk") or 0),
-            dependencies=tuple(
-                str(dependency.get("modId"))
-                for dependency in payload.get("dependencies", [])
-                if dependency.get("relationType") == 3 and dependency.get("modId")
-            ),
-        )
-
-    def list_versions(self, project_id, minecraft, modloader=None):
-        project_id = external_id(project_id)
-        params = {"gameVersion": str(minecraft), "pageSize": 50}
-        normalized_loader = normalize_modloader(modloader)
-        if normalized_loader:
-            loader_type = self.loader_types.get(normalized_loader)
-            if loader_type is None:
-                return []
-            params["modLoaderType"] = loader_type
-        payload = self._request_json(f"/mods/{project_id}/files", params=params)
-        versions = []
-        for item in payload.get("data", []):
-            if item.get("isAvailable") is False:
-                continue
-            version = self._version(item)
-            if str(minecraft) not in version.game_versions:
-                continue
-            if normalized_loader and normalized_loader not in version.loaders:
-                continue
-            if not version.filename.lower().endswith(".jar"):
-                continue
-            versions.append(version)
-        return versions
-
-    def get_version(self, project_id, version_id, minecraft, modloader=None):
-        project_id = external_id(project_id)
-        version_id = external_id(version_id)
-        payload = self._request_json(
-            f"/mods/{project_id}/files/{version_id}"
-        ).get("data") or {}
-        version = self._version(payload)
-        if version.project_id != str(project_id):
-            raise IntegrationError("The selected version belongs to another project.")
-        if str(minecraft) not in version.game_versions:
-            raise IntegrationError("The selected version does not support this Minecraft version.")
-        normalized_loader = normalize_modloader(modloader)
-        if normalized_loader and normalized_loader not in version.loaders:
-            raise IntegrationError("The selected version does not support this modloader.")
-        if not version.filename.lower().endswith(".jar"):
-            raise IntegrationError("The selected CurseForge file is not a JAR.")
-        return version
-
-    def resolve_download_url(self, version):
-        if version.download_url:
-            return version.download_url
-        payload = self._request_json(
-            f"/mods/{version.project_id}/files/{version.version_id}/download-url"
-        )
-        return payload.get("data")
-
-
 def provider_for_user(provider, user_id, *, http=None):
     provider = normalize_provider(provider)
-    if provider == MODRINTH:
-        return ModrinthProvider(http=http)
-    return CurseForgeProvider(
-        IntegrationCredential.get(user_id, CURSEFORGE),
-        http=http,
-    )
+    return ModrinthProvider(http=http)
 
 
 class ModIntegration:

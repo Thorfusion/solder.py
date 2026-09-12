@@ -53,6 +53,7 @@ class ApiTests(unittest.TestCase):
                     "build_comparison": True,
                     "optional_manifests": True,
                     "server_manifests": True,
+                    "write_api": False,
                 },
             },
         )
@@ -112,6 +113,76 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["modpacks"], {})
+
+    @patch.object(api_module, "write_api", True)
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    @patch.object(api_module.Modpack, "get_by_cid_api", return_value=[])
+    @patch.object(api_module.Modpack, "get_all_api")
+    @patch.object(api_module.ApiToken, "authenticate")
+    def test_bearer_read_lists_only_the_users_private_modpacks(
+        self, authenticate, get_all, _get_by_cid, _get_key
+    ):
+        from models.api_token import ApiPrincipal
+
+        authenticate.return_value = ApiPrincipal(
+            3, 7, {"modpacks": "2"}, frozenset()
+        )
+        get_all.return_value = [
+            SimpleNamespace(
+                id=1, slug="public", name="Public", hidden=0, private=0
+            ),
+            SimpleNamespace(
+                id=2, slug="assigned", name="Assigned", hidden=1, private=1
+            ),
+            SimpleNamespace(
+                id=3, slug="other", name="Other", hidden=1, private=1
+            ),
+        ]
+
+        response = self.client.get(
+            "/api/modpack", headers={"Authorization": "Bearer 3|secret"}
+        )
+
+        self.assertEqual(
+            response.get_json()["modpacks"],
+            {"assigned": "Assigned"},
+        )
+        authenticate.assert_called_once_with("Bearer 3|secret", touch=False)
+
+    @patch.object(api_module, "write_api", True)
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api", return_value=None)
+    @patch.object(api_module.Modpack, "get_all_by_slug_api")
+    @patch.object(api_module.ApiToken, "authenticate")
+    def test_bearer_read_can_fetch_an_assigned_private_build(
+        self, authenticate, get_modpack, _get_by_cid, _get_key
+    ):
+        from models.api_token import ApiPrincipal
+
+        authenticate.return_value = ApiPrincipal(
+            3, 7, {}, frozenset({2})
+        )
+        build = Mock(
+            id=7,
+            minecraft="1.21.1",
+            min_java="21",
+            min_memory=4096,
+            forge=None,
+        )
+        build.get_modversions_api.return_value = []
+        modpack = Mock(id=2, private=1)
+        modpack.get_build_api.return_value = build
+        get_modpack.return_value = modpack
+
+        response = self.client.get(
+            "/api/modpack/private/42",
+            headers={"Authorization": "Bearer 3|secret"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        modpack.get_build_api.assert_called_once_with(
+            "42", cid=None, api_key=True
+        )
 
     @patch.object(api_module.Modpack, "get_by_cid_api")
     @patch.object(api_module.Key, "get_key", return_value=None)

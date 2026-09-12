@@ -142,6 +142,36 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("function togglesearchabledropdown(toggle)", script_source)
         self.assertNotIn("bootstrap.Dropdown", script_source)
         self.assertNotIn('document.addEventListener("click"', script_source)
+        self.assertNotIn("solderpy_js_version", version_source)
+        self.assertNotIn("solderpy_js_version", build_source)
+
+    def test_user_can_create_a_write_api_token_from_management(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        created = {
+            "id": 9,
+            "name": "Deployment",
+            "plaintext": "9|copy-this-once",
+            "created_at": None,
+        }
+        with (
+            patch("asite.write_api", True),
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.Session.get_user_id", return_value=4),
+            patch("asite.ApiToken.create", return_value=created) as create,
+            patch("asite.ApiToken.get_all", return_value=[]),
+            patch("asite.Build.get_marked_build", return_value=0),
+            patch("asite.Modpack.get_by_pinned", return_value=[]),
+        ):
+            response = self.client.post(
+                "/apitokens",
+                data={"create_token": "1", "token_name": "Deployment"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"9|copy-this-once", response.data)
+        create.assert_called_once_with(4, "Deployment")
 
     def test_authenticated_user_can_download_mcinstance_export(self):
         with self.client.session_transaction() as flask_session:

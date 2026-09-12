@@ -34,6 +34,22 @@ CORE_TABLES = {
 
 
 class Database:
+    PERSONAL_ACCESS_TOKENS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS personal_access_tokens (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        tokenable_type VARCHAR(255) NOT NULL,
+        tokenable_id BIGINT UNSIGNED NOT NULL,
+        name TEXT NOT NULL,
+        token VARCHAR(64) NOT NULL UNIQUE,
+        abilities TEXT,
+        last_used_at TIMESTAMP NULL,
+        expires_at TIMESTAMP NULL,
+        created_at TIMESTAMP NULL,
+        updated_at TIMESTAMP NULL,
+        INDEX personal_access_tokens_tokenable_type_tokenable_id_index
+            (tokenable_type, tokenable_id),
+        INDEX personal_access_tokens_expires_at_index (expires_at)
+    )"""
+
     MOD_DEPENDENCIES_TABLE_SQL = """CREATE TABLE IF NOT EXISTS mod_dependencies (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         mod_id INT NOT NULL,
@@ -44,14 +60,14 @@ class Database:
         INDEX idx_mod_dependencies_dependency (dependency_mod_id)
     )"""
 
-    INTEGRATION_CREDENTIALS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS integration_credentials (
+    USER_MODPACK_TABLE_SQL = """CREATE TABLE IF NOT EXISTS user_modpack (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
         user_id INT NOT NULL,
-        provider VARCHAR(16) NOT NULL,
-        api_key VARCHAR(512) NOT NULL,
+        modpack_id INT NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY uq_integration_credentials_user_provider (user_id, provider)
+        INDEX idx_user_modpack_user_pack (user_id, modpack_id),
+        INDEX idx_user_modpack_pack_user (modpack_id, user_id)
     )"""
 
     MODLOADER_COLUMN_MIGRATIONS = (
@@ -155,6 +171,18 @@ class Database:
             ("user_id",),
             "ALTER TABLE user_permissions "
             "ADD INDEX idx_user_permissions_user (user_id)",
+        ),
+        (
+            "user_modpack",
+            ("user_id", "modpack_id"),
+            "ALTER TABLE user_modpack "
+            "ADD INDEX idx_user_modpack_user_pack (user_id, modpack_id)",
+        ),
+        (
+            "user_modpack",
+            ("modpack_id", "user_id"),
+            "ALTER TABLE user_modpack "
+            "ADD INDEX idx_user_modpack_pack_user (modpack_id, user_id)",
         ),
         (
             "clients",
@@ -378,7 +406,7 @@ class Database:
                         )"""
             )
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
-            cur.execute(Database.INTEGRATION_CREDENTIALS_TABLE_SQL)
+            cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS users (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -436,15 +464,7 @@ class Database:
                         INDEX idx_client_modpack_client_modpack (client_id, modpack_id)
                         )"""
             )
-            cur.execute(
-                """CREATE TABLE IF NOT EXISTS user_modpack (
-                        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                        user_id INT NOT NULL,
-                        modpack_id INT NOT NULL,
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                        )"""
-            )
+            cur.execute(Database.USER_MODPACK_TABLE_SQL)
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS `keys` (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -580,7 +600,7 @@ class Database:
                     cur.execute(query)
 
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
-            cur.execute(Database.INTEGRATION_CREDENTIALS_TABLE_SQL)
+            cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
 
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
@@ -590,15 +610,7 @@ class Database:
                     user_id INT NOT NULL
                 )"""
             )
-            cur.execute(
-                """CREATE TABLE IF NOT EXISTS user_modpack (
-                        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                        user_id INT NOT NULL,
-                        modpack_id INT NOT NULL,
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                )"""
-            )
+            cur.execute(Database.USER_MODPACK_TABLE_SQL)
             con.commit()
             print("technic database migrated!")
             return True
@@ -627,7 +639,8 @@ class Database:
             cur = con.cursor()
             Database.normalize_legacy_timestamps(cur)
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
-            cur.execute(Database.INTEGRATION_CREDENTIALS_TABLE_SQL)
+            cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
+            cur.execute(Database.USER_MODPACK_TABLE_SQL)
 
             for table, column, query in (
                 *Database.MODLOADER_COLUMN_MIGRATIONS,

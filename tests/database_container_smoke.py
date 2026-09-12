@@ -39,12 +39,14 @@ def database_environment(
     host: str,
     *,
     api_only: bool = False,
+    write_api: bool = False,
     user: str = DATABASE_USER,
     password: str = DATABASE_PASSWORD,
 ) -> list[str]:
     values = {
         "APP_PORT": "5000",
         "API_ONLY": str(api_only).lower(),
+        "WRITE_API": str(write_api).lower(),
         "AWS_EC2_METADATA_DISABLED": "true",
         "CACHE_SIZE": "100",
         "CACHE_TTL": "300",
@@ -240,6 +242,8 @@ def verify_performance_indexes(database_container: str) -> None:
         ("mods", "integration_provider,integration_project_id"),
         ("modversions", "mod_id,integration_version_id"),
         ("user_permissions", "user_id"),
+        ("user_modpack", "user_id,modpack_id"),
+        ("user_modpack", "modpack_id,user_id"),
         ("clients", "uuid"),
         ("keys", "api_key"),
     )
@@ -319,10 +323,9 @@ def verify_technic_migration(database_container: str) -> None:
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
         "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies', "
-        "'integration_credentials', "
         "'personal_access_tokens', 'password_reset_tokens');",
     )
-    if int(table_count) != 6:
+    if int(table_count) != 5:
         raise AssertionError(
             "Migration did not preserve the current Technic tables and create "
             "the solder.py tables"
@@ -419,17 +422,26 @@ def verify_fresh_schema(database_container: str) -> None:
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
         "AND TABLE_NAME = 'integration_credentials';",
     )
-    if integration_table_count != "1":
-        raise AssertionError("Fresh schema did not create integration credentials")
+    if integration_table_count != "0":
+        raise AssertionError("Fresh schema still creates CurseForge credentials")
 
     unwanted_table_count = mysql(
         database_container,
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
-        "AND TABLE_NAME IN ('personal_access_tokens', 'password_reset_tokens');",
+        "AND TABLE_NAME = 'password_reset_tokens';",
     )
     if unwanted_table_count != "0":
-        raise AssertionError("Fresh schema added unused Technic authentication tables")
+        raise AssertionError("Fresh schema added the unused password-reset table")
+
+    token_table_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME = 'personal_access_tokens';",
+    )
+    if token_table_count != "1":
+        raise AssertionError("Fresh schema did not create write API tokens")
 
     user_id_definition = mysql(
         database_container,
@@ -707,6 +719,216 @@ def request_json(endpoint: str) -> dict:
     if status != 200:
         raise AssertionError(f"{endpoint} returned HTTP {status}: {payload}")
     return payload
+
+
+def write_request_json(
+    endpoint: str,
+    token: str,
+    *,
+    method: str = "POST",
+    payload: dict | None = None,
+) -> tuple[int, dict]:
+    parsed = urllib.parse.urlsplit(endpoint)
+    if parsed.scheme != "http" or parsed.hostname != "127.0.0.1":
+        raise ValueError(f"Refusing non-loopback test endpoint: {endpoint}")
+    data = None if payload is None else json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        endpoint,
+        data=data,
+        method=method,
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:  # nosec B310
+            return response.status, json.load(response)
+    except urllib.error.HTTPError as error:
+        return error.code, json.load(error)
+
+
+def seed_write_api_token(database_container: str) -> str:
+    secret = "ci-write-token-not-a-secret"
+    digest = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    tokenable_type = r"App\Models\User".encode("utf-8").hex()
+    mysql(
+        database_container,
+        "DELETE FROM personal_access_tokens WHERE name = 'CI write test'; "
+        "INSERT INTO personal_access_tokens "
+        "(tokenable_type, tokenable_id, name, token, abilities, created_at, updated_at) "
+        f"VALUES (UNHEX('{tokenable_type}'), 1, 'CI write test', '{digest}', "
+        "'[\"*\"]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);",
+    )
+    token_id = mysql(
+        database_container,
+        "SELECT id FROM personal_access_tokens WHERE name = 'CI write test';",
+    )
+    return f"{token_id}|{secret}"
+
+
+def exercise_write_api(base_url: str, database_container: str, token: str) -> None:
+    capabilities = request_json(f"{base_url}/api/").get("capabilities", {})
+    if capabilities.get("write_api") is not True:
+        raise AssertionError("WRITE_API did not register in the production image")
+
+    status, _ = write_request_json(
+        f"{base_url}/api/mod",
+        "1|invalid",
+        payload={"name": "unauthorized", "pretty_name": "Unauthorized"},
+    )
+    if status != 401:
+        raise AssertionError(f"Invalid write token returned HTTP {status}")
+
+    status, created_mod = write_request_json(
+        f"{base_url}/api/mod",
+        token,
+        payload={
+            "name": "ci-write-mod",
+            "pretty_name": "CI Write Mod",
+            "author": "CI",
+            "side": "SERVER",
+            "modtype": "CONFIG",
+            "notes": "private write API note",
+            "dependencies": [1],
+        },
+    )
+    if status != 201 or created_mod.get("side") != "SERVER":
+        raise AssertionError(f"Write API did not create a mod: {status} {created_mod}")
+
+    status, created_version = write_request_json(
+        f"{base_url}/api/mod/ci-write-mod/version",
+        token,
+        payload={
+            "version": "1.21.1-1.0",
+            "minecraft": "ignored",
+            "mcversion": "1.21.1",
+            "modloader": None,
+            "md5": "abababababababababababababababab",
+            "filesize": 2048,
+        },
+    )
+    if status != 201 or created_version.get("mcversion") != "1.21.1":
+        raise AssertionError(
+            f"Write API did not create a mod version: {status} {created_version}"
+        )
+
+    status, membership = write_request_json(
+        f"{base_url}/api/modpack/ci-example-pack/1.0/mod",
+        token,
+        payload={
+            "mod_slug": "ci-write-mod",
+            "mod_version": "1.21.1-1.0",
+            "optional": True,
+        },
+    )
+    if status != 201:
+        raise AssertionError(
+            f"Write API did not add a mod to a build: {status} {membership}"
+        )
+    optional = mysql(
+        database_container,
+        "SELECT build_modversion.optional FROM build_modversion "
+        "INNER JOIN modversions ON build_modversion.modversion_id = modversions.id "
+        "INNER JOIN mods ON modversions.mod_id = mods.id "
+        "WHERE build_modversion.build_id = 1 AND mods.name = 'ci-write-mod';",
+    )
+    if optional != "1":
+        raise AssertionError("Write API did not preserve optional build status")
+
+    status, created_pack = write_request_json(
+        f"{base_url}/api/modpack",
+        token,
+        payload={
+            "name": "CI Write Pack",
+            "slug": "ci-write-pack",
+            "private": True,
+            "enable_optionals": True,
+            "enable_server": True,
+        },
+    )
+    if status != 201 or created_pack.get("enable_server") is not True:
+        raise AssertionError(
+            f"Write API did not create a modpack: {status} {created_pack}"
+        )
+    status, created_build = write_request_json(
+        f"{base_url}/api/modpack/ci-write-pack/build",
+        token,
+        payload={
+            "version": "1.0",
+            "minecraft": "1.21.1",
+            "modloader": "FABRIC",
+        },
+    )
+    if status != 201 or created_build.get("modloader") != "FABRIC":
+        raise AssertionError(
+            f"Write API did not create a build: {status} {created_build}"
+        )
+
+    anonymous_status, _ = request_json_with_status(
+        f"{base_url}/api/modpack/ci-write-pack/1.0"
+    )
+    if anonymous_status != 404:
+        raise AssertionError(
+            f"Private write-API modpack was public: HTTP {anonymous_status}"
+        )
+    status, private_build = write_request_json(
+        f"{base_url}/api/modpack/ci-write-pack/1.0",
+        token,
+        method="GET",
+    )
+    if status != 200 or private_build.get("minecraft") != "1.21.1":
+        raise AssertionError(
+            "Bearer token could not read its assigned private build: "
+            f"{status} {private_build}"
+        )
+    permission_scope = mysql(
+        database_container,
+        "SELECT modpacks FROM user_permissions WHERE user_id = 1;",
+    ).split(",")
+    if str(created_pack["id"]) not in permission_scope:
+        raise AssertionError("Write API did not update Technic modpack permissions")
+
+    status, created_client = write_request_json(
+        f"{base_url}/api/client",
+        token,
+        payload={"name": "CI Write Client", "uuid": "ci-write-client"},
+    )
+    if status != 201:
+        raise AssertionError(
+            f"Write API did not create a client: {status} {created_client}"
+        )
+    status, updated_client = write_request_json(
+        f"{base_url}/api/client/ci-write-client",
+        token,
+        method="PUT",
+        payload={"modpacks": [created_pack["id"]]},
+    )
+    if status != 200:
+        raise AssertionError(
+            f"Write API did not update a client: {status} {updated_client}"
+        )
+
+    status, tokens = write_request_json(
+        f"{base_url}/api/token", token, method="GET"
+    )
+    if status != 200 or len(tokens.get("tokens", [])) != 1:
+        raise AssertionError(f"Write API did not list user tokens: {status} {tokens}")
+
+    status, new_token = write_request_json(
+        f"{base_url}/api/token",
+        token,
+        payload={"name": "CI child token"},
+    )
+    if status != 201 or "plaintext" not in new_token.get("token", {}):
+        raise AssertionError(f"Write API did not create a token: {status} {new_token}")
+    child_id = new_token["token"]["id"]
+    status, revoked = write_request_json(
+        f"{base_url}/api/token/{child_id}", token, method="DELETE"
+    )
+    if status != 200:
+        raise AssertionError(f"Write API did not revoke a token: {status} {revoked}")
 
 
 def wait_for_application(container: str, endpoint: str) -> None:
@@ -1233,7 +1455,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             network,
             "--publish",
             "127.0.0.1:0:5000",
-            *database_environment("mysql"),
+            *database_environment("mysql", write_api=True),
             image,
             capture_output=True,
         )
@@ -1242,6 +1464,8 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         ).strip()
         base_url = f"http://127.0.0.1:{port_mapping.rsplit(':', 1)[1]}"
         wait_for_application(application_container, f"{base_url}/api/")
+        write_token = seed_write_api_token(database_container)
+        exercise_write_api(base_url, database_container, write_token)
         if fixture is not None and fixture.name == "solderpy.sql":
             legacy_notes = mysql(
                 database_container,
@@ -1290,9 +1514,9 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             f"WHERE TABLE_SCHEMA = '{DATABASE}' "
             "AND TABLE_NAME = 'integration_credentials';",
         )
-        if integration_table_count != "1":
+        if integration_table_count != "0":
             raise AssertionError(
-                "Application startup did not create integration_credentials"
+                "Application startup still creates CurseForge credentials"
             )
         mysql(
             database_container,

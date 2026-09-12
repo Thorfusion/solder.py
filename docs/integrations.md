@@ -1,16 +1,14 @@
-# Modrinth and CurseForge integrations
+# Modrinth integration
 
 These integrations belong to the solder.py management interface. They do not
 change the public Technic-compatible read API or expose provider IDs and API
 keys to launchers.
 
-Upstream references: [Modrinth API](https://docs.modrinth.com/api/) and
-[CurseForge REST API](https://docs.curseforge.com/rest-api/).
+Upstream reference: [Modrinth API](https://docs.modrinth.com/api/).
 
 ## How an import works
 
-1. Open **Browse mods**, choose Modrinth or CurseForge, and search for a
-   Minecraft mod.
+1. Open **Browse mods** and search Modrinth for a Minecraft mod.
 2. Add the project. solder.py creates a linked mod-library entry but downloads
    no version files.
 3. Open a modpack build and select that mod. The version dropdown requests only
@@ -30,29 +28,13 @@ deleted like other Solder versions.
 
 ## API keys
 
-Modrinth's public read endpoints do not need a key.
-
-CurseForge requires an API key in the `x-api-key` request header. Every
-management user enters and removes their own key in the **Browse mods** page.
-solder.py validates a key before saving it and never renders the stored value
-back into a page or public API response.
-
-The key must remain retrievable so solder.py can make later CurseForge calls.
-It is stored in the `integration_credentials` database table rather than
-hashed. Protect database access and backups accordingly. No CurseForge key is
-included in the application, image, source code, or environment defaults.
-
-## CurseForge distribution rules
-
-solder.py checks the project again both when it is linked and before each lazy
-download. A CurseForge project is accepted only when it is available and
-`allowModDistribution` is explicitly true. Files from a disabled or
-non-distributable project are not imported.
+Modrinth's public read endpoints do not need a key. solder.py does not store a
+provider credential for this integration.
 
 ## Permissions
 
-- `mods_create` is required to search providers, manage the current user's
-  CurseForge key, and add a provider project to the mod library.
+- `mods_create` is required to search Modrinth and add a project to the mod
+  library.
 - `mods_manage` and `modpacks_manage` are required to list or materialize a
   provider version for a build.
 - The normal per-modpack permission check still applies.
@@ -65,10 +47,10 @@ The runtime schema updater adds three nullable fields to existing installations:
 - `mods.integration_project_id`
 - `modversions.integration_version_id`
 
-It also creates `integration_credentials`. Existing Technic Solder and
-solder.py 1.7.4 rows remain valid because all provider fields are nullable. The
-provider metadata stays private to the management side; normal manifest data
-continues to use local Solder names, versions, URLs and hashes.
+Existing Technic Solder and solder.py 1.7.4 rows remain valid because all
+provider fields are nullable. The provider metadata stays private to the
+management side; normal manifest data continues to use local Solder names,
+versions, URLs and hashes.
 
 ## Upstream dependencies
 

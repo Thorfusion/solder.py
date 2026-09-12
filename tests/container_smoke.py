@@ -68,7 +68,11 @@ def main(image: str) -> None:
             try:
                 with urllib.request.urlopen(endpoint, timeout=3) as response:
                     payload = json.load(response)
-                if response.status == 200 and payload.get("api") == "solder.py":
+                if (
+                    response.status == 200
+                    and payload.get("api") == "solder.py"
+                    and payload.get("capabilities", {}).get("write_api") is False
+                ):
                     print(f"Container smoke test passed: {payload}")
                     return
                 last_error = RuntimeError(

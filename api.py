@@ -3,21 +3,37 @@ import json
 from threading import RLock
 
 from cachetools import cached, TTLCache
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
-from models.common import cache_size, cache_ttl, public_repo_url, solderpy_version
+from models.common import (
+    cache_size,
+    cache_ttl,
+    public_repo_url,
+    solderpy_version,
+    write_api,
+)
+from models.api_token import ApiToken
 from models.key import Key
 from models.mod import Mod
 from models.mod_dependency import ModDependency
 from models.modpack import Modpack
 
 api = Blueprint("api", __name__)
+_api_caches = []
 
 
 def _api_cached(key):
     # Gunicorn serves this application with multiple threads, while cachetools
     # cache objects require external synchronization for shared access.
-    return cached(TTLCache(cache_size, cache_ttl), key=key, lock=RLock())
+    cache = TTLCache(cache_size, cache_ttl)
+    _api_caches.append(cache)
+    return cached(cache, key=key, lock=RLock())
+
+
+def clear_api_caches():
+    """Discard read responses after a successful write in this process."""
+    for cache in _api_caches:
+        cache.clear()
 
 
 def _cache_key(*path_parts):
@@ -28,7 +44,20 @@ def _cache_key(*path_parts):
         (name, tuple(request.args.getlist(name)))
         for name in sorted(request.args.keys())
     )
-    return (*path_parts, query_arguments)
+    principal = _read_principal()
+    bearer_identity = principal.cache_identity if principal else None
+    return (*path_parts, query_arguments, bearer_identity)
+
+
+def _read_principal():
+    """Authenticate Technic-style read requests when write API is enabled."""
+    if not write_api:
+        return None
+    if not hasattr(g, "read_api_principal"):
+        g.read_api_principal = ApiToken.authenticate(
+            request.headers.get("Authorization"), touch=False
+        )
+    return g.read_api_principal
 
 
 def _has_valid_api_key():
@@ -36,9 +65,23 @@ def _has_valid_api_key():
     return bool(supplied_key and Key.get_key(supplied_key))
 
 
-def _get_accessible_modpack(slug, cid, api_key):
+def _principal_can_access(principal, modpack):
+    return bool(principal and principal.can_access_modpack(modpack.id))
+
+
+def _get_accessible_modpack(slug, cid, api_key, principal=None):
     if api_key:
         return Modpack.get_all_by_slug_api(slug)
+    if principal:
+        if principal.permissions.get("solder_full"):
+            return Modpack.get_all_by_slug_api(slug)
+        client_visible = Modpack.get_by_cid_slug_api(cid, slug)
+        if client_visible:
+            return client_visible
+        modpack = Modpack.get_all_by_slug_api(slug)
+        if modpack and _principal_can_access(principal, modpack):
+            return modpack
+        return None
     return Modpack.get_by_cid_slug_api(cid, slug)
 
 
@@ -223,6 +266,7 @@ def api_info():
                 "build_comparison": True,
                 "optional_manifests": True,
                 "server_manifests": True,
+                "write_api": write_api,
             },
         }
     )
@@ -252,15 +296,29 @@ def verify_key(key: str = None):
 def modpack():
     cid = request.args.get("cid")
     api_key = _has_valid_api_key()
+    principal = _read_principal()
     if api_key:
         modpacks = Modpack.get_all_api()
+    elif principal and principal.permissions.get("solder_full"):
+        modpacks = Modpack.get_all_api()
+    elif principal:
+        client_visible = {
+            current.id: current for current in Modpack.get_by_cid_api(cid)
+        }
+        for current in Modpack.get_all_api():
+            if _principal_can_access(principal, current):
+                client_visible[current.id] = current
+        modpacks = sorted(client_visible.values(), key=lambda current: current.id)
     else:
         modpacks = Modpack.get_by_cid_api(cid)
     if request.args.get("include") == "full":
         full_modpacks = {}
         for current_modpack in modpacks:
+            privileged = api_key or _principal_can_access(
+                principal, current_modpack
+            )
             current_modpack.builds = current_modpack.get_builds_api(
-                cid=cid, api_key=api_key
+                cid=cid, api_key=privileged
             )
             full_modpacks[current_modpack.slug] = current_modpack.to_json()
         return jsonify({"modpacks": full_modpacks, "mirror_url": public_repo_url})
@@ -280,12 +338,16 @@ def modpack():
 def modpack_slug(slug: str):
     cid = request.args.get("cid")
     api_key = _has_valid_api_key()
-    current_modpack = _get_accessible_modpack(slug, cid, api_key)
+    principal = _read_principal()
+    current_modpack = _get_accessible_modpack(
+        slug, cid, api_key, principal
+    )
     if not current_modpack:
         return jsonify({"error": "Modpack does not exist"}), 404
 
+    privileged = api_key or _principal_can_access(principal, current_modpack)
     current_modpack.builds = current_modpack.get_builds_api(
-        cid=cid, api_key=api_key
+        cid=cid, api_key=privileged
     )
     return jsonify(current_modpack.to_json())
 
@@ -297,12 +359,16 @@ def modpack_slug(slug: str):
 def modpack_slug_build(slugstring: str, buildstring: str):
     cid = request.args.get("cid")
     api_key = _has_valid_api_key()
-    current_modpack = _get_accessible_modpack(slugstring, cid, api_key)
+    principal = _read_principal()
+    current_modpack = _get_accessible_modpack(
+        slugstring, cid, api_key, principal
+    )
     if not current_modpack:
         return jsonify({"error": "Modpack does not exist"}), 404
 
+    privileged = api_key or _principal_can_access(principal, current_modpack)
     build, buildtag = _get_requested_build(
-        current_modpack, buildstring, cid, api_key
+        current_modpack, buildstring, cid, privileged
     )
     if not build:
         return jsonify({"error": "Build does not exist"}), 404
@@ -357,7 +423,7 @@ def modpack_slug_build(slugstring: str, buildstring: str):
     from_version = request.args.get("from")
     if from_version:
         previous_build = _get_build_by_version_or_channel(
-            current_modpack, from_version, cid, api_key
+            current_modpack, from_version, cid, privileged
         )
         if not previous_build:
             return jsonify({"error": "Comparison build does not exist"}), 404
@@ -428,7 +494,13 @@ def mod_name_version(name: str, version: str):
         getattr(modversion, "modloader", None)
     )
     res["dependencies"] = ModDependency.get_by_mod_api(mod.id)
-    res["builds"] = modversion.get_builds_api(
-        cid=request.args.get("cid"), api_key=_has_valid_api_key()
-    )
+    principal = _read_principal()
+    build_query = {
+        "cid": request.args.get("cid"),
+        "api_key": _has_valid_api_key()
+        or bool(principal and principal.permissions.get("solder_full")),
+    }
+    if principal and not principal.permissions.get("solder_full"):
+        build_query["modpack_ids"] = principal.accessible_modpack_ids
+    res["builds"] = modversion.get_builds_api(**build_query)
     return jsonify(res)

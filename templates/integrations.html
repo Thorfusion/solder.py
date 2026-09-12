@@ -5,17 +5,11 @@
 {%block main%}
 <div class="container-fluid">
     <h2>Browse mods</h2>
-    <p class="text-muted">Link a provider project now. Files are downloaded and packaged only when you select a compatible version for a build.</p>
+    <p class="text-muted">Link a Modrinth project now. Files are downloaded and packaged only when you select a compatible version for a build.</p>
 
     <form method="get" action="{{url_for('asite.integrations')}}" class="row g-2 mb-4">
-        <div class="col-md-3">
-            <label for="provider" class="form-label">Provider</label>
-            <select class="form-select" name="provider" id="provider">
-                <option value="modrinth" {%if provider == modrinth%}selected{%endif%}>Modrinth</option>
-                <option value="curseforge" {%if provider == curseforge%}selected{%endif%}>CurseForge</option>
-            </select>
-        </div>
-        <div class="col-md-7">
+        <input type="hidden" name="provider" value="modrinth">
+        <div class="col-md-10">
             <label for="q" class="form-label">Search</label>
             <input type="search" class="form-control" name="q" id="q" value="{{query}}" maxlength="100" placeholder="Search Minecraft mods" required>
         </div>
@@ -23,10 +17,6 @@
             <button class="btn btn-primary w-100" type="submit">Search</button>
         </div>
     </form>
-
-    {%if provider == curseforge and not curseforge_configured%}
-    <div class="alert alert-warning">Add your CurseForge API key on this page before searching CurseForge.</div>
-    {%endif%}
 
     {%if query and projects%}
     <div class="list-group">
@@ -64,30 +54,5 @@
     {%elif query%}
     <p>No matching mods were found.</p>
     {%endif%}
-</div>
-{%endblock%}
-
-{%block aside%}
-<div>
-    <h4>CurseForge API key</h4>
-    <p>The key is saved only for your solder.py user and is never displayed again.</p>
-    {%if curseforge_configured%}
-    <div class="alert alert-success">A CurseForge API key is configured.</div>
-    {%endif%}
-    <form method="post" action="{{url_for('asite.integrations')}}" autocomplete="off">
-        <input type="hidden" name="provider" value="curseforge">
-        <div class="mb-3">
-            <label for="curseforge_api_key" class="form-label">API key</label>
-            <input type="password" class="form-control" name="curseforge_api_key" id="curseforge_api_key" maxlength="512" required autocomplete="new-password">
-        </div>
-        <button class="btn btn-success" type="submit" name="save_curseforge_key" value="1">Save key</button>
-    </form>
-    {%if curseforge_configured%}
-    <form method="post" action="{{url_for('asite.integrations')}}" class="mt-3">
-        <input type="hidden" name="provider" value="curseforge">
-        <button class="btn btn-danger" type="submit" name="delete_curseforge_key" value="1">Remove key</button>
-    </form>
-    {%endif%}
-    <p class="mt-3"><small>Only CurseForge projects that explicitly allow third-party distribution can be added.</small></p>
 </div>
 {%endblock%}

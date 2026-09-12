@@ -13,12 +13,9 @@ from tests.environment import configure_test_environment
 configure_test_environment()
 
 from models.integration import (  # noqa: E402
-    CURSEFORGE,
     MODRINTH,
-    CurseForgeProvider,
     ExternalProject,
     ExternalVersion,
-    IntegrationCredential,
     IntegrationError,
     ModIntegration,
     ModrinthProvider,
@@ -135,54 +132,6 @@ class ProviderTests(unittest.TestCase):
             "/project/AABBCCDD/members", http.get.call_args_list[1].args[0]
         )
 
-    def test_curseforge_project_uses_the_returned_authors(self):
-        project = CurseForgeProvider._project(
-            {
-                "id": 123,
-                "name": "Example Mod",
-                "slug": "example-mod",
-                "authors": [
-                    {"name": "Owner"},
-                    {"name": "Contributor"},
-                ],
-                "allowModDistribution": True,
-                "isAvailable": True,
-            }
-        )
-
-        self.assertEqual(project.author, "Owner, Contributor")
-
-    def test_curseforge_requires_a_user_key(self):
-        with self.assertRaisesRegex(IntegrationError, "API key"):
-            CurseForgeProvider("")
-
-    def test_curseforge_distribution_flag_is_preserved(self):
-        http = Mock()
-        http.get.return_value = json_response(
-            {
-                "data": {
-                    "id": 123,
-                    "gameId": 432,
-                    "classId": 6,
-                    "name": "Restricted Mod",
-                    "slug": "restricted-mod",
-                    "summary": "No redistribution",
-                    "links": {},
-                    "authors": [{"name": "Owner"}],
-                    "allowModDistribution": False,
-                    "isAvailable": True,
-                }
-            }
-        )
-
-        project = CurseForgeProvider("user-key", http=http).get_project("123")
-
-        self.assertFalse(project.distribution_allowed)
-        self.assertTrue(project.available)
-        self.assertEqual(
-            http.get.call_args.kwargs["headers"]["x-api-key"], "user-key"
-        )
-
     def test_untrusted_provider_download_url_is_rejected(self):
         provider = ModrinthProvider(http=Mock())
         version = ExternalVersion(
@@ -268,23 +217,6 @@ class ProviderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(IntegrationError, "SHA512"):
                 provider.download(version, Path(directory, "example.jar"))
-
-
-class CredentialTests(unittest.TestCase):
-    def test_user_can_store_their_own_curseforge_key(self):
-        connection = Mock()
-        cursor = connection.cursor.return_value
-        with patch(
-            "models.integration.Database.get_connection",
-            return_value=connection,
-        ):
-            IntegrationCredential.set(7, CURSEFORGE, "personal-key")
-
-        parameters = cursor.execute.call_args.args[1]
-        self.assertEqual(parameters, (7, CURSEFORGE, "personal-key"))
-        connection.commit.assert_called_once_with()
-        cursor.close.assert_called_once_with()
-        connection.close.assert_called_once_with()
 
 
 class MaterializationTests(unittest.TestCase):

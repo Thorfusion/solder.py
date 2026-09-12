@@ -19,6 +19,7 @@ COPY /models/ /app/models/
 COPY /static/ /app/static/
 COPY /templates/ /app/templates/
 COPY /api.py /app/
+COPY /api_write.py /app/
 COPY /app.py /app/
 COPY /alogin.py /app/
 COPY /asetup.py /app/
