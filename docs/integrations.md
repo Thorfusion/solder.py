@@ -65,6 +65,12 @@ The modloader configured on an artifact is copied into rule-generated version
 mappings. Individual version rows may override it. A blank modloader is
 loader-agnostic.
 
+Maven mods use a server-generated `<repository name>-<mod name>` Solder slug.
+The form initially copies the artifact ID into the mod name, then uses the same
+slug conversion as the normal new-mod form. You can edit the mod name before
+submitting; the server regenerates and validates the final slug. Repository
+badges identify the exact configured Maven source rather than only "Maven".
+
 Standard `.sha512`, `.sha256`, `.sha1`, and `.md5` sidecars are checked in that
 order. When the repository publishes no sidecar, solder.py still streams the
 download through its size limit, calculates its local hashes, and validates the
@@ -91,6 +97,48 @@ embedded credentials are rejected.
   provider version for a build.
 - `mods_manage` is required to edit and refresh Maven version mappings.
 - The normal per-modpack permission check still applies.
+
+## Batch integration manifests
+
+**Browse mods** can import a reviewed JSON manifest containing up to 250
+Modrinth projects and Maven artifacts. This lets a person or AI resolve a
+written mod list to stable Modrinth project IDs or exact Maven coordinates
+before an administrator imports it. The importer never guesses from a name.
+
+Start from the
+[example integration manifest](../static/examples/integration-manifest.json).
+Its root contract is:
+
+```json
+{
+  "format": "solder.py-integration-manifest",
+  "version": 1,
+  "mods": []
+}
+```
+
+A Modrinth item requires `provider: "modrinth"` and `project_id`. A Maven item
+requires `provider: "maven"`, a `repository` object containing `name` and
+`url`, plus `group_id` and `artifact_id`. Maven items can also set `classifier`,
+`modloader`, and a Minecraft mapping:
+
+```json
+"minecraft": {
+  "mode": "EMBEDDED",
+  "pattern": "{minecraft}-{version}"
+}
+```
+
+Use `FIXED` with `version`, or `MANUAL` when releases will be mapped later.
+Both provider types accept reviewed `name`, `description`, `author`, `link`,
+and `side` (`BOTH`, `CLIENT`, or `SERVER`). Metadata is applied only when a new
+local mod is created; existing mods are never overwritten.
+
+The complete file is validated before provider calls begin. Files are limited
+to 512 KiB. Maven entries require `mods_create`, `solder_env`, and the form's
+redistribution confirmation because they may add a trusted repository URL.
+Modrinth-only manifests require `mods_create`. Individual provider failures are
+reported while other valid items continue importing.
 
 ## Database compatibility
 

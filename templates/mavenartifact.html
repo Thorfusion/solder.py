@@ -8,7 +8,7 @@
     <div class="d-flex justify-content-between align-items-start gap-3">
         <div>
             <h2>{{artifact.title}}</h2>
-            <p><code>{{artifact.coordinates}}</code> from {{artifact.repository_name}}</p>
+            <p><code>{{artifact.coordinates}}</code> from <span class="badge bg-info text-dark">{{artifact.repository_name}}</span></p>
         </div>
         <form method="post"><button class="btn btn-primary" name="refresh_versions" value="1">Refresh Maven metadata</button></form>
     </div>
@@ -23,7 +23,7 @@
         <tbody>
         {%for version in versions%}
         <tr class="{%if not version.available%}text-muted{%endif%}">
-            <td>{{version.upstream_version}}</td>
+            <td>{{version.upstream_version}} <span class="badge bg-info text-dark">{{artifact.repository_name}}</span></td>
             <td><input class="form-control" name="minecraft" value="{{version.minecraft or ''}}" form="mapping_{{version.id}}"></td>
             <td><input class="form-control" name="mod_version" value="{{version.mod_version or ''}}" form="mapping_{{version.id}}"></td>
             <td>
@@ -59,7 +59,7 @@
 <form method="post">
     <div class="mb-3">
         <label for="version_mode" class="form-label">Minecraft mapping</label>
-        <select class="form-select" name="version_mode" id="version_mode">
+        <select class="form-select" name="version_mode" id="version_mode" onchange="updatemavenmappingfields('version_mode', 'version_pattern');">
             <option value="EMBEDDED" {%if artifact.version_mode == 'EMBEDDED'%}selected{%endif%}>Contained in Maven version</option>
             <option value="FIXED" {%if artifact.version_mode == 'FIXED'%}selected{%endif%}>Always one Minecraft version</option>
             <option value="MANUAL" {%if artifact.version_mode == 'MANUAL'%}selected{%endif%}>Manual per version</option>
@@ -67,7 +67,7 @@
     </div>
     <div class="mb-3">
         <label for="version_pattern" class="form-label">Embedded format</label>
-        <input class="form-control" name="version_pattern" id="version_pattern" value="{{artifact.version_pattern}}">
+        <input class="form-control" name="version_pattern" id="version_pattern" value="{%if artifact.version_mode == 'FIXED'%}{version}{%else%}{{artifact.version_pattern}}{%endif%}" {%if artifact.version_mode == 'FIXED'%}readonly{%endif%}>
         <div class="form-text">Example: {minecraft}-{version}</div>
     </div>
     <div class="mb-3">
@@ -89,4 +89,5 @@
 <p><a href="{{url_for('asite.modversion', id=artifact.mod_id)}}">Open mod versions</a></p>
 <p><a href="{{url_for('asite.maven')}}">Back to Maven</a></p>
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
+<script>updatemavenmappingfields('version_mode', 'version_pattern');</script>
 {%endblock%}

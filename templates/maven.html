@@ -8,38 +8,13 @@
     <h2>Maven</h2>
     <p class="text-muted">Configure standard Maven coordinates. Metadata is read without downloading JARs; a JAR is downloaded and packaged only when its version is selected for a build.</p>
 
-    <h4>Configured artifacts</h4>
-    {%if artifacts%}
-    <table class="table table-striped table-hover">
-        <thead><tr><th>Mod</th><th>Coordinates</th><th>Repository</th><th>Mapping</th><th></th></tr></thead>
-        <tbody>
-        {%for artifact in artifacts%}
-        <tr>
-            <td>{{artifact.title}} ({{artifact.slug}})</td>
-            <td><code>{{artifact.coordinates}}</code></td>
-            <td>{{artifact.repository_name}}</td>
-            <td>
-                {%if artifact.version_mode == 'FIXED'%}Always {{artifact.fixed_minecraft}}
-                {%elif artifact.version_mode == 'EMBEDDED'%}<code>{{artifact.version_pattern}}</code>
-                {%else%}Manual per version{%endif%}
-            </td>
-            <td>{%if can_manage_mods%}<a class="btn btn-secondary" href="{{url_for('asite.maven_artifact', artifact_id=artifact.id)}}">Manage versions</a>{%endif%}</td>
-        </tr>
-        {%endfor%}
-        </tbody>
-    </table>
-    {%else%}
-    <p>No Maven artifacts have been configured.</p>
-    {%endif%}
-
     {%if repositories and can_create_mods%}
-    <hr>
     <h4>Add Maven mod</h4>
     <form method="post" action="{{url_for('asite.maven')}}" class="row g-3 mb-4">
         <div class="col-md-4">
             <label for="repository_id" class="form-label">Repository</label>
-            <select class="form-select" name="repository_id" id="repository_id" required>
-                {%for repository in repositories%}<option value="{{repository.id}}">{{repository.name}}</option>{%endfor%}
+            <select class="form-select" name="repository_id" id="repository_id" onchange="updatemavenslug();" required>
+                {%for repository in repositories%}<option value="{{repository.id}}" data-name="{{repository.name}}">{{repository.name}}</option>{%endfor%}
             </select>
         </div>
         <div class="col-md-4">
@@ -48,7 +23,7 @@
         </div>
         <div class="col-md-4">
             <label for="artifact_id" class="form-label">Artifact ID</label>
-            <input class="form-control" name="artifact_id" id="artifact_id" placeholder="Mekanism-Community-Edition" required>
+            <input class="form-control" name="artifact_id" id="artifact_id" placeholder="Mekanism-Community-Edition" oninput="updatemavenmodname();" required>
         </div>
         <div class="col-md-4">
             <label for="classifier" class="form-label">Classifier</label>
@@ -60,7 +35,7 @@
         </div>
         <div class="col-md-3">
             <label for="version_mode" class="form-label">Minecraft mapping</label>
-            <select class="form-select" name="version_mode" id="version_mode" required>
+            <select class="form-select" name="version_mode" id="version_mode" onchange="updatemavenmappingfields('version_mode', 'version_pattern');" required>
                 <option value="EMBEDDED">Contained in Maven version</option>
                 <option value="FIXED">Always one Minecraft version</option>
                 <option value="MANUAL">Manual per version</option>
@@ -86,11 +61,11 @@
         </div>
         <div class="col-md-4">
             <label for="title" class="form-label">Mod name</label>
-            <input class="form-control" name="title" id="title" required>
+            <input class="form-control" name="title" id="title" oninput="updatemavenslug();" required>
         </div>
         <div class="col-md-4">
             <label for="slug" class="form-label">Solder slug</label>
-            <input class="form-control" name="slug" id="slug" required>
+            <input class="form-control" name="slug" id="slug" readonly>
         </div>
         <div class="col-md-4">
             <label for="author" class="form-label">Author</label>
@@ -122,7 +97,36 @@
     {%elif can_create_mods%}
     <p>Add a Maven repository before adding an artifact.</p>
     {%endif%}
+
+    <hr>
+    <h4>Configured artifacts</h4>
+    {%if artifacts%}
+    <div class="mb-3 tablewidthsearch">
+        <input type="search" class="form-control" id="search" placeholder="Search configured artifacts" onkeyup="tablesearches(0);">
+    </div>
+    <table class="table table-striped table-hover maxheighttable table-sm" id="table">
+        <thead class="table-light sticky-md-top"><tr><th>Mod</th><th>Coordinates</th><th>Repository</th><th>Mapping</th><th></th></tr></thead>
+        <tbody>
+        {%for artifact in artifacts%}
+        <tr>
+            <td>{{artifact.title}} ({{artifact.slug}})</td>
+            <td><code>{{artifact.coordinates}}</code></td>
+            <td><span class="badge bg-info text-dark">{{artifact.repository_name}}</span></td>
+            <td>
+                {%if artifact.version_mode == 'FIXED'%}Always {{artifact.fixed_minecraft}}
+                {%elif artifact.version_mode == 'EMBEDDED'%}<code>{{artifact.version_pattern}}</code>
+                {%else%}Manual per version{%endif%}
+            </td>
+            <td>{%if can_manage_mods%}<a class="btn btn-secondary" href="{{url_for('asite.maven_artifact', artifact_id=artifact.id)}}">Manage versions</a>{%endif%}</td>
+        </tr>
+        {%endfor%}
+        </tbody>
+    </table>
+    {%else%}
+    <p>No Maven artifacts have been configured.</p>
+    {%endif%}
 </div>
+<script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 {%endblock%}
 {%block aside%}
 <h5>Repositories</h5>

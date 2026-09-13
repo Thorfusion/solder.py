@@ -56,6 +56,12 @@ Management-side Modrinth and Maven imports are documented in the
     classifier. solder.py reads `maven-metadata.xml`, maps upstream releases to
     Minecraft versions, and downloads only the release selected for a build.
 
+  + **Reviewed integration manifest import**
+
+    Import JSON resolved to Modrinth project IDs or exact Maven coordinates,
+    with optional name, description, author, link, side, modloader, and
+    Minecraft mapping metadata.
+
 + **API only mode**
 
   Host a public api with only read permission to database and have another instance with manegement in your local network
@@ -133,6 +139,10 @@ The **Export MCIL** action on a modpack's build list creates the
 uses the public repository URLs. Build create/edit forms store the modloader
 and its optional version (in Technic's existing `forge` version column) for
 `metadata.packconfig`.
+
+The build editor also exports Technic-compatible CSV with the columns
+`mod_name`, `mod_slug`, `version`, `md5`, and `filesize`. Choose **Export mod
+list**, then **CSV (Technic)** or **MCIL**.
 
 The export maps Solder packages as follows:
 

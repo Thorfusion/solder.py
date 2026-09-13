@@ -867,7 +867,7 @@ def create_maven_artifact():
             _optional_string(data, "version_pattern") or DEFAULT_VERSION_PATTERN,
             _optional_string(data, "fixed_minecraft") or None,
             _loader(data, default=None),
-            _slug(data, required=True),
+            _optional_string(data, "slug"),
             _string(data, "title", required=True),
             _optional_string(data, "description"),
             _optional_string(data, "author"),

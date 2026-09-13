@@ -874,6 +874,9 @@ def exercise_maven_write_api(
             f"Write API did not import Maven metadata: {status} {artifact}"
         )
     artifact_id = artifact["artifact"]["id"]
+    mod_slug = artifact["artifact"]["slug"]
+    if mod_slug != "ci-maven-ci-maven-mod":
+        raise AssertionError(f"Unexpected repository-prefixed Maven slug: {mod_slug}")
     mapping_id = artifact["versions"][0]["id"]
     integration_id = artifact["versions"][0]["integration_version_id"]
     status, mapped = write_request_json(
@@ -918,7 +921,7 @@ def exercise_maven_write_api(
 
     status, versions = write_request_json(
         f"{base_url}/api/modpack/ci-example-pack/1.0/mod/"
-        "ci-maven-mod/integration-versions",
+        f"{mod_slug}/integration-versions",
         token,
         method="GET",
     )
@@ -931,7 +934,7 @@ def exercise_maven_write_api(
         f"{base_url}/api/modpack/ci-example-pack/1.0/mod",
         token,
         payload={
-            "mod_slug": "ci-maven-mod",
+            "mod_slug": mod_slug,
             "integration_version_id": integration_id,
         },
     )
@@ -946,13 +949,13 @@ def exercise_maven_write_api(
         "modversions.mcversion, LENGTH(modversions.md5), "
         "LENGTH(modversions.jarmd5) FROM mods "
         "INNER JOIN modversions ON modversions.mod_id = mods.id "
-        "WHERE mods.name = 'ci-maven-mod';",
+        f"WHERE mods.name = '{mod_slug}';",
     )
     if stored != "MAVEN\t1.21.1-2.0-ci\t1.21.1\t32\t32":
         raise AssertionError(f"Unexpected stored Maven version: {stored}")
     for filename in (
-        "/app/mods/ci-maven-mod/ci-maven-mod-1.21.1-2.0-ci.jar",
-        "/app/mods/ci-maven-mod/ci-maven-mod-1.21.1-2.0-ci.zip",
+        f"/app/mods/{mod_slug}/{mod_slug}-1.21.1-2.0-ci.jar",
+        f"/app/mods/{mod_slug}/{mod_slug}-1.21.1-2.0-ci.zip",
     ):
         result = subprocess.run(
             ["docker", "exec", application_container, "test", "-f", filename],

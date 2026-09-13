@@ -432,10 +432,17 @@ class Dashboard:
                                   END
                               ) AS detail,
                               mods.integration_provider,
+                              COALESCE(maven_repositories.name,
+                                       mods.integration_provider)
+                                  AS integration_label,
                               COALESCE(modversions.updated_at,
                                        modversions.created_at) AS updated_at
                        FROM modversions
                        INNER JOIN mods ON modversions.mod_id = mods.id
+                       LEFT JOIN maven_artifacts
+                           ON maven_artifacts.mod_id = mods.id
+                       LEFT JOIN maven_repositories
+                           ON maven_artifacts.repository_id = maven_repositories.id
                        ORDER BY updated_at DESC, modversions.id DESC LIMIT 8"""
                 )
                 recent.extend(cur.fetchall() or [])

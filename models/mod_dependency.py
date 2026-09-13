@@ -100,10 +100,18 @@ class ModDependency:
                 """SELECT mod_dependencies.id,
                           mods.id AS dependency_mod_id,
                           mods.name,
-                          mods.pretty_name
+                          mods.pretty_name,
+                          mods.integration_provider,
+                          COALESCE(maven_repositories.name,
+                                   mods.integration_provider)
+                              AS integration_label
                    FROM mod_dependencies
                    INNER JOIN mods
                        ON mod_dependencies.dependency_mod_id = mods.id
+                   LEFT JOIN maven_artifacts
+                       ON maven_artifacts.mod_id = mods.id
+                   LEFT JOIN maven_repositories
+                       ON maven_artifacts.repository_id = maven_repositories.id
                    WHERE mod_dependencies.mod_id = %s
                    ORDER BY mods.pretty_name, mods.name""",
                 (mod_id,),
@@ -112,8 +120,15 @@ class ModDependency:
 
             cur.execute(
                 """SELECT mods.id, mods.name, mods.pretty_name,
-                          mods.integration_provider
+                          mods.integration_provider,
+                          COALESCE(maven_repositories.name,
+                                   mods.integration_provider)
+                              AS integration_label
                    FROM mods
+                   LEFT JOIN maven_artifacts
+                       ON maven_artifacts.mod_id = mods.id
+                   LEFT JOIN maven_repositories
+                       ON maven_artifacts.repository_id = maven_repositories.id
                    WHERE mods.id <> %s
                      AND NOT EXISTS (
                          SELECT 1

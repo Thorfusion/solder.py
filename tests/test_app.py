@@ -50,7 +50,9 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("/integrations", routes)
         self.assertIn("/maven", routes)
         self.assertIn("/maven/<int:artifact_id>", routes)
+        self.assertIn("/integrations/manifest", routes)
         self.assertIn("/modpackbuild/<int:id>/mcinstance", routes)
+        self.assertIn("/modpackbuild/<int:id>/csv", routes)
         self.assertIn(
             "/modpackbuild/<int:build_id>/integration-versions/<int:mod_id>",
             routes,
@@ -180,7 +182,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         self.assertIn("selectsearchabledropdown(this", version_source)
         self.assertIn(
-            '<span class="badge bg-info text-dark">{{dependency.integration_provider|title}}</span>',
+            '<span class="badge bg-info text-dark">{{dependency.integration_label}}</span>',
             version_source,
         )
         self.assertIn(
@@ -210,17 +212,19 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn('type="hidden" name="modnames" id="modnames"', build_source)
         self.assertIn("selectbuildmod(this", build_source)
         self.assertIn(
-            '<span class="badge bg-info text-dark">{{lmod.integration_provider|title}}</span>',
+            '<span class="badge bg-info text-dark">{{lmod.integration_label}}</span>',
             build_source,
         )
         self.assertIn(
-            '<span class="badge bg-info text-dark">{{combo.integration_provider|title}}</span>',
+            '<span class="badge bg-info text-dark">{{combo.integration_label}}</span>',
             build_source,
         )
         self.assertIn('name="update_all_mods_submit"', build_source)
         self.assertIn('form="update_all_mods_form"', build_source)
         self.assertIn('id="update_all_mods_form"', build_source)
         self.assertIn('<div class="d-flex gap-2 mt-3">', build_source)
+        self.assertIn('>CSV (Technic)</a>', build_source)
+        self.assertIn('>MCIL</a>', build_source)
 
         script_source = (
             Path(__file__).resolve().parents[1] / "static" / "js" / "solderpy.js"
@@ -339,6 +343,67 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(b"Example Maven", response.data)
         self.assertIn(b"Contained in Maven version", response.data)
         self.assertIn(b"Add Maven mod", response.data)
+        self.assertLess(
+            response.data.index(b"Add Maven mod"),
+            response.data.index(b"Configured artifacts"),
+        )
+        self.assertIn(b'data-name="Example Maven"', response.data)
+        self.assertIn(b"updatemavenmodname", response.data)
+
+    def test_authenticated_user_can_export_technic_csv(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        build = SimpleNamespace(modpack_slug="example-pack", version="2.0")
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Build.get_modpackid_by_id", return_value=3),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch(
+                "asite.BuildCsvExport.load",
+                return_value=(build, [{"mod_name": "Example"}]),
+            ),
+            patch(
+                "asite.BuildCsvExport.render",
+                return_value=io.BytesIO(b"mod_name,mod_slug,version,md5,filesize\n"),
+            ),
+        ):
+            response = self.client.get("/modpackbuild/7/csv")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "text/csv")
+        self.assertIn(
+            "example-pack_2.0.csv", response.headers["Content-Disposition"]
+        )
+
+    def test_maven_manifest_requires_environment_permission(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        manifest = Mock(includes_maven=True)
+
+        def permission(_token, permission):
+            return 0 if permission == "solder_env" else 1
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", side_effect=permission),
+            patch(
+                "asite.IntegrationManifest.parse", return_value=manifest
+            ),
+        ):
+            response = self.client.post(
+                "/integrations/manifest",
+                data={"redistribution_confirmed": "1"},
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/integrations")
+        manifest.import_all.assert_not_called()
 
     def test_integration_version_error_does_not_expose_exception_details(self):
         with self.client.session_transaction() as flask_session:

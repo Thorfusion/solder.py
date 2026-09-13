@@ -8,6 +8,7 @@ import requests
 from api import solderpy_version
 from flask import Blueprint, app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
 from models.build import Build
+from models.build_export import BuildCsvExport, BuildExportError
 from models.build_modversion import Build_modversion
 from models.api_token import ApiToken
 from models.client import Client
@@ -29,6 +30,10 @@ from models.integration import (
     external_id,
     normalize_provider,
     provider_for_user,
+)
+from models.integration_manifest import (
+    IntegrationManifest,
+    IntegrationManifestError,
 )
 from models.maven import (
     DEFAULT_VERSION_PATTERN,
@@ -430,7 +435,45 @@ def integrations():
         query=query,
         projects=projects,
         modrinth=MODRINTH,
+        can_manage_repositories=bool(
+            User.get_permission_token(session["token"], "solder_env")
+        ),
     )
+
+
+@asite.route("/integrations/manifest", methods=["POST"])
+def import_integration_manifest():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "mods_create") == 0:
+        return redirect(url_for("asite.index"))
+
+    try:
+        manifest = IntegrationManifest.parse(request.files.get("manifest"))
+        if manifest.includes_maven:
+            if User.get_permission_token(session["token"], "solder_env") == 0:
+                raise IntegrationManifestError(
+                    "Environment permission is required for Maven manifest entries."
+                )
+            if request.form.get("redistribution_confirmed") != "1":
+                raise IntegrationManifestError(
+                    "Confirm permission to download and rehost Maven artifacts."
+                )
+        result = manifest.import_all(Session.get_user_id(session["token"]))
+    except IntegrationManifestError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.integrations"))
+
+    flash(
+        f"Manifest import: {result.created} added, "
+        f"{result.existing} already configured, {len(result.errors)} failed.",
+        "success" if not result.errors else "error",
+    )
+    for error in result.errors[:10]:
+        flash(error, "error")
+    return redirect(url_for("asite.integrations"))
 
 
 @asite.route("/maven", methods=["GET", "POST"])
@@ -1144,6 +1187,36 @@ def export_mcinstance(id):
     return send_file(
         archive,
         mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@asite.route("/modpackbuild/<int:id>/csv", methods=["GET"])
+def export_build_csv(id):
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+        return redirect(url_for("asite.modpacklibrary"))
+
+    modpack_id = Build.get_modpackid_by_id(id)
+    if not modpack_id or not User_modpack.get_user_modpackpermission(
+        session["token"], modpack_id
+    ):
+        return redirect(url_for("asite.modpacklibrary"))
+
+    try:
+        build, rows = BuildCsvExport.load(id)
+    except BuildExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpack", id=modpack_id))
+
+    filename = secure_filename(f"{build.modpack_slug}_{build.version}.csv")
+    return send_file(
+        BuildCsvExport.render(rows),
+        mimetype="text/csv",
         as_attachment=True,
         download_name=filename,
     )

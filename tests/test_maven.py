@@ -28,7 +28,9 @@ from models.maven import (  # noqa: E402
     MavenVersion,
     artifact_file_url,
     normalize_base_url,
+    maven_mod_slug,
     split_maven_version,
+    validate_version_rule,
 )
 
 
@@ -67,6 +69,20 @@ def artifact(**overrides):
 
 
 class MavenRuleTests(unittest.TestCase):
+    def test_fixed_rule_discards_the_embedded_minecraft_pattern(self):
+        self.assertEqual(
+            validate_version_rule(
+                "FIXED", "{minecraft}-{version}", "1.7.10"
+            ),
+            ("FIXED", "{version}", "1.7.10"),
+        )
+
+    def test_maven_slug_uses_repository_and_mod_names(self):
+        self.assertEqual(
+            maven_mod_slug("GTNH Releases", "Example Mod"),
+            "gtnh-releases-example-mod",
+        )
+
     def test_embedded_rule_marks_the_minecraft_part(self):
         self.assertEqual(
             split_maven_version(
@@ -408,6 +424,9 @@ class MavenSchemaAndUiTests(unittest.TestCase):
         self.assertIn("Manual per version", source)
         self.assertIn("{minecraft}", source)
         self.assertIn("{version}", source)
+        self.assertIn("maxheighttable table-sm", source)
+        self.assertIn("updatemavenmodname", source)
+        self.assertIn("updatemavenmappingfields", source)
 
     def test_artifact_url_preserves_classifier_as_a_separate_coordinate(self):
         self.assertEqual(

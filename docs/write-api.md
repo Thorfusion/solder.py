@@ -106,7 +106,9 @@ To add or update a provider-managed mod in a build, send
 verifies and packages that one release on demand before changing the build.
 
 Creating a Maven artifact requires `repository_id`, `group_id`, `artifact_id`,
-`slug`, `title`, and `redistribution_confirmed: true`. It also accepts
+`title`, and `redistribution_confirmed: true`. The Solder slug is generated
+from the configured repository name and mod title; a submitted `slug` is
+ignored for compatibility with older clients. The route also accepts
 `classifier`, `extension` (`jar`), `author`, `description`, `link`, `side`,
 `modloader`, and one of these version mapping configurations:
 

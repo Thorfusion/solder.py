@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import re
+import unicodedata
 from urllib.parse import quote, urljoin, urlparse
 
 from defusedxml import ElementTree
@@ -90,8 +91,10 @@ def validate_version_rule(mode, pattern=None, fixed_minecraft=None):
         remainder = pattern.replace("{minecraft}", "").replace("{version}", "")
         if "{" in remainder or "}" in remainder:
             raise MavenError("The embedded format contains an unknown placeholder.")
-    if mode == "FIXED" and (not fixed_minecraft or len(fixed_minecraft) > 255):
-        raise MavenError("Select the fixed Minecraft version for this artifact.")
+    if mode == "FIXED":
+        if not fixed_minecraft or len(fixed_minecraft) > 255:
+            raise MavenError("Select the fixed Minecraft version for this artifact.")
+        pattern = "{version}"
     return mode, pattern or DEFAULT_VERSION_PATTERN, fixed_minecraft or None
 
 
@@ -130,6 +133,25 @@ def split_maven_version(upstream_version, mode, pattern, fixed_minecraft):
 def maven_version_id(artifact_id, upstream_version):
     value = f"{int(artifact_id)}\0{upstream_version}".encode("utf-8")
     return hashlib.sha256(value).hexdigest()
+
+
+def _slug_part(value):
+    value = unicodedata.normalize("NFKD", str(value or ""))
+    value = value.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-zA-Z0-9]+", "-", value).strip("-").lower()
+
+
+def maven_mod_slug(repository_name, mod_name):
+    """Build the stable repository-prefixed slug used by Maven mods."""
+    repository = _slug_part(repository_name)
+    mod = _slug_part(mod_name)
+    if not repository or not mod:
+        raise MavenError("Repository and mod names must produce a usable slug.")
+    value = f"{repository}-{mod}"
+    if len(value) <= 255:
+        return value
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
+    return f"{value[:242].rstrip('-')}-{digest}"
 
 
 def _path_part(value):
@@ -214,6 +236,20 @@ class MavenRepository:
         try:
             cur.execute("SELECT * FROM maven_repositories ORDER BY name, id")
             return [cls.from_row(row) for row in (cur.fetchall() or [])]
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def get_by_name(cls, name):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                "SELECT * FROM maven_repositories WHERE name = %s", (name,)
+            )
+            row = cur.fetchone()
+            return cls.from_row(row) if row else None
         finally:
             cur.close()
             conn.close()
@@ -304,20 +340,21 @@ class MavenArtifact:
             version_mode, version_pattern, fixed_minecraft
         )
         modloader = normalize_modloader(modloader)
-        slug = str(slug or "").strip()
         title = str(title or "").strip()
         description = str(description or "").strip()
         author = str(author or "").strip()
         link = str(link or "").strip()
         side = str(side or "BOTH").strip().upper()
-        if not slug or len(slug) > 255 or not title or len(title) > 255:
-            raise MavenError("Mod name and slug must contain 1 to 255 characters.")
+        if not title or len(title) > 255:
+            raise MavenError("Mod name must contain 1 to 255 characters.")
         if len(description) > 255 or len(author) > 255 or len(link) > 255:
             raise MavenError("Maven mod metadata is too long.")
         if side not in {"CLIENT", "SERVER", "BOTH"}:
             raise MavenError("Select a valid mod side.")
-        if MavenRepository.get(repository_id) is None:
+        repository = MavenRepository.get(repository_id)
+        if repository is None:
             raise MavenError("The selected Maven repository does not exist.")
+        slug = maven_mod_slug(repository.name, title)
 
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
@@ -365,6 +402,48 @@ class MavenArtifact:
         try:
             cur.execute(cls._select_sql() + " ORDER BY maven_artifacts.title, maven_artifacts.id")
             return [cls.from_row(row) for row in (cur.fetchall() or [])]
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def get_by_mod_id(cls, mod_id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                cls._select_sql() + " WHERE maven_artifacts.mod_id = %s",
+                (mod_id,),
+            )
+            row = cur.fetchone()
+            return cls.from_row(row) if row else None
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def get_by_coordinates(
+        cls, repository_id, group_id, artifact_id, classifier="", extension="jar"
+    ):
+        group_id, artifact_id, classifier, extension = validate_coordinates(
+            group_id, artifact_id, classifier, extension
+        )
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                cls._select_sql()
+                + """ WHERE maven_artifacts.repository_id = %s
+                           AND maven_artifacts.group_id = %s
+                           AND maven_artifacts.artifact_id = %s
+                           AND maven_artifacts.classifier = %s
+                           AND maven_artifacts.extension = %s""",
+                (
+                    repository_id, group_id, artifact_id, classifier, extension,
+                ),
+            )
+            row = cur.fetchone()
+            return cls.from_row(row) if row else None
         finally:
             cur.close()
             conn.close()

@@ -39,6 +39,7 @@ class Mod:
         notes,
         integration_provider=None,
         integration_project_id=None,
+        integration_label=None,
     ):
         self.id = id
         self.name = name
@@ -56,6 +57,10 @@ class Mod:
         )
         self.integration_project_id = (
             str(integration_project_id) if integration_project_id else None
+        )
+        self.integration_label = integration_label or (
+            self.integration_provider.title()
+            if self.integration_provider else None
         )
 
     @classmethod
@@ -166,10 +171,22 @@ class Mod:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
-            cur.execute("SELECT * FROM mods WHERE id = %s", (id,))
+            cur.execute(
+                """SELECT mods.*,
+                          COALESCE(maven_repositories.name,
+                                   mods.integration_provider)
+                              AS integration_label
+                   FROM mods
+                   LEFT JOIN maven_artifacts
+                       ON maven_artifacts.mod_id = mods.id
+                   LEFT JOIN maven_repositories
+                       ON maven_artifacts.repository_id = maven_repositories.id
+                   WHERE mods.id = %s""",
+                (id,),
+            )
             row = cur.fetchone()
             if row:
-                return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")), row.get("integration_provider"), row.get("integration_project_id"))
+                return cls(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")), row.get("integration_provider"), row.get("integration_project_id"), row.get("integration_label"))
             return None
         finally:
             cur.close()
@@ -222,10 +239,21 @@ class Mod:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
-            cur.execute("SELECT * FROM mods ORDER BY id DESC")
+            cur.execute(
+                """SELECT mods.*,
+                          COALESCE(maven_repositories.name,
+                                   mods.integration_provider)
+                              AS integration_label
+                   FROM mods
+                   LEFT JOIN maven_artifacts
+                       ON maven_artifacts.mod_id = mods.id
+                   LEFT JOIN maven_repositories
+                       ON maven_artifacts.repository_id = maven_repositories.id
+                   ORDER BY mods.id DESC"""
+            )
             rows = cur.fetchall()
             if rows:
-                return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")), row.get("integration_provider"), row.get("integration_project_id")) for row in rows]
+                return [Mod(row["id"], row["name"], row["description"], row["author"], row["link"], row["created_at"], row["updated_at"], row["pretty_name"], row["side"], row["modtype"], row.get("notes", row.get("note")), row.get("integration_provider"), row.get("integration_project_id"), row.get("integration_label")) for row in rows]
             return []
         finally:
             cur.close()
