@@ -1,7 +1,7 @@
 # solder.py write API reference
 
 The write API follows the current Technic Solder route layout and is extended
-with solder.py's modloader, server, optional, dependency, Modrinth and
+with solder.py's modloader, server, optional, dependency, Modrinth, Maven and
 MCInstanceLoader fields. It is intended for the trusted management deployment,
 not the public launcher-facing API instance.
 
@@ -92,12 +92,40 @@ curl -X POST https://solder.example.com/api/modpack/example/1.0/mod \
 | --- | --- | --- |
 | `GET` | `/api/integration/modrinth/search?q={query}` | Search Modrinth. |
 | `POST` | `/api/integration/modrinth/mod` | Link `project_id` without downloading releases. |
-| `GET` | `/api/modpack/{slug}/{version}/mod/{modSlug}/integration-versions` | List compatible, unimported Modrinth releases. |
+| `GET`, `POST` | `/api/integration/maven/repository` | List or create standard Maven repository roots. |
+| `DELETE` | `/api/integration/maven/repository/{id}` | Delete a repository that has no configured artifacts. |
+| `GET`, `POST` | `/api/integration/maven/artifact` | List or create Maven-managed mods. |
+| `GET`, `PUT` | `/api/integration/maven/artifact/{id}` | Read the catalog or change its Minecraft mapping rule. |
+| `POST` | `/api/integration/maven/artifact/{id}/refresh` | Refresh standard Maven metadata without downloading JARs. |
+| `PUT` | `/api/integration/maven/artifact/{id}/version/{mappingId}` | Manually map or disable one upstream version. |
+| `GET` | `/api/modpack/{slug}/{version}/mod/{modSlug}/integration-versions` | List compatible, unimported provider releases, including configured Maven artifacts. |
 | `POST` | `/api/mod/{slug}/{version}/mcil-jar` | Extract and verify a raw JAR for MCInstanceLoader. |
 
-To add or update a Modrinth-managed mod in a build, send
+To add or update a provider-managed mod in a build, send
 `integration_version_id` instead of `mod_version`. solder.py downloads,
 verifies and packages that one release on demand before changing the build.
+
+Creating a Maven artifact requires `repository_id`, `group_id`, `artifact_id`,
+`slug`, `title`, and `redistribution_confirmed: true`. It also accepts
+`classifier`, `extension` (`jar`), `author`, `description`, `link`, `side`,
+`modloader`, and one of these version mapping configurations:
+
+```json
+{"version_mode":"EMBEDDED","version_pattern":"{minecraft}-{version}"}
+```
+
+```json
+{"version_mode":"FIXED","fixed_minecraft":"1.7.10"}
+```
+
+```json
+{"version_mode":"MANUAL"}
+```
+
+Manual version updates accept `minecraft`, `mod_version`, `modloader`, and
+`enabled`. An enabled mapping requires both version strings. Maven repository
+creation requires `solder_env`; artifact creation requires `mods_create`;
+catalog refreshes and mapping changes require `mods_manage`.
 
 ## Responses and errors
 

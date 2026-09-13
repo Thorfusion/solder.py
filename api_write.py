@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 
 import boto3
 from flask import Blueprint, g, jsonify, request
+from mysql.connector import IntegrityError
 
 from api import clear_api_caches
 from models.api_token import ApiToken
@@ -22,10 +23,20 @@ from models.common import (
 from models.compatibility import InvalidModloaderError, normalize_modloader
 from models.integration import (
     IntegrationError,
+    MAVEN,
     MODRINTH,
     ModIntegration,
     external_id,
     provider_for_user,
+)
+from models.maven import (
+    DEFAULT_VERSION_PATTERN,
+    MAVEN_VERSION_MODES,
+    MavenArtifact,
+    MavenCatalog,
+    MavenError,
+    MavenRepository,
+    MavenVersion,
 )
 from models.mcinstance import MCInstanceExportError, MCInstanceJar
 from models.mod import Mod
@@ -208,6 +219,11 @@ def _permission(name):
         raise ApiRequestProblem("Permission denied.", 403)
 
 
+def _permission_any(*names):
+    if not any(g.write_principal.allows(name) for name in names):
+        raise ApiRequestProblem("Permission denied.", 403)
+
+
 def _modpack(slug, permission=None):
     modpack = WriteApiStore.get_modpack(slug)
     if modpack is None:
@@ -309,6 +325,7 @@ def handle_write_problem(error):
 
 @write_api_blueprint.errorhandler(IntegrationError)
 @write_api_blueprint.errorhandler(MCInstanceExportError)
+@write_api_blueprint.errorhandler(MavenError)
 def handle_integration_problem(error):
     return jsonify({"error": str(error)}), 422
 
@@ -726,6 +743,237 @@ def _project_json(project, imported=False):
     }
 
 
+def _maven_repository_json(repository):
+    return {
+        "id": repository.id,
+        "name": repository.name,
+        "base_url": repository.base_url,
+        "created_at": repository.created_at,
+        "updated_at": repository.updated_at,
+    }
+
+
+def _maven_artifact_json(artifact):
+    return {
+        "id": artifact.id,
+        "repository_id": artifact.repository_id,
+        "repository_name": artifact.repository_name,
+        "group_id": artifact.group_id,
+        "artifact_id": artifact.artifact_id,
+        "classifier": artifact.classifier,
+        "extension": artifact.extension,
+        "coordinates": artifact.coordinates,
+        "version_mode": artifact.version_mode,
+        "version_pattern": artifact.version_pattern,
+        "fixed_minecraft": artifact.fixed_minecraft,
+        "modloader": artifact.modloader,
+        "slug": artifact.slug,
+        "title": artifact.title,
+        "description": artifact.description,
+        "author": artifact.author,
+        "link": artifact.project_url,
+        "side": artifact.side,
+        "mod_id": artifact.mod_id,
+        "created_at": artifact.created_at,
+        "updated_at": artifact.updated_at,
+    }
+
+
+def _maven_version_json(version):
+    return {
+        "id": version.id,
+        "upstream_version": version.upstream_version,
+        "integration_version_id": version.integration_version_id,
+        "minecraft": version.minecraft,
+        "mod_version": version.mod_version,
+        "modloader": version.modloader,
+        "mapping_source": version.mapping_source,
+        "enabled": version.enabled,
+        "available": version.available,
+        "metadata_order": version.metadata_order,
+    }
+
+
+def _optional_string(data, field, maximum=255):
+    value = _string(data, field, maximum=maximum)
+    return "" if value is _MISSING else value
+
+
+@write_api_blueprint.get("/api/integration/maven/repository")
+def list_maven_repositories():
+    _permission_any("mods_create", "mods_manage", "solder_env")
+    return _response(
+        {
+            "repositories": [
+                _maven_repository_json(item) for item in MavenRepository.get_all()
+            ]
+        }
+    )
+
+
+@write_api_blueprint.post("/api/integration/maven/repository")
+def create_maven_repository():
+    _permission("solder_env")
+    data = _payload()
+    try:
+        repository = MavenRepository.new(
+            _string(data, "name", required=True),
+            _string(data, "base_url", required=True, maximum=2048),
+        )
+    except IntegrityError as error:
+        raise ApiRequestProblem("Maven repository already exists.", 409) from error
+    return _written({"repository": _maven_repository_json(repository)}, 201)
+
+
+@write_api_blueprint.delete(
+    "/api/integration/maven/repository/<int:repository_id>"
+)
+def delete_maven_repository(repository_id):
+    _permission("solder_env")
+    MavenRepository.delete(repository_id)
+    return _written({"success": "Maven repository deleted."})
+
+
+@write_api_blueprint.get("/api/integration/maven/artifact")
+def list_maven_artifacts():
+    _permission_any("mods_create", "mods_manage")
+    return _response(
+        {"artifacts": [_maven_artifact_json(item) for item in MavenArtifact.get_all()]}
+    )
+
+
+@write_api_blueprint.post("/api/integration/maven/artifact")
+def create_maven_artifact():
+    _permission("mods_create")
+    data = _payload()
+    confirmed = _boolean(data, "redistribution_confirmed", False)
+    if not confirmed:
+        _validation(
+            "redistribution_confirmed",
+            "Confirm that this artifact may be downloaded and rehosted.",
+        )
+    repository_id = _integer(data, "repository_id", minimum=1)
+    if repository_id is _MISSING:
+        _validation("repository_id", "The repository_id field is required.")
+    artifact = None
+    try:
+        artifact = MavenArtifact.new(
+            repository_id,
+            _string(data, "group_id", required=True),
+            _string(data, "artifact_id", required=True),
+            _optional_string(data, "classifier", 128),
+            _optional_string(data, "extension", 16) or "jar",
+            _enum(data, "version_mode", set(MAVEN_VERSION_MODES), "MANUAL"),
+            _optional_string(data, "version_pattern") or DEFAULT_VERSION_PATTERN,
+            _optional_string(data, "fixed_minecraft") or None,
+            _loader(data, default=None),
+            _slug(data, required=True),
+            _string(data, "title", required=True),
+            _optional_string(data, "description"),
+            _optional_string(data, "author"),
+            None if (link := _url(data, "link")) is _MISSING else link,
+            _enum(data, "side", _SIDES, "BOTH"),
+        )
+        versions = MavenCatalog.refresh(artifact)
+        mod, _created = ModIntegration.import_project(
+            MAVEN, str(artifact.id), g.write_principal.user_id
+        )
+        MavenArtifact.attach_mod(artifact.id, mod.id)
+        artifact = MavenArtifact.get(artifact.id)
+    except IntegrityError as error:
+        if artifact is not None:
+            MavenArtifact.delete_unlinked(artifact.id)
+        raise ApiRequestProblem("Maven artifact or mod already exists.", 409) from error
+    except Exception:
+        if artifact is not None:
+            MavenArtifact.delete_unlinked(artifact.id)
+        raise
+    return _written(
+        {
+            "artifact": _maven_artifact_json(artifact),
+            "versions": [_maven_version_json(item) for item in versions],
+        },
+        201,
+    )
+
+
+def _maven_artifact(artifact_id):
+    artifact = MavenArtifact.get(artifact_id)
+    if artifact is None:
+        raise ApiRequestProblem("Maven artifact not found.", 404)
+    return artifact
+
+
+@write_api_blueprint.get("/api/integration/maven/artifact/<int:artifact_id>")
+def get_maven_artifact(artifact_id):
+    _permission("mods_manage")
+    artifact = _maven_artifact(artifact_id)
+    return _response(
+        {
+            "artifact": _maven_artifact_json(artifact),
+            "versions": [
+                _maven_version_json(item) for item in MavenVersion.get_all(artifact_id)
+            ],
+        }
+    )
+
+
+@write_api_blueprint.put("/api/integration/maven/artifact/<int:artifact_id>")
+def update_maven_artifact(artifact_id):
+    _permission("mods_manage")
+    artifact = _maven_artifact(artifact_id)
+    data = _payload()
+    version_mode = _enum(
+        data, "version_mode", set(MAVEN_VERSION_MODES), artifact.version_mode
+    )
+    version_pattern = _string(data, "version_pattern")
+    fixed_minecraft = _string(data, "fixed_minecraft", nullable=True)
+    artifact = MavenArtifact.update_rule(
+        artifact.id,
+        version_mode,
+        artifact.version_pattern
+        if version_pattern is _MISSING
+        else (version_pattern or DEFAULT_VERSION_PATTERN),
+        artifact.fixed_minecraft
+        if fixed_minecraft is _MISSING
+        else (fixed_minecraft or None),
+        _loader(data, default=artifact.modloader),
+    )
+    return _written({"artifact": _maven_artifact_json(artifact)})
+
+
+@write_api_blueprint.post(
+    "/api/integration/maven/artifact/<int:artifact_id>/refresh"
+)
+def refresh_maven_artifact(artifact_id):
+    _permission("mods_manage")
+    artifact = _maven_artifact(artifact_id)
+    versions = MavenCatalog.refresh(artifact)
+    return _written(
+        {"versions": [_maven_version_json(item) for item in versions]}
+    )
+
+
+@write_api_blueprint.put(
+    "/api/integration/maven/artifact/<int:artifact_id>/version/<int:mapping_id>"
+)
+def update_maven_version(artifact_id, mapping_id):
+    _permission("mods_manage")
+    _maven_artifact(artifact_id)
+    data = _payload()
+    enabled = _boolean(data, "enabled", False)
+    MavenVersion.update_manual(
+        mapping_id,
+        artifact_id,
+        _optional_string(data, "minecraft") or None,
+        _optional_string(data, "mod_version") or None,
+        _loader(data, default=None),
+        enabled,
+    )
+    version = MavenVersion.get_by_id(mapping_id, artifact_id)
+    return _written({"version": _maven_version_json(version)})
+
+
 @write_api_blueprint.get("/api/integration/modrinth/search")
 def search_modrinth():
     _permission("mods_create")
@@ -765,8 +1013,8 @@ def list_integration_versions(slug, version, mod_slug):
     _permission("mods_manage")
     build = _build(modpack, version)
     mod = _mod(mod_slug)
-    if mod.get("integration_provider") != MODRINTH:
-        raise ApiRequestProblem("The selected mod is not managed by Modrinth.")
+    if not mod.get("integration_provider"):
+        raise ApiRequestProblem("The selected mod is not managed by an integration.")
     mod_object = Mod.get_by_id(mod["id"])
     build_object = Build.get_by_id(build["id"])
     versions = ModIntegration.list_versions(

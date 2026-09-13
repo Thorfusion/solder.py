@@ -241,6 +241,8 @@ def verify_performance_indexes(database_container: str) -> None:
         ("modversions", "mod_id,version"),
         ("mods", "integration_provider,integration_project_id"),
         ("modversions", "mod_id,integration_version_id"),
+        ("maven_artifacts", "repository_id"),
+        ("maven_versions", "maven_artifact_id,minecraft,modloader,enabled,available,metadata_order"),
         ("user_permissions", "user_id"),
         ("user_modpack", "user_id,modpack_id"),
         ("user_modpack", "modpack_id,user_id"),
@@ -323,9 +325,10 @@ def verify_technic_migration(database_container: str) -> None:
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
         "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies', "
-        "'personal_access_tokens', 'password_reset_tokens');",
+        "'personal_access_tokens', 'password_reset_tokens', "
+        "'maven_repositories', 'maven_artifacts', 'maven_versions');",
     )
-    if int(table_count) != 5:
+    if int(table_count) != 8:
         raise AssertionError(
             "Migration did not preserve the current Technic tables and create "
             "the solder.py tables"
@@ -449,6 +452,16 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if token_table_count != "1":
         raise AssertionError("Fresh schema did not create write API tokens")
+
+    maven_table_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME IN "
+        "('maven_repositories', 'maven_artifacts', 'maven_versions');",
+    )
+    if maven_table_count != "3":
+        raise AssertionError("Fresh schema did not create the Maven catalog")
 
     user_id_definition = mysql(
         database_container,
@@ -773,6 +786,180 @@ def seed_write_api_token(database_container: str) -> str:
         "SELECT id FROM personal_access_tokens WHERE name = 'CI write test';",
     )
     return f"{token_id}|{secret}"
+
+
+def start_maven_fixture(image: str, network: str, container: str) -> None:
+    version = "1.21.1-2.0"
+    relative = Path("example", "group", "ci-maven-mod")
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        artifact_root = root / relative
+        version_root = artifact_root / version
+        version_root.mkdir(parents=True)
+        metadata = (
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<metadata><groupId>example.group</groupId>"
+            "<artifactId>ci-maven-mod</artifactId><versioning><versions>"
+            f"<version>{version}</version>"
+            "</versions></versioning></metadata>\n"
+        )
+        (artifact_root / "maven-metadata.xml").write_text(
+            metadata, encoding="utf-8"
+        )
+        jar_data = io.BytesIO()
+        with zipfile.ZipFile(jar_data, "w") as archive:
+            archive.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n")
+        jar_name = f"ci-maven-mod-{version}.jar"
+        jar_path = version_root / jar_name
+        jar_path.write_bytes(jar_data.getvalue())
+        (version_root / f"{jar_name}.sha256").write_text(
+            hashlib.sha256(jar_data.getvalue()).hexdigest(), encoding="ascii"
+        )
+
+        docker(
+            "create",
+            "--name",
+            container,
+            "--network",
+            network,
+            "--network-alias",
+            "maven",
+            image,
+            "python",
+            "-m",
+            "http.server",
+            "8000",
+            "--directory",
+            "/repo",
+            capture_output=True,
+        )
+        docker("cp", f"{root}{os.sep}.", f"{container}:/repo")
+    docker("start", container, capture_output=True)
+
+
+def exercise_maven_write_api(
+    base_url: str,
+    database_container: str,
+    application_container: str,
+    token: str,
+) -> None:
+    status, repository = write_request_json(
+        f"{base_url}/api/integration/maven/repository",
+        token,
+        payload={"name": "CI Maven", "base_url": "http://maven:8000/"},
+    )
+    if status != 201:
+        raise AssertionError(
+            f"Write API did not create a Maven repository: {status} {repository}"
+        )
+
+    status, artifact = write_request_json(
+        f"{base_url}/api/integration/maven/artifact",
+        token,
+        payload={
+            "repository_id": repository["repository"]["id"],
+            "group_id": "example.group",
+            "artifact_id": "ci-maven-mod",
+            "slug": "ci-maven-mod",
+            "title": "CI Maven Mod",
+            "author": "CI",
+            "side": "BOTH",
+            "version_mode": "EMBEDDED",
+            "version_pattern": "{minecraft}-{version}",
+            "redistribution_confirmed": True,
+        },
+    )
+    if status != 201 or len(artifact.get("versions", [])) != 1:
+        raise AssertionError(
+            f"Write API did not import Maven metadata: {status} {artifact}"
+        )
+    artifact_id = artifact["artifact"]["id"]
+    mapping_id = artifact["versions"][0]["id"]
+    integration_id = artifact["versions"][0]["integration_version_id"]
+    status, mapped = write_request_json(
+        f"{base_url}/api/integration/maven/artifact/{artifact_id}/"
+        f"version/{mapping_id}",
+        token,
+        method="PUT",
+        payload={
+            "minecraft": "1.21.1",
+            "mod_version": "2.0-ci",
+            "modloader": None,
+            "enabled": True,
+        },
+    )
+    if status != 200 or mapped["version"]["mapping_source"] != "MANUAL":
+        raise AssertionError(
+            f"Write API did not save a Maven mapping: {status} {mapped}"
+        )
+    refresh_status, refreshed = write_request_json(
+        f"{base_url}/api/integration/maven/artifact/{artifact_id}/refresh",
+        token,
+    )
+    if refresh_status != 200:
+        raise AssertionError(
+            f"Write API did not refresh Maven metadata: "
+            f"{refresh_status} {refreshed}"
+        )
+    status, catalog = write_request_json(
+        f"{base_url}/api/integration/maven/artifact/{artifact_id}",
+        token,
+        method="GET",
+    )
+    refreshed_mapping = catalog.get("versions", [{}])[0]
+    if (
+        status != 200
+        or refreshed_mapping.get("mapping_source") != "MANUAL"
+        or refreshed_mapping.get("mod_version") != "2.0-ci"
+    ):
+        raise AssertionError(
+            f"Maven refresh did not preserve a manual mapping: {status} {catalog}"
+        )
+
+    status, versions = write_request_json(
+        f"{base_url}/api/modpack/ci-example-pack/1.0/mod/"
+        "ci-maven-mod/integration-versions",
+        token,
+        method="GET",
+    )
+    if status != 200 or versions["versions"][0]["id"] != integration_id:
+        raise AssertionError(
+            f"Maven version was not available to the build: {status} {versions}"
+        )
+
+    status, membership = write_request_json(
+        f"{base_url}/api/modpack/ci-example-pack/1.0/mod",
+        token,
+        payload={
+            "mod_slug": "ci-maven-mod",
+            "integration_version_id": integration_id,
+        },
+    )
+    if status != 201:
+        raise AssertionError(
+            f"Maven version was not materialized into the build: "
+            f"{status} {membership}"
+        )
+    stored = mysql(
+        database_container,
+        "SELECT mods.integration_provider, modversions.version, "
+        "modversions.mcversion, LENGTH(modversions.md5), "
+        "LENGTH(modversions.jarmd5) FROM mods "
+        "INNER JOIN modversions ON modversions.mod_id = mods.id "
+        "WHERE mods.name = 'ci-maven-mod';",
+    )
+    if stored != "MAVEN\t1.21.1-2.0-ci\t1.21.1\t32\t32":
+        raise AssertionError(f"Unexpected stored Maven version: {stored}")
+    for filename in (
+        "/app/mods/ci-maven-mod/ci-maven-mod-1.21.1-2.0-ci.jar",
+        "/app/mods/ci-maven-mod/ci-maven-mod-1.21.1-2.0-ci.zip",
+    ):
+        result = subprocess.run(
+            ["docker", "exec", application_container, "test", "-f", filename],
+            check=False,
+        )
+        if result.returncode != 0:
+            raise AssertionError(f"Maven materialization did not create {filename}")
 
 
 def exercise_write_api(base_url: str, database_container: str, token: str) -> None:
@@ -1427,6 +1614,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
     network = f"solderpy-db-test-{suffix}"
     database_container = f"solderpy-mysql-{suffix}"
     application_container = f"solderpy-app-{suffix}"
+    maven_container = f"solderpy-maven-{suffix}"
     failed = True
 
     docker("network", "create", network, capture_output=True)
@@ -1468,6 +1656,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         seed_dependency_scenario(database_container)
         seed_api_access_scenario(database_container)
         seed_mcinstance_scenario(database_container)
+        start_maven_fixture(image, network, maven_container)
 
         docker(
             "run",
@@ -1526,6 +1715,15 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         )
         if dependency_table_count != "1":
             raise AssertionError("Application startup did not create mod_dependencies")
+        maven_table_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.TABLES "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+            "AND TABLE_NAME IN "
+            "('maven_repositories', 'maven_artifacts', 'maven_versions');",
+        )
+        if maven_table_count != "3":
+            raise AssertionError("Application startup did not create the Maven catalog")
         integration_schema_count = mysql(
             database_container,
             "SELECT COUNT(*) FROM information_schema.COLUMNS "
@@ -1564,12 +1762,19 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             application_container,
             legacy_jar_md5,
         )
+        exercise_maven_write_api(
+            base_url, database_container, application_container, write_token
+        )
         failed = False
         fixture_name = fixture.name if fixture is not None else "fresh database"
         print(f"Database image test passed: {fixture_name}")
     finally:
         if failed:
-            for container in (application_container, database_container):
+            for container in (
+                application_container,
+                maven_container,
+                database_container,
+            ):
                 if subprocess.run(
                     ["docker", "inspect", container],
                     check=False,
@@ -1587,7 +1792,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
                     print(logs.stdout)
                 if logs.stderr:
                     print(logs.stderr, file=sys.stderr)
-        for container in (application_container, database_container):
+        for container in (application_container, maven_container, database_container):
             subprocess.run(
                 ["docker", "rm", "--force", container],
                 check=False,

@@ -16,8 +16,8 @@ The complete read API, including Technic-compatible routes and solder.py server
 and optional-manifest extensions, is documented in the
 [API reference](docs/api.md).
 
-Management-side Modrinth imports are documented in the
-[Modrinth integration guide](docs/integrations.md).
+Management-side Modrinth and Maven imports are documented in the
+[integration guide](docs/integrations.md).
 
 + **Easy install with docker**
 
@@ -50,6 +50,12 @@ Management-side Modrinth imports are documented in the
     version in a build downloads, verifies and packages it on demand. Modrinth
     does not require an API key.
 
+  + **Universal Maven integration**
+
+    Configure a standard Maven repository, group ID, artifact ID and optional
+    classifier. solder.py reads `maven-metadata.xml`, maps upstream releases to
+    Minecraft versions, and downloads only the release selected for a build.
+
 + **API only mode**
 
   Host a public api with only read permission to database and have another instance with manegement in your local network
@@ -79,10 +85,6 @@ Management-side Modrinth imports are documented in the
 
   solder.py only adds extra tables and columns and can be dual run with technic solder
 
-# Features to be added in the future
-
-+ Maven integration
-
 ## Modrinth imports
 
 Open **Browse mods** in the management menu to search and add provider-managed
@@ -92,8 +94,36 @@ upstream JAR, verifies the provider hash and file size, packages the JAR as a
 normal Solder ZIP, and records the local version. Re-selecting it reuses the
 stored version.
 
-See the [Modrinth integration guide](docs/integrations.md) for storage,
+See the [integration guide](docs/integrations.md) for storage,
 permissions and operational details.
+
+## Maven imports
+
+Open **Maven** in the management menu and add the repository base URL first.
+Then add a mod using its group ID, artifact ID, optional classifier, and JAR
+extension. Maven implementations only need to expose the standard repository
+layout and `maven-metadata.xml`; solder.py does not require an Artifactory,
+Nexus, or other vendor-specific API.
+
+Each artifact has one explicit Minecraft mapping mode:
+
+- **Contained in Maven version** uses a format such as
+  `{minecraft}-{version}`. For example, `1.7.10-9.10.48` maps to Minecraft
+  `1.7.10` and mod version `9.10.48`.
+- **Always one Minecraft version** assigns every upstream release to the fixed
+  Minecraft version selected by the administrator.
+- **Manual per version** leaves new releases disabled until their Minecraft
+  and mod versions are entered on the artifact page.
+
+Refreshes preserve manual corrections and mark releases removed from upstream
+metadata as unavailable. The build editor and **Update all mods** only consider
+available, enabled releases matching the build's Minecraft version and
+modloader. Listing or refreshing releases downloads metadata only. The selected
+JAR is downloaded, checksum-verified when Maven publishes a standard checksum
+sidecar, validated as a JAR, and packaged into the normal Solder repository.
+Timestamped Maven snapshots are resolved through their version-level metadata.
+
+See the [integration guide](docs/integrations.md) for the complete workflow.
 
 ## MCInstanceLoader exports
 

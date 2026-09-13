@@ -1,3 +1,4 @@
+from dataclasses import replace
 from types import SimpleNamespace
 from pathlib import Path
 import unittest
@@ -12,7 +13,8 @@ configure_test_environment()
 
 from api_write import write_api_blueprint  # noqa: E402
 from models.api_token import ApiPrincipal, ApiToken, TOKENABLE_TYPE  # noqa: E402
-from models.integration import MODRINTH  # noqa: E402
+from models.integration import MAVEN, MODRINTH, ExternalVersion  # noqa: E402
+from models.maven import MavenArtifact, MavenRepository, MavenVersion  # noqa: E402
 
 
 FULL_PRINCIPAL = ApiPrincipal(1, 7, {"solder_full": True})
@@ -384,6 +386,108 @@ class WriteApiRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         import_project.assert_called_once_with(MODRINTH, "PROJECT", 7)
+
+    def test_maven_repository_can_be_created_through_write_api(self):
+        repository = MavenRepository(
+            8, "Example Maven", "https://maven.example.test/releases/"
+        )
+        with patch(
+            "api_write.MavenRepository.new", return_value=repository
+        ) as create:
+            response = self.client.post(
+                "/api/integration/maven/repository",
+                headers=self.headers,
+                json={
+                    "name": "Example Maven",
+                    "base_url": "https://maven.example.test/releases/",
+                },
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["repository"]["id"], 8)
+        create.assert_called_once_with(
+            "Example Maven", "https://maven.example.test/releases/"
+        )
+
+    def test_maven_artifact_creation_refreshes_metadata_and_links_mod(self):
+        configured = MavenArtifact(
+            9, 8, "Example Maven", "https://maven.example.test/releases/",
+            "example.group", "example-mod", "all", "jar", "EMBEDDED",
+            "{minecraft}-{version}", None, "FORGE", "example-mod",
+            "Example Mod", "Description", "Author",
+            "https://example.test/mod", "BOTH", None,
+        )
+        attached = replace(configured, mod_id=4)
+        mapping = MavenVersion(
+            1, 9, "1.20.1-2.0", "f" * 64, "1.20.1", "2.0",
+            "FORGE", "RULE", True, True, 1,
+        )
+        with (
+            patch("api_write.MavenArtifact.new", return_value=configured),
+            patch("api_write.MavenCatalog.refresh", return_value=[mapping]) as refresh,
+            patch(
+                "api_write.ModIntegration.import_project",
+                return_value=(SimpleNamespace(id=4), True),
+            ) as import_project,
+            patch("api_write.MavenArtifact.attach_mod") as attach,
+            patch("api_write.MavenArtifact.get", return_value=attached),
+        ):
+            response = self.client.post(
+                "/api/integration/maven/artifact",
+                headers=self.headers,
+                json={
+                    "repository_id": 8,
+                    "group_id": "example.group",
+                    "artifact_id": "example-mod",
+                    "classifier": "all",
+                    "slug": "example-mod",
+                    "title": "Example Mod",
+                    "description": "Description",
+                    "author": "Author",
+                    "link": "https://example.test/mod",
+                    "side": "BOTH",
+                    "modloader": "FORGE",
+                    "version_mode": "EMBEDDED",
+                    "version_pattern": "{minecraft}-{version}",
+                    "redistribution_confirmed": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["artifact"]["mod_id"], 4)
+        self.assertEqual(response.get_json()["versions"][0]["minecraft"], "1.20.1")
+        refresh.assert_called_once_with(configured)
+        import_project.assert_called_once_with(MAVEN, "9", 7)
+        attach.assert_called_once_with(9, 4)
+
+    def test_maven_versions_use_the_generic_integration_listing_route(self):
+        external = ExternalVersion(
+            MAVEN, "9", "f" * 64, "1.20.1-2.0", "2.0",
+            ("1.20.1",), ("FORGE",), "release", None,
+            "example.jar", "https://maven.example.test/example.jar", {}, 0,
+        )
+        with (
+            patch("api_write.WriteApiStore.get_modpack", return_value=modpack_row()),
+            patch("api_write.WriteApiStore.get_build", return_value=build_row()),
+            patch(
+                "api_write.WriteApiStore.get_mod",
+                return_value=mod_row(
+                    integration_provider=MAVEN,
+                    integration_project_id="9",
+                ),
+            ),
+            patch("api_write.Mod.get_by_id", return_value=SimpleNamespace(id=4)),
+            patch("api_write.Build.get_by_id", return_value=SimpleNamespace(id=3)),
+            patch("api_write.ModIntegration.list_versions", return_value=[external]),
+            patch("api_write.Modversion.get_integration_version_ids", return_value=set()),
+        ):
+            response = self.client.get(
+                "/api/modpack/example-pack/1.0/mod/example-mod/integration-versions",
+                headers=self.headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["versions"][0]["id"], "f" * 64)
 
     def test_mcil_jar_generation_uses_configured_repository(self):
         with (

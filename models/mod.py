@@ -148,6 +148,14 @@ class Mod:
             "DELETE FROM mod_dependencies WHERE mod_id = %s OR dependency_mod_id = %s",
             (id, id),
         )
+        cur.execute(
+            """DELETE maven_versions FROM maven_versions
+               INNER JOIN maven_artifacts
+                   ON maven_versions.maven_artifact_id = maven_artifacts.id
+               WHERE maven_artifacts.mod_id = %s""",
+            (id,),
+        )
+        cur.execute("DELETE FROM maven_artifacts WHERE mod_id = %s", (id,))
         cur.execute("DELETE FROM modversions WHERE mod_id = %s", (id,))
         cur.execute("DELETE FROM mods WHERE id=%s", (id,))
         conn.commit()

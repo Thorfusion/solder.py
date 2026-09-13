@@ -22,12 +22,22 @@ from models.mcinstance import (
     MCInstanceJar,
 )
 from models.integration import (
+    MAVEN,
     MODRINTH,
     IntegrationError,
     ModIntegration,
     external_id,
     normalize_provider,
     provider_for_user,
+)
+from models.maven import (
+    DEFAULT_VERSION_PATTERN,
+    MAVEN_VERSION_MODES,
+    MavenArtifact,
+    MavenCatalog,
+    MavenError,
+    MavenRepository,
+    MavenVersion,
 )
 from models.mod import DuplicateModError, Mod, UploadVerificationError
 from models.mod_dependency import DependencyError, ModDependency
@@ -420,6 +430,149 @@ def integrations():
         query=query,
         projects=projects,
         modrinth=MODRINTH,
+    )
+
+
+@asite.route("/maven", methods=["GET", "POST"])
+def maven():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    can_create_mods = bool(
+        User.get_permission_token(session["token"], "mods_create")
+    )
+    can_manage_mods = bool(
+        User.get_permission_token(session["token"], "mods_manage")
+    )
+    can_manage_repositories = bool(
+        User.get_permission_token(session["token"], "solder_env")
+    )
+    if not (can_create_mods or can_manage_mods or can_manage_repositories):
+        return redirect(url_for("asite.index"))
+
+    if request.method == "POST":
+        artifact = None
+        try:
+            if "add_repository" in request.form:
+                if not can_manage_repositories:
+                    raise MavenError(
+                        "Environment permission is required to add a repository."
+                    )
+                repository = MavenRepository.new(
+                    request.form.get("repository_name"),
+                    request.form.get("base_url"),
+                )
+                flash(f"added Maven repository {repository.name}", "success")
+            elif "delete_repository" in request.form:
+                if not can_manage_repositories:
+                    raise MavenError(
+                        "Environment permission is required to delete a repository."
+                    )
+                MavenRepository.delete(request.form.get("repository_id"))
+                flash("deleted Maven repository", "success")
+            elif "add_artifact" in request.form:
+                if not can_create_mods:
+                    raise MavenError(
+                        "Mod creation permission is required to add an artifact."
+                    )
+                if request.form.get("redistribution_confirmed") != "1":
+                    raise MavenError(
+                        "Confirm that this mod may be downloaded and rehosted."
+                    )
+                artifact = MavenArtifact.new(
+                    request.form.get("repository_id"),
+                    request.form.get("group_id"),
+                    request.form.get("artifact_id"),
+                    request.form.get("classifier"),
+                    request.form.get("extension", "jar"),
+                    request.form.get("version_mode"),
+                    request.form.get("version_pattern"),
+                    request.form.get("fixed_minecraft"),
+                    request.form.get("modloader"),
+                    request.form.get("slug"),
+                    request.form.get("title"),
+                    request.form.get("description"),
+                    request.form.get("author"),
+                    request.form.get("link"),
+                    request.form.get("side"),
+                )
+                MavenCatalog.refresh(artifact)
+                mod, _created = ModIntegration.import_project(
+                    MAVEN, str(artifact.id),
+                    Session.get_user_id(session["token"]),
+                )
+                MavenArtifact.attach_mod(artifact.id, mod.id)
+                flash(f"added {artifact.title} from Maven", "success")
+                return redirect(url_for("asite.maven_artifact", artifact_id=artifact.id))
+        except (MavenError, IntegrationError, InvalidModloaderError) as error:
+            if artifact is not None:
+                MavenArtifact.delete_unlinked(artifact.id)
+            flash(str(error), "error")
+        except connector.IntegrityError:
+            if artifact is not None:
+                MavenArtifact.delete_unlinked(artifact.id)
+            flash("That Maven repository, artifact, or mod already exists.", "error")
+        return redirect(url_for("asite.maven"))
+
+    return render_template(
+        "maven.html",
+        repositories=MavenRepository.get_all(),
+        artifacts=MavenArtifact.get_all(),
+        version_modes=MAVEN_VERSION_MODES,
+        default_pattern=DEFAULT_VERSION_PATTERN,
+        can_create_mods=can_create_mods,
+        can_manage_mods=can_manage_mods,
+        can_manage_repositories=can_manage_repositories,
+    )
+
+
+@asite.route("/maven/<int:artifact_id>", methods=["GET", "POST"])
+def maven_artifact(artifact_id):
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "mods_manage") == 0:
+        return redirect(url_for("asite.index"))
+
+    artifact = MavenArtifact.get(artifact_id)
+    if artifact is None:
+        return render_template("404.html", error="Maven artifact not found"), 404
+    if request.method == "POST":
+        try:
+            if "save_rule" in request.form:
+                MavenArtifact.update_rule(
+                    artifact_id,
+                    request.form.get("version_mode"),
+                    request.form.get("version_pattern"),
+                    request.form.get("fixed_minecraft"),
+                    request.form.get("modloader"),
+                )
+                flash("updated Maven version mapping rule", "success")
+            elif "refresh_versions" in request.form:
+                versions = MavenCatalog.refresh(artifact)
+                flash(f"loaded {len(versions)} Maven version(s)", "success")
+            elif "save_mapping" in request.form:
+                MavenVersion.update_manual(
+                    request.form.get("mapping_id"),
+                    artifact_id,
+                    request.form.get("minecraft"),
+                    request.form.get("mod_version"),
+                    request.form.get("modloader"),
+                    request.form.get("enabled") == "1",
+                )
+                flash("updated Maven version mapping", "success")
+        except (MavenError, InvalidModloaderError) as error:
+            flash(str(error), "error")
+        return redirect(url_for("asite.maven_artifact", artifact_id=artifact_id))
+
+    versions = MavenVersion.get_all(artifact_id)
+    return render_template(
+        "mavenartifact.html",
+        artifact=artifact,
+        versions=versions,
+        version_modes=MAVEN_VERSION_MODES,
     )
 
 

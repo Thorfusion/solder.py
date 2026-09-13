@@ -48,6 +48,8 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("/login", routes)
         self.assertIn("/modlibrary", routes)
         self.assertIn("/integrations", routes)
+        self.assertIn("/maven", routes)
+        self.assertIn("/maven/<int:artifact_id>", routes)
         self.assertIn("/modpackbuild/<int:id>/mcinstance", routes)
         self.assertIn(
             "/modpackbuild/<int:build_id>/integration-versions/<int:mod_id>",
@@ -313,6 +315,30 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(integration_response.headers["Location"], "/")
         self.assertEqual(export_response.status_code, 302)
         self.assertEqual(export_response.headers["Location"], "/modpacklibrary")
+
+    def test_maven_management_page_renders_with_configured_repositories(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        repository = SimpleNamespace(
+            id=2,
+            name="Example Maven",
+            base_url="https://maven.example.test/releases/",
+        )
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.MavenRepository.get_all", return_value=[repository]),
+            patch("asite.MavenArtifact.get_all", return_value=[]),
+            patch("asite.Build.get_marked_build", return_value=0),
+            patch("asite.Modpack.get_by_pinned", return_value=[]),
+        ):
+            response = self.client.get("/maven")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Example Maven", response.data)
+        self.assertIn(b"Contained in Maven version", response.data)
+        self.assertIn(b"Add Maven mod", response.data)
 
     def test_integration_version_error_does_not_expose_exception_details(self):
         with self.client.session_transaction() as flask_session:
