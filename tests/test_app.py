@@ -51,6 +51,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("/maven", routes)
         self.assertIn("/maven/<int:artifact_id>", routes)
         self.assertIn("/integrations/manifest", routes)
+        self.assertIn("/integrations/manifest/export", routes)
         self.assertIn("/modpackbuild/<int:id>/mcinstance", routes)
         self.assertIn("/modpackbuild/<int:id>/csv", routes)
         self.assertIn(
@@ -58,6 +59,13 @@ class ApplicationSmokeTests(unittest.TestCase):
             routes,
         )
         self.assertIn("/api/modpack/<slugstring>/<buildstring>", routes)
+        self.assertIn(
+            "/packwiz/<pack_slug>/<selector>/pack.toml", routes
+        )
+        self.assertIn(
+            "/filedirector/<pack_slug>/<selector>/<bundle_name>.bundle.json",
+            routes,
+        )
 
     def test_dashboard_is_a_status_view_without_duplicate_action_buttons(self):
         with self.client.session_transaction() as flask_session:
@@ -164,6 +172,16 @@ class ApplicationSmokeTests(unittest.TestCase):
             self.assertNotIn('<datalist id="modloaders">', source)
             self.assertNotIn("or 'ANY'", source)
 
+        for template_name in ("modpack.html", "modpackbuild.html"):
+            source = (template_root / template_name).read_text(encoding="utf-8")
+            self.assertIn(
+                '<input type="text" class="form-control" name="min_java"',
+                source,
+            )
+            self.assertNotIn(
+                '<select class="form-select" name="min_java"', source
+            )
+
         version_source = (template_root / "modversion.html").read_text(
             encoding="utf-8"
         )
@@ -223,8 +241,17 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn('form="update_all_mods_form"', build_source)
         self.assertIn('id="update_all_mods_form"', build_source)
         self.assertIn('<div class="d-flex gap-2 mt-3">', build_source)
-        self.assertIn('>CSV (Technic)</a>', build_source)
-        self.assertIn('>MCIL</a>', build_source)
+        self.assertIn('>Export mod list (CSV)</a>', build_source)
+        self.assertNotIn('>Export mod list</button>', build_source)
+        self.assertNotIn('>MCIL</a>', build_source)
+        self.assertLess(
+            build_source.index('id="add_mod_submit"'),
+            build_source.index('>Export mod list (CSV)</a>'),
+        )
+        self.assertIn(
+            '<div class="mb-3 gridswrapper" id="build_version_fields">',
+            build_source,
+        )
 
         script_source = (
             Path(__file__).resolve().parents[1] / "static" / "js" / "solderpy.js"
@@ -269,6 +296,62 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"9|copy-this-once", response.data)
         create.assert_called_once_with(4, "Deployment")
+
+    def test_environment_settings_can_toggle_public_distribution_formats(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch(
+                "asite.DistributionSettings.get_all",
+                return_value={
+                    "packwiz_enabled": True,
+                    "filedirector_enabled": False,
+                },
+            ),
+            patch("asite.Build.get_marked_build", return_value=0),
+            patch("asite.Modpack.get_by_pinned", return_value=[]),
+        ):
+            response = self.client.get("/mainsettings")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Public distribution formats", response.data)
+        self.assertIn(b'id="packwiz_enabled"', response.data)
+        self.assertIn(b'id="filedirector_enabled"', response.data)
+        self.assertIn(b"API-only mode", response.data)
+        self.assertLess(
+            response.data.index(b'id="distribution_settings"'),
+            response.data.index(b'id="manual_md5_hashing"'),
+        )
+
+        settings_source = (
+            Path(__file__).resolve().parents[1]
+            / "templates"
+            / "mainsettings.html"
+        ).read_text(encoding="utf-8")
+        self.assertGreater(
+            settings_source.index('id="distribution_settings"'),
+            settings_source.index("{%block aside%}"),
+        )
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.DistributionSettings.update_exports") as update,
+        ):
+            saved = self.client.post(
+                "/mainsettings",
+                data={
+                    "export_settings_submit": "1",
+                    "filedirector_enabled": "on",
+                },
+            )
+
+        self.assertEqual(saved.status_code, 302)
+        self.assertEqual(saved.headers["Location"], "/mainsettings")
+        update.assert_called_once_with(packwiz=False, filedirector=True)
 
     def test_authenticated_user_can_download_mcinstance_export(self):
         with self.client.session_transaction() as flask_session:
@@ -405,6 +488,33 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.headers["Location"], "/integrations")
         manifest.import_all.assert_not_called()
 
+    def test_integration_manifest_export_downloads_json(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        manifest = Mock()
+        manifest.render.return_value = io.BytesIO(
+            b'{"format":"solder.py-integration-manifest","version":1,'
+            b'"mods":[{"provider":"modrinth","project_id":"AANobbMI"}]}'
+        )
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch(
+                "asite.IntegrationManifest.from_database",
+                return_value=manifest,
+            ),
+        ):
+            response = self.client.get("/integrations/manifest/export")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/json")
+        self.assertIn(
+            "solder.py-integration-manifest.json",
+            response.headers["Content-Disposition"],
+        )
+        manifest.render.assert_called_once_with()
+
     def test_integration_version_error_does_not_expose_exception_details(self):
         with self.client.session_transaction() as flask_session:
             flask_session["token"] = "valid-test-token"
@@ -509,6 +619,39 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         materialize.assert_called_once_with(9, "7", "LATEST")
         update_all.assert_called_once_with("7", {9: 33})
+
+    def test_build_update_accepts_arbitrary_minimum_java_text(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Build.get_modpackid_by_id", return_value=3),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch("asite.Build.update") as update,
+        ):
+            response = self.client.post(
+                "/modpackbuild/7",
+                data={
+                    "form-submit": "1",
+                    "version": "2.0",
+                    "mcversion": "1.21.1",
+                    "min_java": " 1.8.0_51 ",
+                    "memory": "4096",
+                    "forge": "",
+                    "modloader": "",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/modpackbuild/7")
+        update.assert_called_once_with(
+            "7", "2.0", "1.21.1", "0", "0", "1.8.0_51", "4096", None, ""
+        )
 
     def test_unknown_route_uses_the_solder_404_page(self):
         response = self.client.get("/this-route-does-not-exist")

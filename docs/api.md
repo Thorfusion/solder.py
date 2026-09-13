@@ -18,6 +18,11 @@ The optional authenticated write routes are documented separately in the
 [write API reference](write-api.md). Unknown API routes and unsupported methods
 return JSON rather than the management interface's HTML error page.
 
+Packwiz and FileDirector are public file formats rather than Technic JSON API
+routes. Their paths, visibility rules, and enable switches are covered in the
+[distribution-format guide](distribution-formats.md). They are registered on
+the read-only application and remain available when `API_ONLY=True`.
+
 Values placed in a path or query string must be URL encoded.
 
 ## Authentication and visibility
@@ -197,7 +202,7 @@ manifest shape:
 {
   "id": 12,
   "minecraft": "1.20.1",
-  "java": "17",
+  "java": "1.8.0_51",
   "memory": 4096,
   "forge": "47.3.0",
   "mods": [
@@ -214,7 +219,8 @@ manifest shape:
 ```
 
 The default target is the client and optional packages are excluded. The mods
-are returned in deterministic natural-name order.
+are returned in deterministic natural-name order. `java` is a free-form string,
+so complete Java versions such as `1.8.0_51` are preserved unchanged.
 
 ### Expanded mod metadata
 

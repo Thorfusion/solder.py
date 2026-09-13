@@ -7,6 +7,7 @@ TEST_ENVIRONMENT = {
     "APP_DEBUG": "false",
     "APP_HOST": "127.0.0.1",
     "APP_PORT": "5000",
+    "APP_URL": "https://solder.example.test/",
     "API_ONLY": "false",
     "CACHE_SIZE": "100",
     "CACHE_TTL": "300",

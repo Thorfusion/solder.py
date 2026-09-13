@@ -148,6 +148,32 @@ class WriteApiRouteTests(unittest.TestCase):
         self.assertTrue(values["enable_server"])
         self.assertTrue(response.get_json()["enable_server"])
 
+    def test_create_build_preserves_a_complete_java_version(self):
+        created = build_row(min_java="1.8.0_51")
+        with (
+            patch(
+                "api_write.WriteApiStore.get_modpack",
+                return_value=modpack_row(),
+            ),
+            patch(
+                "api_write.WriteApiStore.create_build", return_value=created
+            ) as create,
+        ):
+            response = self.client.post(
+                "/api/modpack/example-pack/build",
+                headers=self.headers,
+                json={
+                    "version": "1.0",
+                    "minecraft": "1.20.1",
+                    "min_java": "1.8.0_51",
+                },
+            )
+
+        self.assertEqual(response.status_code, 201)
+        values = create.call_args.args[1]
+        self.assertEqual(values["min_java"], "1.8.0_51")
+        self.assertEqual(response.get_json()["min_java"], "1.8.0_51")
+
     def test_permission_is_enforced_before_mod_creation(self):
         restricted = ApiPrincipal(2, 8, {})
         with patch("api_write.ApiToken.authenticate", return_value=restricted):

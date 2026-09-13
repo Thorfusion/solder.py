@@ -95,13 +95,9 @@
             {%if buildlist%}
             <button class="btn btn-primary" type="submit" name="update_all_mods_submit" value="1" form="update_all_mods_form">Update all mods</button>
             {%endif%}
-            <div class="dropdown">
-                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Export mod list</button>
-                <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="{{url_for('asite.export_build_csv', id=packbuild.id)}}">CSV (Technic)</a></li>
-                    <li><a class="dropdown-item" href="{{url_for('asite.export_mcinstance', id=packbuild.id)}}">MCIL</a></li>
-                </ul>
-            </div>
+        </div>
+        <div class="mt-2">
+            <a class="btn btn-secondary" href="{{url_for('asite.export_build_csv', id=packbuild.id)}}">Export mod list (CSV)</a>
         </div>
     </form>
         {%if buildlist%}
@@ -113,13 +109,15 @@
             <label for="build_name" class="form-label">Selected modpack</label>
             <input type="text" class="form-control" name="build_name" id="build_name" value="{{ packbuildname }}" disabled readonly></input>
         </div>
-        <div class="mb-3">
-            <label for="version" class="form-label">Build number</label>
-            <input type="text" class="form-control" name="version" id="version" value="{{ packbuild.version }}" required></input>
-        </div>
-        <div class="mb-3">
-            <label for="mcversion" class="form-label">Minecraft version</label>
-            <input type="text" class="form-control" name="mcversion" id="mcversion" value="{{ packbuild.minecraft }}" required></input>
+        <div class="mb-3 gridswrapper" id="build_version_fields">
+            <div class="grid1">
+                <label for="version" class="form-label">Build number</label>
+                <input type="text" class="form-control" name="version" id="version" value="{{ packbuild.version }}" required></input>
+            </div>
+            <div class="grid2">
+                <label for="mcversion" class="form-label">Minecraft version</label>
+                <input type="text" class="form-control" name="mcversion" id="mcversion" value="{{ packbuild.minecraft }}" required></input>
+            </div>
         </div>
         <div class="mb-3">
             <label for="modloader" class="form-label">Modloader</label>
@@ -139,27 +137,7 @@
         </div>
         <div class="mb-3">
             <label for="min_java" class="form-label">Minimum Java Version</label>
-            <select class="form-select" name="min_java" id="min_java">
-                <option>{{ packbuild.min_java }}</option>
-                {% if packbuild.min_java != "None" %}
-                <option>None</option>
-                {% endif %}
-                {% if packbuild.min_java != "1.6" %}
-                <option>1.6</option>
-                {% endif %}
-                {% if packbuild.min_java != "1.7" %}
-                <option>1.7</option>
-                {% endif %}
-                {% if packbuild.min_java != "1.8" %}
-                <option>1.8</option>
-                {% endif %}
-                {% if packbuild.min_java != "16" %}
-                <option>16</option>
-                {% endif %}
-                {% if packbuild.min_java != "17" %}
-                <option>17</option>
-                {% endif %}
-            </select>
+            <input type="text" class="form-control" name="min_java" id="min_java" value="{{ packbuild.min_java or '' }}" maxlength="255" placeholder="For example: 1.8.0_51">
         </div>
         <div class="mb-3">
             <label for="memory" class="form-label">Minimum Memory requirement in MB, 0 for disable</label>

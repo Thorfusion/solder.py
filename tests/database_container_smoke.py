@@ -45,6 +45,7 @@ def database_environment(
 ) -> list[str]:
     values = {
         "APP_PORT": "5000",
+        "APP_URL": "https://solder.example.invalid/",
         "API_ONLY": str(api_only).lower(),
         "WRITE_API": str(write_api).lower(),
         "AWS_EC2_METADATA_DISABLED": "true",
@@ -197,8 +198,12 @@ def verify_read_only_api_startup(image: str, network: str, database_container: s
         "GRANT SELECT ON solder.* TO 'solder-readonly'@'%';",
     )
     command = (
-        "from models.common import DB_IS_UP; "
-        "raise SystemExit(0 if DB_IS_UP == 1 else 1)"
+        "from models.common import DB_IS_UP; from app import app; "
+        "routes = {rule.rule for rule in app.url_map.iter_rules()}; "
+        "required = {'/api/', '/packwiz/<pack_slug>/<selector>/pack.toml', "
+        "'/filedirector/<pack_slug>/<selector>/<bundle_name>.bundle.json'}; "
+        "raise SystemExit(0 if DB_IS_UP == 1 and required <= routes "
+        "and '/mainsettings' not in routes else 1)"
     )
     result = subprocess.run(
         [
@@ -225,6 +230,52 @@ def verify_read_only_api_startup(image: str, network: str, database_container: s
     if result.returncode != 0:
         raise AssertionError(
             "API-only startup did not work with read-only database access:\n"
+            f"{result.stdout.strip()}\n{result.stderr.strip()}"
+        )
+
+
+def verify_api_only_distribution_files(image: str, network: str) -> None:
+    """Render both formats through an API-only app using SELECT permission."""
+    command = (
+        "from app import app; client = app.test_client(); "
+        "pack = client.get('/packwiz/ci-hidden-pack/latest/pack.toml', "
+        "follow_redirects=True); "
+        "bundle = client.get('/filedirector/ci-hidden-pack/latest/"
+        "mods.bundle.json'); "
+        "version = client.get('/filedirector/ci-hidden-pack/latest/"
+        "version.txt'); "
+        "valid = (pack.status_code == 200 and b'packwiz:1.1.0' in pack.data "
+        "and bundle.status_code == 200 and "
+        "bundle.get_json().get('url') and version.data.strip() == b'1.0'); "
+        "private = client.get('/filedirector/ci-private-pack/latest/"
+        "version.txt'); valid = valid and private.status_code == 404; "
+        "raise SystemExit(0 if valid else 1)"
+    )
+    result = subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            network,
+            *database_environment(
+                "mysql",
+                api_only=True,
+                user="solder-readonly",
+                password="readonly-password",
+            ),
+            image,
+            "python",
+            "-c",
+            command,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise AssertionError(
+            "API-only mode did not serve enabled distribution files:\n"
             f"{result.stdout.strip()}\n{result.stderr.strip()}"
         )
 
@@ -325,10 +376,11 @@ def verify_technic_migration(database_container: str) -> None:
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
         "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies', "
+        "'solder_settings', "
         "'personal_access_tokens', 'password_reset_tokens', "
         "'maven_repositories', 'maven_artifacts', 'maven_versions');",
     )
-    if int(table_count) != 8:
+    if int(table_count) != 9:
         raise AssertionError(
             "Migration did not preserve the current Technic tables and create "
             "the solder.py tables"
@@ -452,6 +504,15 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if token_table_count != "1":
         raise AssertionError("Fresh schema did not create write API tokens")
+
+    settings_table_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME = 'solder_settings';",
+    )
+    if settings_table_count != "1":
+        raise AssertionError("Fresh schema did not create distribution settings")
 
     maven_table_count = mysql(
         database_container,
@@ -875,8 +936,8 @@ def exercise_maven_write_api(
         )
     artifact_id = artifact["artifact"]["id"]
     mod_slug = artifact["artifact"]["slug"]
-    if mod_slug != "ci-maven-ci-maven-mod":
-        raise AssertionError(f"Unexpected repository-prefixed Maven slug: {mod_slug}")
+    if mod_slug != "ci-maven-mod-ci-maven":
+        raise AssertionError(f"Unexpected Maven mod/repository slug: {mod_slug}")
     mapping_id = artifact["versions"][0]["id"]
     integration_id = artifact["versions"][0]["integration_version_id"]
     status, mapped = write_request_json(
@@ -1409,6 +1470,67 @@ def exercise_synthetic_user_login(
                     f"The management dashboard is missing {expected_text!r}"
                 )
 
+    with opener.open(f"{base_url}/integrations", timeout=5) as response:
+        integrations_page = response.read()
+        if (
+            response.status != 200
+            or b"Export configured integrations" not in integrations_page
+        ):
+            raise AssertionError(
+                "The integration manifest export action was not shown"
+            )
+
+    with opener.open(f"{base_url}/mainsettings", timeout=5) as response:
+        settings_page = response.read()
+        if response.status != 200:
+            raise AssertionError("The environment settings page did not load")
+        distribution_position = settings_page.find(
+            b'id="distribution_settings"'
+        )
+        hashing_position = settings_page.find(b'id="manual_md5_hashing"')
+        if (
+            distribution_position < 0
+            or hashing_position < 0
+            or distribution_position >= hashing_position
+        ):
+            raise AssertionError(
+                "Distribution settings were not above manual MD5 hashing"
+            )
+
+    with opener.open(
+        f"{base_url}/integrations/manifest/export", timeout=5
+    ) as response:
+        if response.status != 200:
+            raise AssertionError(
+                "The integration manifest export did not return HTTP 200"
+            )
+        disposition = response.headers.get("Content-Disposition", "")
+        if "solder.py-integration-manifest.json" not in disposition:
+            raise AssertionError(
+                f"The integration export filename was incorrect: {disposition}"
+            )
+        integration_manifest = json.loads(response.read())
+    if (
+        integration_manifest.get("format") != "solder.py-integration-manifest"
+        or integration_manifest.get("version") != 1
+    ):
+        raise AssertionError(
+            f"The integration export header was invalid: {integration_manifest}"
+        )
+    maven_entries = [
+        entry
+        for entry in integration_manifest.get("mods", [])
+        if entry.get("provider") == "maven"
+    ]
+    if (
+        len(maven_entries) != 1
+        or maven_entries[0].get("artifact_id") != "ci-maven-mod"
+        or maven_entries[0].get("repository", {}).get("name") != "CI Maven"
+    ):
+        raise AssertionError(
+            f"The Maven integration was not portable: {integration_manifest}"
+        )
+
     with opener.open(f"{base_url}/modversion/3", timeout=5) as response:
         version_page = response.read()
         if (
@@ -1558,8 +1680,55 @@ def exercise_synthetic_user_login(
             response.status != 200
             or b"CI Example Mod" not in build_editor
             or b">Update all mods</button>" not in build_editor
+            or b">Export mod list (CSV)</a>" not in build_editor
+            or b'id="build_version_fields"' not in build_editor
+            or b">Export mod list</button>" in build_editor
         ):
             raise AssertionError("The authenticated build editor did not render")
+
+    build_settings_request = urllib.request.Request(
+        f"{base_url}/modpackbuild/1",
+        data=urllib.parse.urlencode(
+            {
+                "form-submit": "1",
+                "version": "1.0",
+                "mcversion": "1.21.1",
+                "min_java": "1.8.0_51",
+                "memory": "4096",
+                "forge": "",
+                "modloader": "",
+                "publish": "1",
+            }
+        ).encode(),
+        method="POST",
+    )
+    try:
+        opener.open(build_settings_request, timeout=5)
+    except urllib.error.HTTPError as error:
+        if error.code != 302 or error.headers.get("Location") != "/modpackbuild/1":
+            raise AssertionError(
+                "Updating the minimum Java version returned an unexpected "
+                f"response: {error}"
+            ) from error
+    else:
+        raise AssertionError("Updating the minimum Java version did not redirect")
+
+    stored_java = mysql(
+        database_container,
+        "SELECT min_java FROM builds WHERE id = 1;",
+    )
+    if stored_java != "1.8.0_51":
+        raise AssertionError(
+            f"The complete minimum Java version was not stored: {stored_java}"
+        )
+    client = urllib.parse.quote("ci-client-id-not-a-secret")
+    java_manifest = request_json(
+        f"{base_url}/api/modpack/ci-example-pack/1.0?cid={client}"
+    )
+    if java_manifest.get("java") != "1.8.0_51":
+        raise AssertionError(
+            f"The API changed the minimum Java version: {java_manifest}"
+        )
 
     with opener.open(f"{base_url}/modpackbuild/20/mcinstance", timeout=5) as response:
         if response.status != 200:
@@ -1718,6 +1887,16 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         )
         if dependency_table_count != "1":
             raise AssertionError("Application startup did not create mod_dependencies")
+        settings_table_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.TABLES "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+            "AND TABLE_NAME = 'solder_settings';",
+        )
+        if settings_table_count != "1":
+            raise AssertionError(
+                "Application startup did not create distribution settings"
+            )
         maven_table_count = mysql(
             database_container,
             "SELECT COUNT(*) FROM information_schema.TABLES "
@@ -1755,18 +1934,25 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             "INSERT INTO mod_dependencies (mod_id, dependency_mod_id) "
             "VALUES (21, 1);",
         )
+        mysql(
+            database_container,
+            "INSERT INTO solder_settings (name, value) VALUES "
+            "('packwiz_enabled', '1'), ('filedirector_enabled', '1') "
+            "ON DUPLICATE KEY UPDATE value = '1';",
+        )
+        verify_api_only_distribution_files(image, network)
         exercise_database_api(base_url)
         legacy_jar_md5 = stage_legacy_mcil_package(
             application_container, database_container
+        )
+        exercise_maven_write_api(
+            base_url, database_container, application_container, write_token
         )
         exercise_synthetic_user_login(
             base_url,
             database_container,
             application_container,
             legacy_jar_md5,
-        )
-        exercise_maven_write_api(
-            base_url, database_container, application_container, write_token
         )
         failed = False
         fixture_name = fixture.name if fixture is not None else "fresh database"

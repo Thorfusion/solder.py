@@ -19,6 +19,9 @@ and optional-manifest extensions, is documented in the
 Management-side Modrinth and Maven imports are documented in the
 [integration guide](docs/integrations.md).
 
+Public Packwiz and FileDirector output is documented in the
+[distribution-format guide](docs/distribution-formats.md).
+
 + **Easy install with docker**
 
 + **Efficient user experience**
@@ -56,11 +59,12 @@ Management-side Modrinth and Maven imports are documented in the
     classifier. solder.py reads `maven-metadata.xml`, maps upstream releases to
     Minecraft versions, and downloads only the release selected for a build.
 
-  + **Reviewed integration manifest import**
+  + **Reviewed integration manifest import and export**
 
     Import JSON resolved to Modrinth project IDs or exact Maven coordinates,
     with optional name, description, author, link, side, modloader, and
-    Minecraft mapping metadata.
+    Minecraft mapping metadata. Export configured integrations to the same
+    portable format for review or transfer to another installation.
 
 + **API only mode**
 
@@ -86,6 +90,12 @@ Management-side Modrinth and Maven imports are documented in the
 
   Export a build from its management page as an MCInstanceLoader
   `.mcinstance` archive.
+
++ **Packwiz and FileDirector support**
+
+  Serve published builds as Packwiz metadata or FileDirector bundles. Each
+  format is independently enabled in the settings GUI, and both are available
+  in API-only mode.
 
 + **Database compatbility with technic solder**
 
@@ -133,16 +143,15 @@ See the [integration guide](docs/integrations.md) for the complete workflow.
 
 ## MCInstanceLoader exports
 
-The **Export MCIL** action on a modpack's build list creates the
+The authenticated MCIL build-export route creates the
 [MCInstanceLoader 2.7 archive format](https://github.com/HRudyPlayZ/MCInstanceLoader/tree/1.7.10).
 `PUBLIC_REPO_LOCATION` must be configured because the generated resource list
 uses the public repository URLs. Build create/edit forms store the modloader
 and its optional version (in Technic's existing `forge` version column) for
 `metadata.packconfig`.
 
-The build editor also exports Technic-compatible CSV with the columns
-`mod_name`, `mod_slug`, `version`, `md5`, and `filesize`. Choose **Export mod
-list**, then **CSV (Technic)** or **MCIL**.
+The build editor's **Export mod list (CSV)** button exports Technic-compatible
+CSV with the columns `mod_name`, `mod_slug`, `version`, `md5`, and `filesize`.
 
 The export maps Solder packages as follows:
 
@@ -296,9 +305,11 @@ You can use the same nginx/apache server for both reverse proxy and filehosting.
 
 If you do not want to use S3 or R2, the recommended Docker setup is to let
 [Caddy](https://hub.docker.com/_/caddy) serve the local mod repository and
-reverse proxy the rest of the site to solder.py. Only Caddy is exposed to the
-internet. The solder.py container writes files to the shared repository while
-Caddy mounts that repository read-only.
+reverse proxy solder.py. Caddy serves large files below `/mods/` directly and
+proxies the dynamic site, API, Packwiz metadata, and FileDirector manifests to
+Gunicorn. Only Caddy is exposed to the internet. The solder.py container writes
+files to the shared repository while Caddy mounts that repository read-only;
+MySQL is reachable only on a private Docker network.
 
 This example uses `solder.example.com`. Before starting it:
 
@@ -316,39 +327,81 @@ Create a file named `Caddyfile` beside the Compose file:
 
 ```caddyfile
 solder.example.com {
-    # handle_path removes /mods before looking in /srv/solder-mods. A request
-    # for /mods/example/example-1.0.zip therefore maps to
-    # /srv/solder-mods/example/example-1.0.zip.
-    handle_path /mods/* {
-        root * /srv/solder-mods
-        file_server
-    }
+	encode zstd gzip
 
-    handle {
-        reverse_proxy solderpy:5000
-    }
+	# handle_path removes /mods before looking in /srv/solder-mods. A request
+	# for /mods/example/example-1.0.zip therefore maps to
+	# /srv/solder-mods/example/example-1.0.zip.
+	handle_path /mods/* {
+		root * /srv/solder-mods
+		file_server
+	}
+
+	# These files are generated from the selected build. Keep the full path
+	# and proxy them to solder.py instead of looking for them under /mods.
+	handle /packwiz/* {
+		reverse_proxy solderpy:5000
+	}
+
+	handle /filedirector/* {
+		reverse_proxy solderpy:5000
+	}
+
+	# Management pages and the Technic-compatible API.
+	handle {
+		reverse_proxy solderpy:5000
+	}
 }
 ```
 
 Directory browsing is not enabled, so requests to repository directories do
 not produce file listings.
 
-Create `compose.yml`, filling in the existing database values for your
-installation. Replace `mysql` with the database hostname or service name used
-by your deployment:
+Create a Compose `.env` file beside `compose.yml`. Use different, randomly
+generated values in production and do not commit this file:
+
+```dotenv
+SOLDER_DB_PASSWORD=replace-with-a-long-random-password
+MYSQL_ROOT_PASSWORD=replace-with-another-long-random-password
+```
+
+Then create `compose.yml`:
 
 ```yaml
 services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: solderpy
+      MYSQL_USER: solderpy
+      MYSQL_PASSWORD: ${SOLDER_DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - solder_database
+
   solderpy:
     image: thorfusion/solderpy:latest
     restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
     expose:
       - "5000"
     environment:
+      APP_URL: https://solder.example.com/
       DB_HOST: mysql
       DB_PORT: "3306"
       DB_USER: solderpy
-      DB_PASSWORD: change-me
+      DB_PASSWORD: ${SOLDER_DB_PASSWORD}
       DB_DATABASE: solderpy
       PUBLIC_REPO_LOCATION: https://solder.example.com/mods/
       MD5_REPO_LOCATION: /app/mods/
@@ -359,6 +412,7 @@ services:
     networks:
       solder_frontend:
         ipv4_address: 172.30.50.3
+      solder_database:
 
   caddy:
     image: caddy:2-alpine
@@ -383,16 +437,19 @@ networks:
     ipam:
       config:
         - subnet: 172.30.50.0/24
+  solder_database:
+    internal: true
 
 volumes:
+  mysql_data:
   caddy_data:
   caddy_config:
 ```
 
-If MySQL is another service in the same Compose file, attach `solderpy` to its
-database network as well. Do not publish solder.py's port `5000`; Caddy should
-be its only public entry point. If `172.30.50.0/24` overlaps an existing Docker
-or LAN network, choose another private subnet and update both fixed addresses.
+Neither MySQL's port `3306` nor solder.py's port `5000` is published. Caddy is
+the only public entry point. If `172.30.50.0/24` overlaps an existing Docker or
+LAN network, choose another private subnet and update both fixed addresses and
+`PROXY_IP`.
 
 Start or update the installation with:
 
@@ -403,28 +460,42 @@ docker compose up -d
 Caddy automatically obtains and renews HTTPS certificates when the domain
 resolves to the server and ports 80 and 443 are reachable. The `caddy_data`
 volume must remain persistent because it stores Caddy's certificates and other
-state.
+state. On a new installation, open `https://solder.example.com/setup` and
+create the first administrator after the containers become healthy.
 
 With this layout, the important solder.py repository settings are:
 
 ```ini
 PUBLIC_REPO_LOCATION=https://solder.example.com/mods/
 MD5_REPO_LOCATION=/app/mods/
+APP_URL=https://solder.example.com/
 ```
 
 `PUBLIC_REPO_LOCATION` is the URL used by launchers. `MD5_REPO_LOCATION` is the
 local path used by solder.py for hashing and file inspection, so those internal
-operations do not need to download the file again through Caddy.
+operations do not need to download the file again through Caddy. `APP_URL` is
+the trusted public base URL used in generated FileDirector remote pointers.
+
+Packwiz and FileDirector are disabled by default. After setup, open **Settings
+> Env Settings**, enable the formats that this installation should publish,
+and save. They are still served when the solder.py container has
+`API_ONLY=True`; the enable switches live in MySQL so management and API-only
+containers can share them.
 
 After uploading a mod version, verify both services through Caddy:
 
 ```bash
 curl -I https://solder.example.com/api/
 curl -I https://solder.example.com/mods/example-mod/example-mod-1.0.zip
+curl -I https://solder.example.com/packwiz/example-pack/latest/pack.toml
+curl -I https://solder.example.com/filedirector/example-pack/latest/mods.bundle.json
 ```
 
-Back up `/srv/solder/mods` along with the database. The mod repository is user
-data and is not stored inside either Docker image.
+Replace the example slugs with a public pack and uploaded mod from the
+installation. Back up `/srv/solder/mods` and take regular logical MySQL backups;
+the `mysql_data` volume, repository, and `caddy_data` volume all persist across
+container replacement. The mod repository is user data and is not stored inside
+either Docker image.
 
 ## Install solder.py with python (Limited support)
 

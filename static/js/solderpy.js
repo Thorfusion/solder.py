@@ -208,7 +208,7 @@ function updatemavenslug() {
         return;
     }
     const repositoryName = repository.options[repository.selectedIndex].dataset.name || "";
-    slug.value = string_to_slug(repositoryName + "-" + modName.value);
+    slug.value = string_to_slug(modName.value + "-" + repositoryName);
 }
 
 function updatemavenmodname() {
@@ -228,13 +228,20 @@ function updatemavenmappingfields(modeId, patternId) {
         return;
     }
     if (mode.value === "FIXED") {
+        if (pattern.value.includes("{minecraft}")) {
+            pattern.dataset.embeddedPattern = pattern.value;
+        }
         pattern.value = "{version}";
         pattern.readOnly = true;
-    } else {
-        pattern.readOnly = false;
-        if (mode.value === "EMBEDDED" && !pattern.value.includes("{minecraft}")) {
-            pattern.value = "{minecraft}-{version}";
+        return;
+    }
+
+    pattern.readOnly = false;
+    if (mode.value === "EMBEDDED") {
+        if (!pattern.value.includes("{minecraft}")) {
+            pattern.value = pattern.dataset.embeddedPattern || "{minecraft}-{version}";
         }
+        pattern.dataset.embeddedPattern = pattern.value;
     }
 }
 

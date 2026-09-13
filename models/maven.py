@@ -142,12 +142,12 @@ def _slug_part(value):
 
 
 def maven_mod_slug(repository_name, mod_name):
-    """Build the stable repository-prefixed slug used by Maven mods."""
+    """Build the stable mod-and-repository slug used by Maven mods."""
     repository = _slug_part(repository_name)
     mod = _slug_part(mod_name)
     if not repository or not mod:
         raise MavenError("Repository and mod names must produce a usable slug.")
-    value = f"{repository}-{mod}"
+    value = f"{mod}-{repository}"
     if len(value) <= 255:
         return value
     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]

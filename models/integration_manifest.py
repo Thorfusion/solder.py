@@ -1,10 +1,12 @@
 """Validated batch imports for Modrinth and standard Maven repositories."""
 
 from dataclasses import dataclass, field
+import io
 import json
 from mysql.connector import IntegrityError
 
 from .compatibility import InvalidModloaderError, normalize_modloader
+from .database import Database
 from .integration import IntegrationError, MAVEN, MODRINTH, ModIntegration
 from .maven import (
     DEFAULT_VERSION_PATTERN,
@@ -67,6 +69,37 @@ class ManifestMod:
             if value is not None
         }
 
+    def as_dict(self):
+        entry = {"provider": self.provider.lower()}
+        if self.provider == MODRINTH:
+            entry["project_id"] = self.project_id
+        else:
+            entry.update(
+                {
+                    "repository": {
+                        "name": self.repository_name,
+                        "url": self.repository_url,
+                    },
+                    "group_id": self.group_id,
+                    "artifact_id": self.artifact_id,
+                    "extension": self.extension,
+                }
+            )
+            if self.classifier:
+                entry["classifier"] = self.classifier
+            if self.modloader:
+                entry["modloader"] = self.modloader
+
+            minecraft = {"mode": self.version_mode}
+            if self.version_mode == "EMBEDDED":
+                minecraft["pattern"] = self.version_pattern
+            elif self.version_mode == "FIXED":
+                minecraft["version"] = self.fixed_minecraft
+            entry["minecraft"] = minecraft
+
+        entry.update(self.metadata)
+        return entry
+
 
 @dataclass
 class ManifestImportResult:
@@ -125,6 +158,136 @@ class IntegrationManifest:
     @property
     def includes_maven(self):
         return any(mod.provider == MAVEN for mod in self.mods)
+
+    @classmethod
+    def from_database(cls):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT mods.id, mods.name, mods.pretty_name,
+                          mods.description, mods.author, mods.link, mods.side,
+                          mods.integration_provider,
+                          mods.integration_project_id,
+                          maven_artifacts.id AS maven_artifact_id,
+                          maven_artifacts.group_id,
+                          maven_artifacts.artifact_id,
+                          maven_artifacts.classifier,
+                          maven_artifacts.extension,
+                          maven_artifacts.version_mode,
+                          maven_artifacts.version_pattern,
+                          maven_artifacts.fixed_minecraft,
+                          maven_artifacts.modloader,
+                          maven_repositories.name AS repository_name,
+                          maven_repositories.base_url AS repository_url
+                   FROM mods
+                   LEFT JOIN maven_artifacts
+                       ON maven_artifacts.mod_id = mods.id
+                   LEFT JOIN maven_repositories
+                       ON maven_repositories.id = maven_artifacts.repository_id
+                   WHERE mods.integration_provider IN (%s, %s)
+                   ORDER BY LOWER(COALESCE(NULLIF(mods.pretty_name, ''),
+                                           mods.name)),
+                            LOWER(mods.name), mods.id""",
+                (MODRINTH, MAVEN),
+            )
+            rows = cur.fetchall() or []
+        finally:
+            cur.close()
+            conn.close()
+
+        if not rows:
+            raise IntegrationManifestError(
+                "No Modrinth or Maven mods are configured."
+            )
+        if len(rows) > MAX_MANIFEST_MODS:
+            raise IntegrationManifestError(
+                f"The export contains more than {MAX_MANIFEST_MODS} mods."
+            )
+
+        mods = []
+        for row in rows:
+            provider = str(row["integration_provider"]).upper()
+            metadata = {
+                "name": cls._export_text(
+                    row.get("pretty_name") or row.get("name")
+                ),
+                "description": cls._export_text(row.get("description")),
+                "author": cls._export_text(row.get("author")),
+                "link": cls._export_text(row.get("link")),
+                "side": cls._export_text(row.get("side")) or "BOTH",
+            }
+            if provider == MODRINTH:
+                project_id = cls._export_text(row.get("integration_project_id"))
+                if not project_id:
+                    raise IntegrationManifestError(
+                        f'Modrinth mod "{metadata["name"]}" has no project ID.'
+                    )
+                mods.append(
+                    ManifestMod(
+                        provider=MODRINTH,
+                        project_id=project_id,
+                        **metadata,
+                    )
+                )
+                continue
+
+            required_maven_fields = (
+                "maven_artifact_id",
+                "repository_name",
+                "repository_url",
+                "group_id",
+                "artifact_id",
+            )
+            if any(not row.get(field) for field in required_maven_fields):
+                raise IntegrationManifestError(
+                    f'Maven mod "{metadata["name"]}" has no attached artifact.'
+                )
+            mods.append(
+                ManifestMod(
+                    provider=MAVEN,
+                    repository_name=str(row["repository_name"]),
+                    repository_url=str(row["repository_url"]),
+                    group_id=str(row["group_id"]),
+                    artifact_id=str(row["artifact_id"]),
+                    classifier=str(row.get("classifier") or ""),
+                    extension=str(row.get("extension") or "jar"),
+                    version_mode=str(row.get("version_mode") or "MANUAL"),
+                    version_pattern=str(
+                        row.get("version_pattern") or DEFAULT_VERSION_PATTERN
+                    ),
+                    fixed_minecraft=cls._export_text(
+                        row.get("fixed_minecraft")
+                    ),
+                    modloader=cls._export_text(row.get("modloader")),
+                    **metadata,
+                )
+            )
+        return cls(mods)
+
+    @staticmethod
+    def _export_text(value):
+        if value is None:
+            return None
+        return str(value).strip() or None
+
+    def payload(self):
+        return {
+            "format": MANIFEST_FORMAT,
+            "version": MANIFEST_VERSION,
+            "mods": [mod.as_dict() for mod in self.mods],
+        }
+
+    def render(self):
+        content = (
+            json.dumps(self.payload(), ensure_ascii=False, indent=2) + "\n"
+        ).encode("utf-8")
+        if len(content) > MAX_MANIFEST_SIZE:
+            raise IntegrationManifestError("The exported manifest exceeds 512 KiB.")
+        # Keep export and import as one contract. This is local validation only;
+        # parsing a manifest does not make provider requests.
+        type(self).parse(io.BytesIO(content))
+        return io.BytesIO(content)
 
     @classmethod
     def parse(cls, uploaded_file):

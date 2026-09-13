@@ -65,7 +65,7 @@ The modloader configured on an artifact is copied into rule-generated version
 mappings. Individual version rows may override it. A blank modloader is
 loader-agnostic.
 
-Maven mods use a server-generated `<repository name>-<mod name>` Solder slug.
+Maven mods use a server-generated `<mod name>-<repository name>` Solder slug.
 The form initially copies the artifact ID into the mod name, then uses the same
 slug conversion as the normal new-mod form. You can edit the mod name before
 submitting; the server regenerates and validates the final slug. Repository
@@ -104,6 +104,15 @@ embedded credentials are rejected.
 Modrinth projects and Maven artifacts. This lets a person or AI resolve a
 written mod list to stable Modrinth project IDs or exact Maven coordinates
 before an administrator imports it. The importer never guesses from a name.
+
+Use **Export configured integrations** on the same page to download the
+currently configured Modrinth and Maven mods in this format. The export uses
+the reviewed local name, description, author, project link, and side together
+with each portable provider identifier. Maven entries also include their
+repository, exact coordinates, modloader, and Minecraft mapping rule. It does
+not contact an upstream provider and does not include local mod versions,
+downloaded files, internal notes, users, tokens, or credentials. The generated
+file can be reviewed, edited, and imported into another solder.py installation.
 
 Start from the
 [example integration manifest](../static/examples/integration-manifest.json).

@@ -34,6 +34,13 @@ CORE_TABLES = {
 
 
 class Database:
+    SOLDER_SETTINGS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS solder_settings (
+        name VARCHAR(64) NOT NULL PRIMARY KEY,
+        value VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )"""
+
     PERSONAL_ACCESS_TOKENS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS personal_access_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         tokenable_type VARCHAR(255) NOT NULL,
@@ -524,6 +531,7 @@ class Database:
             )
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
+            cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
             for query in Database.MAVEN_TABLES_SQL:
                 cur.execute(query)
             cur.execute(
@@ -724,6 +732,7 @@ class Database:
 
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
+            cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
             for query in Database.MAVEN_TABLES_SQL:
                 cur.execute(query)
 
@@ -765,6 +774,7 @@ class Database:
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
             cur.execute(Database.USER_MODPACK_TABLE_SQL)
+            cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
             for query in Database.MAVEN_TABLES_SQL:
                 cur.execute(query)
 

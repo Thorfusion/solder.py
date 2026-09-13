@@ -72,6 +72,7 @@
         </div>
         <div class="col-12">
             <button class="btn btn-success" type="submit">Import manifest</button>
+            <a class="btn btn-secondary" href="{{url_for('asite.export_integration_manifest')}}">Export configured integrations</a>
             <a class="btn btn-link" href="{{url_for('static', filename='examples/integration-manifest.json')}}">Example manifest</a>
         </div>
     </form>

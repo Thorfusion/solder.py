@@ -16,6 +16,10 @@ from models.client_modpack import Client_modpack
 from models.compatibility import InvalidModloaderError
 from models.database import Database
 from models.dashboard import Dashboard
+from models.distribution_settings import (
+    DistributionSettings,
+    DistributionSettingsError,
+)
 from models.key import Key
 from models.mcinstance import (
     MCInstanceExport,
@@ -52,7 +56,7 @@ from models.session import Session
 from models.user import User
 from mysql import connector
 from werkzeug.utils import secure_filename
-from models.common import public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl, write_api
+from models.common import api_only, app_url, public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl, write_api
 from models.user_modpack import User_modpack
 from models.errorPrinter import ErrorPrinter
 
@@ -60,7 +64,7 @@ __version__ = solderpy_version
 
 asite = Blueprint("asite", __name__)
 
-if DB_IS_UP == 1:
+if DB_IS_UP == 1 and not api_only:
     Session.start_session_loop()
 
 ## Allowed extensions to be uploaded
@@ -476,6 +480,29 @@ def import_integration_manifest():
     return redirect(url_for("asite.integrations"))
 
 
+@asite.route("/integrations/manifest/export", methods=["GET"])
+def export_integration_manifest():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "mods_create") == 0:
+        return redirect(url_for("asite.index"))
+
+    try:
+        output = IntegrationManifest.from_database().render()
+    except IntegrationManifestError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.integrations"))
+
+    return send_file(
+        output,
+        mimetype="application/json",
+        as_attachment=True,
+        download_name="solder.py-integration-manifest.json",
+    )
+
+
 @asite.route("/maven", methods=["GET", "POST"])
 def maven():
     if "token" not in session or not Session.verify_session(
@@ -616,6 +643,7 @@ def maven_artifact(artifact_id):
         artifact=artifact,
         versions=versions,
         version_modes=MAVEN_VERSION_MODES,
+        default_pattern=DEFAULT_VERSION_PATTERN,
     )
 
 
@@ -647,10 +675,9 @@ def modpack(id):
             
             publish = "0"
             private = "0"
-            if "min_java" in request.form:
-                min_java = request.form['min_java']
-                if "NONE" in min_java:
-                    min_java = None
+            min_java = request.form.get("min_java", "").strip()
+            if not min_java or min_java.upper() == "NONE":
+                min_java = None
             if "publish" in request.form:
                 publish = request.form['publish']
             if "private" in request.form:
@@ -722,7 +749,7 @@ def changelog(oldver, newver):
     return render_template("changelog.html", changelog=changelog)
 
 
-@asite.route("/mainsettings")
+@asite.route("/mainsettings", methods=["GET", "POST"])
 def mainsettings():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -730,8 +757,21 @@ def mainsettings():
 
     if User.get_permission_token(session["token"], "solder_env") == 0:
         return redirect(request.referrer)
-    
-    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_ttl=cache_ttl)
+
+    if request.method == "POST" and "export_settings_submit" in request.form:
+        try:
+            DistributionSettings.update_exports(
+                packwiz="packwiz_enabled" in request.form,
+                filedirector="filedirector_enabled" in request.form,
+            )
+            flash("Public distribution settings updated.", "success")
+        except DistributionSettingsError as error:
+            ErrorPrinter.message("Unable to update distribution settings", error)
+            flash(str(error), "error")
+        return redirect(url_for("asite.mainsettings"))
+
+    distribution_settings = DistributionSettings.get_all()
+    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, app_url=app_url, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_ttl=cache_ttl, distribution_settings=distribution_settings)
 
 
 @asite.route("/apikeylibrary", methods=["GET"])
@@ -948,10 +988,9 @@ def modpackbuild(id):
         if "form-submit" in request.form:
             publish = "0"
             private = "0"
-            if "min_java" in request.form:
-                min_java = request.form['min_java']
-                if "NONE" in min_java:
-                    min_java = None
+            min_java = request.form.get("min_java", "").strip()
+            if not min_java or min_java.upper() == "NONE":
+                min_java = None
             if "publish" in request.form:
                 publish = request.form['publish']
             if "private" in request.form:

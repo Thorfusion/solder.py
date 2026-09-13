@@ -19,6 +19,7 @@ reverse_proxy = False
 
 host = os.getenv("APP_HOST")
 port = os.getenv("APP_PORT")
+app_url = os.getenv("APP_URL")
 
 if os.getenv("PROXY_IP"):
     reverse_proxy = True

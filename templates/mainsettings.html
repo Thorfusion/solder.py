@@ -53,6 +53,10 @@
                 <td class="">{{port}}</td>
             </tr>
             <tr>
+                <td class="">APP_URL:</td>
+                <td class="">{{app_url}}</td>
+            </tr>
+            <tr>
                 <td class="">PUBLIC_REPO_URL:</td>
                 <td class="">{{public_repo_url}}</td>
             </tr>
@@ -105,10 +109,42 @@
 {% endblock %}
 
 {%block aside%}
-<div class="">
+<section id="distribution_settings">
+    <h5>Public distribution formats</h5>
+    <p class="text-muted">
+        Expose public builds in API-only mode too. Both formats are disabled
+        by default.
+    </p>
+    <form method="post" action="{{ url_for('asite.mainsettings') }}">
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                id="packwiz_enabled" name="packwiz_enabled"
+                {% if distribution_settings.packwiz_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="packwiz_enabled">
+                Enable Packwiz files
+            </label>
+        </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                id="filedirector_enabled" name="filedirector_enabled"
+                {% if distribution_settings.filedirector_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="filedirector_enabled">
+                Enable FileDirector files
+            </label>
+        </div>
+        <button class="btn btn-primary" type="submit" name="export_settings_submit" value="1">
+            Save distribution settings
+        </button>
+    </form>
+</section>
+
+<hr>
+
+<section id="manual_md5_hashing">
+    <h5>Manual MD5 hashing</h5>
     <form method="post" action="" enctype="multipart/form-data">
         <div class="mb-3">
-            <label for="formFile" class="form-label">MD5 Hashing, included for verifying hashes manually for ZIP files</label>
+            <label for="file" class="form-label">ZIP file</label>
             <input class="form-control" type="file" id="file" onchange="hashmd5()">
         </div>
         <div class="mb-3">
@@ -120,7 +156,7 @@
             <input type="text" class="form-control" name="filesize" id="filesize" readonly>
         </div>
     </form>
-</div>
+</section>
 
 
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>

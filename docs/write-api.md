@@ -61,7 +61,8 @@ Tokens may also manage the authenticated user's own tokens:
 
 Create-build requests require `version` and `minecraft`. They may include
 `forge`, `modloader`, `is_published`, `private`, `min_java`, `min_memory`,
-`clone_from`, and `clone_from_modpack`.
+`clone_from`, and `clone_from_modpack`. `min_java` is a free-form string and
+accepts complete versions such as `1.8.0_51`.
 
 Create-mod requests require `name` and `pretty_name`. They may include
 `author`, `description`, `link`, private management `notes`, `side`, `modtype`,
@@ -107,8 +108,8 @@ verifies and packages that one release on demand before changing the build.
 
 Creating a Maven artifact requires `repository_id`, `group_id`, `artifact_id`,
 `title`, and `redistribution_confirmed: true`. The Solder slug is generated
-from the configured repository name and mod title; a submitted `slug` is
-ignored for compatibility with older clients. The route also accepts
+from the mod title followed by the configured repository name; a submitted
+`slug` is ignored for compatibility with older clients. The route also accepts
 `classifier`, `extension` (`jar`), `author`, `description`, `link`, `side`,
 `modloader`, and one of these version mapping configurations:
 

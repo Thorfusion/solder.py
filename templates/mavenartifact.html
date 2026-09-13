@@ -67,7 +67,7 @@
     </div>
     <div class="mb-3">
         <label for="version_pattern" class="form-label">Embedded format</label>
-        <input class="form-control" name="version_pattern" id="version_pattern" value="{%if artifact.version_mode == 'FIXED'%}{version}{%else%}{{artifact.version_pattern}}{%endif%}" {%if artifact.version_mode == 'FIXED'%}readonly{%endif%}>
+        <input class="form-control" name="version_pattern" id="version_pattern" value="{%if artifact.version_mode == 'FIXED'%}{version}{%else%}{{artifact.version_pattern}}{%endif%}" data-embedded-pattern="{%if artifact.version_mode == 'EMBEDDED'%}{{artifact.version_pattern}}{%else%}{{default_pattern}}{%endif%}" {%if artifact.version_mode == 'FIXED'%}readonly{%endif%}>
         <div class="form-text">Example: {minecraft}-{version}</div>
     </div>
     <div class="mb-3">

@@ -80,7 +80,7 @@ class MavenRuleTests(unittest.TestCase):
     def test_maven_slug_uses_repository_and_mod_names(self):
         self.assertEqual(
             maven_mod_slug("GTNH Releases", "Example Mod"),
-            "gtnh-releases-example-mod",
+            "example-mod-gtnh-releases",
         )
 
     def test_embedded_rule_marks_the_minecraft_part(self):
@@ -427,6 +427,14 @@ class MavenSchemaAndUiTests(unittest.TestCase):
         self.assertIn("maxheighttable table-sm", source)
         self.assertIn("updatemavenmodname", source)
         self.assertIn("updatemavenmappingfields", source)
+        self.assertIn('data-embedded-pattern="{{default_pattern}}"', source)
+
+        javascript = (
+            Path(__file__).resolve().parents[1] / "static" / "js" / "solderpy.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn('pattern.value = "{version}"', javascript)
+        self.assertIn("pattern.dataset.embeddedPattern", javascript)
+        self.assertIn('modName.value + "-" + repositoryName', javascript)
 
     def test_artifact_url_preserves_classifier_as_a_separate_coordinate(self):
         self.assertEqual(
