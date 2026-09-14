@@ -389,6 +389,9 @@ class FileDirectorExport:
                     ),
                     "fileName": filename,
                     "folder": ".",
+                    "metadata": {
+                        "hash": {"MD5": package.zip_md5},
+                    },
                     "installationPolicy": {
                         "extract": True,
                         "deleteAfterExtract": True,

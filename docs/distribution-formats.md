@@ -72,9 +72,10 @@ https://solder.example.com/filedirector/example-pack/latest/mods.bundle.json
 FileDirector side metadata is generated for `CLIENT` and `SERVER` entries;
 `BOTH` entries are left unrestricted. Its native optional selection fields
 preserve Solder's optional status and default those packages to not selected.
-Raw-JAR-ready mods download as JARs and are checked against their stored MD5.
-Other ordinary Solder package types download their Solder ZIP and use
-FileDirector's extract-and-delete policy at the instance root. `MCIL` and
+Raw-JAR-ready mods download as JARs and are checked against their stored JAR
+MD5. Other ordinary Solder package types download their Solder ZIP, check its
+stored ZIP MD5, and use FileDirector's extract-and-delete policy at the instance
+root. `MCIL` and
 `LAUNCHER` packages are excluded because they are launcher bootstrap packages,
 not runtime files. `required.bundle.json` and `optional.bundle.json` are also
 available if a pack author deliberately wants the two subsets separately; do

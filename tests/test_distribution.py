@@ -149,7 +149,10 @@ class DistributionRendererTests(unittest.TestCase):
         self.assertEqual(entries[0]["metadata"]["side"], "CLIENT")
         self.assertEqual(entries[0]["metadata"]["hash"], {"MD5": JAR_MD5})
         self.assertTrue(entries[0]["url"].endswith("example-mod-2.0.jar"))
-        self.assertEqual(entries[1]["metadata"], {"side": "SERVER"})
+        self.assertEqual(
+            entries[1]["metadata"],
+            {"hash": {"MD5": ZIP_MD5}, "side": "SERVER"},
+        )
         self.assertEqual(entries[1]["folder"], ".")
         self.assertEqual(
             entries[1]["installationPolicy"],
