@@ -16,7 +16,8 @@ _WRITABLE_FIELDS = {
     },
     "builds": {
         "modpack_id", "version", "minecraft", "forge", "modloader",
-        "is_published", "private", "min_java", "min_memory", "marked",
+        "is_published", "private", "min_java", "java_runtime", "min_memory",
+        "marked",
     },
     "mods": {
         "name", "pretty_name", "description", "author", "link", "notes",

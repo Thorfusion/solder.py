@@ -181,6 +181,11 @@ class ApplicationSmokeTests(unittest.TestCase):
             self.assertNotIn(
                 '<select class="form-select" name="min_java"', source
             )
+            self.assertIn(
+                '<select class="form-select" name="java_runtime"', source
+            )
+            self.assertIn(">Advanced</span>", source)
+            self.assertIn("jre-legacy may be older", source)
 
         version_source = (template_root / "modversion.html").read_text(
             encoding="utf-8"
@@ -641,6 +646,7 @@ class ApplicationSmokeTests(unittest.TestCase):
                     "version": "2.0",
                     "mcversion": "1.21.1",
                     "min_java": " 1.8.0_51 ",
+                    "java_runtime": "java-runtime-delta",
                     "memory": "4096",
                     "forge": "",
                     "modloader": "",
@@ -650,7 +656,8 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["Location"], "/modpackbuild/7")
         update.assert_called_once_with(
-            "7", "2.0", "1.21.1", "0", "0", "1.8.0_51", "4096", None, ""
+            "7", "2.0", "1.21.1", "0", "0", "1.8.0_51", "4096", None, "",
+            "java-runtime-delta"
         )
 
     def test_unknown_route_uses_the_solder_404_page(self):

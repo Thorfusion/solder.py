@@ -320,6 +320,7 @@ def verify_technic_migration(database_container: str) -> None:
         ("build_modversion", "optional"),
         ("builds", "marked"),
         ("builds", "modloader"),
+        ("builds", "java_runtime"),
         ("mods", "modtype"),
         ("mods", "notes"),
         ("mods", "side"),
@@ -465,6 +466,15 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if notes_column_count != "1":
         raise AssertionError("Fresh schema did not create Technic-compatible notes")
+
+    java_runtime_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND "
+        "TABLE_NAME = 'builds' AND COLUMN_NAME = 'java_runtime';",
+    )
+    if java_runtime_column_count != "1":
+        raise AssertionError("Fresh schema did not create java_runtime")
 
     integration_schema_count = mysql(
         database_container,
@@ -1117,10 +1127,17 @@ def exercise_write_api(base_url: str, database_container: str, token: str) -> No
             "version": "1.0",
             "minecraft": "1.21.1",
             "modloader": "FABRIC",
+            "min_java": "21.0.2",
+            "java_runtime": "java-runtime-delta",
             "is_published": True,
         },
     )
-    if status != 201 or created_build.get("modloader") != "FABRIC":
+    if (
+        status != 201
+        or created_build.get("modloader") != "FABRIC"
+        or created_build.get("min_java") != "21.0.2"
+        or created_build.get("java_runtime") != "java-runtime-delta"
+    ):
         raise AssertionError(
             f"Write API did not create a build: {status} {created_build}"
         )
@@ -1682,6 +1699,8 @@ def exercise_synthetic_user_login(
             or b">Update all mods</button>" not in build_editor
             or b">Export mod list (CSV)</a>" not in build_editor
             or b'id="build_version_fields"' not in build_editor
+            or b'name="java_runtime"' not in build_editor
+            or b">Advanced</span>" not in build_editor
             or b">Export mod list</button>" in build_editor
         ):
             raise AssertionError("The authenticated build editor did not render")
@@ -1694,6 +1713,7 @@ def exercise_synthetic_user_login(
                 "version": "1.0",
                 "mcversion": "1.21.1",
                 "min_java": "1.8.0_51",
+                "java_runtime": "java-runtime-delta",
                 "memory": "4096",
                 "forge": "",
                 "modloader": "",
@@ -1715,11 +1735,12 @@ def exercise_synthetic_user_login(
 
     stored_java = mysql(
         database_container,
-        "SELECT min_java FROM builds WHERE id = 1;",
+        "SELECT min_java, java_runtime FROM builds WHERE id = 1;",
     )
-    if stored_java != "1.8.0_51":
+    if stored_java != "1.8.0_51\tjava-runtime-delta":
         raise AssertionError(
-            f"The complete minimum Java version was not stored: {stored_java}"
+            "The Java requirement/runtime override was not stored: "
+            f"{stored_java}"
         )
     client = urllib.parse.quote("ci-client-id-not-a-secret")
     java_manifest = request_json(
@@ -1728,6 +1749,10 @@ def exercise_synthetic_user_login(
     if java_manifest.get("java") != "1.8.0_51":
         raise AssertionError(
             f"The API changed the minimum Java version: {java_manifest}"
+        )
+    if java_manifest.get("java_runtime") != "java-runtime-delta":
+        raise AssertionError(
+            f"The API omitted the Mojang Java runtime: {java_manifest}"
         )
 
     with opener.open(f"{base_url}/modpackbuild/20/mcinstance", timeout=5) as response:

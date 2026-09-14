@@ -403,6 +403,9 @@ def modpack_slug_build(slugstring: str, buildstring: str):
         "id": build.id,
         "minecraft": build.minecraft,
         "java": build.min_java,
+        "java_runtime": _optional_string_attribute(
+            getattr(build, "java_runtime", None)
+        ),
         "memory": build.min_memory,
         "forge": build.forge,
         "mods": moddata,

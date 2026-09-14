@@ -51,6 +51,7 @@ def build_row(**changes):
         "is_published": 0,
         "private": 0,
         "min_java": None,
+        "java_runtime": None,
         "min_memory": None,
         "created_at": None,
         "updated_at": None,
@@ -148,8 +149,10 @@ class WriteApiRouteTests(unittest.TestCase):
         self.assertTrue(values["enable_server"])
         self.assertTrue(response.get_json()["enable_server"])
 
-    def test_create_build_preserves_a_complete_java_version(self):
-        created = build_row(min_java="1.8.0_51")
+    def test_create_build_preserves_java_version_and_runtime_override(self):
+        created = build_row(
+            min_java="1.8.0_51", java_runtime="java-runtime-delta"
+        )
         with (
             patch(
                 "api_write.WriteApiStore.get_modpack",
@@ -166,13 +169,65 @@ class WriteApiRouteTests(unittest.TestCase):
                     "version": "1.0",
                     "minecraft": "1.20.1",
                     "min_java": "1.8.0_51",
+                    "java_runtime": "java-runtime-delta",
                 },
             )
 
         self.assertEqual(response.status_code, 201)
         values = create.call_args.args[1]
         self.assertEqual(values["min_java"], "1.8.0_51")
+        self.assertEqual(values["java_runtime"], "java-runtime-delta")
         self.assertEqual(response.get_json()["min_java"], "1.8.0_51")
+        self.assertEqual(
+            response.get_json()["java_runtime"], "java-runtime-delta"
+        )
+
+    def test_build_rejects_an_unknown_java_runtime_component(self):
+        with (
+            patch(
+                "api_write.WriteApiStore.get_modpack",
+                return_value=modpack_row(),
+            ),
+            patch("api_write.WriteApiStore.create_build") as create,
+        ):
+            response = self.client.post(
+                "/api/modpack/example-pack/build",
+                headers=self.headers,
+                json={
+                    "version": "1.0",
+                    "minecraft": "1.20.1",
+                    "java_runtime": "1.8.0_401",
+                },
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("java_runtime", response.get_json()["error"])
+        create.assert_not_called()
+
+    def test_build_update_can_clear_the_runtime_override(self):
+        existing = build_row(java_runtime="java-runtime-delta")
+        updated = build_row(java_runtime=None)
+        with (
+            patch(
+                "api_write.WriteApiStore.get_modpack",
+                return_value=modpack_row(),
+            ),
+            patch(
+                "api_write.WriteApiStore.get_build", return_value=existing
+            ),
+            patch(
+                "api_write.WriteApiStore.update_build", return_value=updated
+            ) as update,
+        ):
+            response = self.client.put(
+                "/api/modpack/example-pack/1.0",
+                headers=self.headers,
+                json={"java_runtime": ""},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(update.call_args.args[1]["java_runtime"])
+        self.assertIsNone(response.get_json()["java_runtime"])
 
     def test_permission_is_enforced_before_mod_creation(self):
         restricted = ApiPrincipal(2, 8, {})

@@ -203,6 +203,7 @@ manifest shape:
   "id": 12,
   "minecraft": "1.20.1",
   "java": "1.8.0_51",
+  "java_runtime": "jre-legacy",
   "memory": 4096,
   "forge": "47.3.0",
   "mods": [
@@ -221,6 +222,16 @@ manifest shape:
 The default target is the client and optional packages are excluded. The mods
 are returned in deterministic natural-name order. `java` is a free-form string,
 so complete Java versions such as `1.8.0_51` are preserved unchanged.
+
+`java_runtime` is the nullable per-build Mojang runtime override supported by
+current Technic Launcher releases. Accepted component names are `jre-legacy`
+(Java 8), `java-runtime-alpha` (Java 16), `java-runtime-beta` and
+`java-runtime-gamma` (Java 17), `java-runtime-delta` (Java 21), and
+`java-runtime-epsilon` (Java 25). `null` leaves runtime selection automatic.
+The component selects a Mojang-managed runtime family, not a particular patch
+release. In particular, `jre-legacy` does not guarantee a current Java 8 update;
+use the separate `java` requirement and a manually installed runtime when a
+specific minimum Java 8 update is required.
 
 ### Expanded mod metadata
 

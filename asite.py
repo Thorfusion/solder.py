@@ -7,7 +7,11 @@ import requests
 
 from api import solderpy_version
 from flask import Blueprint, app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
-from models.build import Build
+from models.build import (
+    Build,
+    InvalidJavaRuntimeError,
+    MOJANG_JAVA_RUNTIME_OPTIONS,
+)
 from models.build_export import BuildCsvExport, BuildExportError
 from models.build_modversion import Build_modversion
 from models.api_token import ApiToken
@@ -678,6 +682,7 @@ def modpack(id):
             min_java = request.form.get("min_java", "").strip()
             if not min_java or min_java.upper() == "NONE":
                 min_java = None
+            java_runtime = request.form.get("java_runtime") or None
             if "publish" in request.form:
                 publish = request.form['publish']
             if "private" in request.form:
@@ -688,8 +693,8 @@ def modpack(id):
             if "clonebuildman" in request.form and request.form['clonebuildman'] != "":
                 clonebuild = request.form['clonebuildman']
             try:
-                Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild, request.form.get("forge") or None, request.form.get("modloader"))
-            except InvalidModloaderError as error:
+                Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild, request.form.get("forge") or None, request.form.get("modloader"), java_runtime)
+            except (InvalidJavaRuntimeError, InvalidModloaderError) as error:
                 flash(str(error), "error")
                 return redirect(url_for("asite.modpack", id=id))
             flash("added build", "success")
@@ -729,7 +734,12 @@ def modpack(id):
             flash("deleted " + id, "success")
             return redirect(url_for('asite.modpacklibrary'))
 
-    return render_template("modpack.html", modpack=builds, modpackname=modpack)
+    return render_template(
+        "modpack.html",
+        modpack=builds,
+        modpackname=modpack,
+        java_runtime_options=MOJANG_JAVA_RUNTIME_OPTIONS,
+    )
 
 
 @asite.route("/changelog/<oldver>-<newver>", methods=["GET"])
@@ -991,13 +1001,14 @@ def modpackbuild(id):
             min_java = request.form.get("min_java", "").strip()
             if not min_java or min_java.upper() == "NONE":
                 min_java = None
+            java_runtime = request.form.get("java_runtime") or None
             if "publish" in request.form:
                 publish = request.form['publish']
             if "private" in request.form:
                 private = request.form['private']
             try:
-                Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], request.form.get("forge") or None, request.form.get("modloader"))
-            except InvalidModloaderError as error:
+                Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], request.form.get("forge") or None, request.form.get("modloader"), java_runtime)
+            except (InvalidJavaRuntimeError, InvalidModloaderError) as error:
                 flash(str(error), "error")
                 return redirect(url_for("asite.modpackbuild", id=id))
             flash("updated " + id, "success")
@@ -1148,6 +1159,7 @@ def modpackbuild(id):
         packbuildname=editor.packbuildname,
         listmodversions=editor.listmodversions,
         buildlist=editor.buildlist,
+        java_runtime_options=MOJANG_JAVA_RUNTIME_OPTIONS,
     )
 
 

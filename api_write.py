@@ -10,7 +10,11 @@ from mysql.connector import IntegrityError
 
 from api import clear_api_caches
 from models.api_token import ApiToken
-from models.build import Build
+from models.build import (
+    Build,
+    InvalidJavaRuntimeError,
+    normalize_java_runtime,
+)
 from models.common import (
     R2_ACCESS_KEY,
     R2_BUCKET,
@@ -186,6 +190,16 @@ def _loader(data, field="modloader", default=_MISSING):
         _validation(field, str(error))
 
 
+def _java_runtime(data, field="java_runtime", default=_MISSING):
+    if field not in data:
+        return default
+    value = _string(data, field, nullable=True)
+    try:
+        return normalize_java_runtime(value)
+    except InvalidJavaRuntimeError as error:
+        _validation(field, str(error))
+
+
 def _enum(data, field, choices, default=_MISSING):
     if field not in data:
         return default
@@ -271,8 +285,8 @@ def _modpack_json(row):
 def _build_json(row):
     fields = (
         "id", "modpack_id", "version", "minecraft", "forge", "modloader",
-        "is_published", "private", "min_java", "min_memory", "created_at",
-        "updated_at",
+        "is_published", "private", "min_java", "java_runtime", "min_memory",
+        "created_at", "updated_at",
     )
     result = {field: row.get(field) for field in fields}
     result["is_published"] = bool(result["is_published"])
@@ -409,6 +423,7 @@ def _build_values(data, *, partial=False):
     ):
         _include(values, field, _boolean(data, field, default))
     _include(values, "min_java", _string(data, "min_java", nullable=True))
+    _include(values, "java_runtime", _java_runtime(data))
     _include(values, "min_memory", _integer(data, "min_memory", minimum=0))
     return values
 

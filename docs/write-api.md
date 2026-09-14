@@ -60,9 +60,14 @@ Tokens may also manage the authenticated user's own tokens:
 | `POST` | `/api/minecraft/refresh` | authenticated | Compatibility no-op; solder.py uses free-form version fields. |
 
 Create-build requests require `version` and `minecraft`. They may include
-`forge`, `modloader`, `is_published`, `private`, `min_java`, `min_memory`,
-`clone_from`, and `clone_from_modpack`. `min_java` is a free-form string and
-accepts complete versions such as `1.8.0_51`.
+`forge`, `modloader`, `is_published`, `private`, `min_java`, `java_runtime`,
+`min_memory`, `clone_from`, and `clone_from_modpack`. `min_java` is a free-form
+string and accepts complete versions such as `1.8.0_51`. `java_runtime` is an
+optional Mojang component override: `jre-legacy`, `java-runtime-alpha`,
+`java-runtime-beta`, `java-runtime-gamma`, `java-runtime-delta`, or
+`java-runtime-epsilon`. Omit it or send `null`/an empty string for automatic
+selection. Unsupported component names return `422`. On partial build updates,
+omitting the field preserves its current value.
 
 Create-mod requests require `name` and `pretty_name`. They may include
 `author`, `description`, `link`, private management `notes`, `side`, `modtype`,

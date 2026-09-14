@@ -15,7 +15,11 @@ from tests.environment import configure_test_environment
 
 configure_test_environment()
 
-from models.build import Build  # noqa: E402
+from models.build import (  # noqa: E402
+    Build,
+    InvalidJavaRuntimeError,
+    normalize_java_runtime,
+)
 from models.build_modversion import Build_modversion  # noqa: E402
 from models.common import common  # noqa: E402
 from models.database import Database  # noqa: E402
@@ -49,6 +53,15 @@ class PasswordHasherTests(unittest.TestCase):
 
 
 class ModelSerializationTests(unittest.TestCase):
+    def test_mojang_java_runtime_components_are_strictly_validated(self):
+        self.assertEqual(
+            normalize_java_runtime(" java-runtime-delta "),
+            "java-runtime-delta",
+        )
+        self.assertIsNone(normalize_java_runtime(""))
+        with self.assertRaises(InvalidJavaRuntimeError):
+            normalize_java_runtime("1.8.0_401")
+
     def test_mod_serialization_matches_the_api_contract(self):
         mod = Mod(
             1,

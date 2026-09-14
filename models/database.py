@@ -153,6 +153,14 @@ class Database:
         ),
     )
 
+    JAVA_RUNTIME_COLUMN_MIGRATIONS = (
+        (
+            "builds",
+            "java_runtime",
+            "ALTER TABLE builds ADD COLUMN java_runtime VARCHAR(255) NULL AFTER min_java",
+        ),
+    )
+
     NOTES_COLUMN_MIGRATIONS = (
         (
             "mods",
@@ -472,6 +480,7 @@ class Database:
                         is_published TINYINT(1) DEFAULT(0),
                         private TINYINT(1) DEFAULT(0),
                         min_java VARCHAR(255),
+                        java_runtime VARCHAR(255),
                         min_memory INT,
                         marked TINYINT(1) NOT NULL DEFAULT(0),
                         INDEX idx_builds_modpack_version_access
@@ -690,6 +699,7 @@ class Database:
                 "ALTER TABLE user_permissions ADD COLUMN solder_env BOOLEAN DEFAULT 0",
             ),
             *Database.MODLOADER_COLUMN_MIGRATIONS,
+            *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
             *Database.NOTES_COLUMN_MIGRATIONS,
             *Database.INTEGRATION_COLUMN_MIGRATIONS,
         )
@@ -780,6 +790,7 @@ class Database:
 
             for table, column, query in (
                 *Database.MODLOADER_COLUMN_MIGRATIONS,
+                *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
                 *Database.NOTES_COLUMN_MIGRATIONS,
                 *Database.INTEGRATION_COLUMN_MIGRATIONS,
             ):

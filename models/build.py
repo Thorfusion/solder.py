@@ -8,8 +8,38 @@ from .database import Database
 from .modversion import Modversion
 
 
+MOJANG_JAVA_RUNTIME_OPTIONS = (
+    ("jre-legacy", "Java 8 (jre-legacy)"),
+    ("java-runtime-alpha", "Java 16 (java-runtime-alpha)"),
+    ("java-runtime-beta", "Java 17 (java-runtime-beta)"),
+    ("java-runtime-gamma", "Java 17 (java-runtime-gamma)"),
+    ("java-runtime-delta", "Java 21 (java-runtime-delta)"),
+    ("java-runtime-epsilon", "Java 25 (java-runtime-epsilon)"),
+)
+MOJANG_JAVA_RUNTIMES = frozenset(
+    value for value, _label in MOJANG_JAVA_RUNTIME_OPTIONS
+)
+
+
+class InvalidJavaRuntimeError(ValueError):
+    """Raised when a build names an unsupported Mojang runtime component."""
+
+
+def normalize_java_runtime(value):
+    """Return a supported Mojang runtime component, or None for automatic."""
+    value = str(value or "").strip()
+    if not value:
+        return None
+    if value not in MOJANG_JAVA_RUNTIMES:
+        raise InvalidJavaRuntimeError(
+            "Unsupported Mojang Java runtime. Choose a listed component or "
+            "leave it on Automatic."
+        )
+    return value
+
+
 class Build:
-    def __init__(self, id, modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory, marked, count=None, modloader=None):
+    def __init__(self, id, modpack_id, version, created_at, updated_at, minecraft, forge, is_published, private, min_java, min_memory, marked, count=None, modloader=None, java_runtime=None):
         self.id = id
         self.modpack_id = modpack_id
         self.version = version
@@ -23,19 +53,21 @@ class Build:
         self.min_memory = min_memory
         self.marked = marked
         self.count = count
+        self.java_runtime = normalize_java_runtime(java_runtime)
         self.modloader = normalize_modloader(modloader)
         if self.modloader is None and forge:
             self.modloader = "FORGE"
 
     @classmethod
-    def new(cls, modpack_id, version, minecraft, is_published, private, min_java, min_memory, clone_id, forge=None, modloader=None):
+    def new(cls, modpack_id, version, minecraft, is_published, private, min_java, min_memory, clone_id, forge=None, modloader=None, java_runtime=None):
+        modloader = normalize_modloader(modloader)
+        java_runtime = normalize_java_runtime(java_runtime)
+        if modloader is None and forge:
+            modloader = "FORGE"
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        modloader = normalize_modloader(modloader)
-        if modloader is None and forge:
-            modloader = "FORGE"
-        cur.execute("INSERT INTO builds (modpack_id, version, created_at, updated_at, minecraft, forge, modloader, is_published, private, min_java, min_memory) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (modpack_id, version, now, now, minecraft, forge, modloader, is_published, private, min_java, min_memory))
+        cur.execute("INSERT INTO builds (modpack_id, version, created_at, updated_at, minecraft, forge, modloader, is_published, private, min_java, java_runtime, min_memory) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (modpack_id, version, now, now, minecraft, forge, modloader, is_published, private, min_java, java_runtime, min_memory))
         conn.commit()
         cur.execute("SELECT LAST_INSERT_ID() AS id")
         id = cur.fetchone()["id"]
@@ -46,7 +78,7 @@ class Build:
                 for mv in modversions:
                     cur.execute("INSERT INTO build_modversion (modversion_id, build_id, optional) VALUES (%s, %s, %s)", (mv["modversion_id"], id, mv["optional"]))
             conn.commit()
-        cls(id, modpack_id, version, now, now, minecraft, forge, is_published, private, min_java, min_memory, "0", modloader=modloader)
+        cls(id, modpack_id, version, now, now, minecraft, forge, is_published, private, min_java, min_memory, "0", modloader=modloader, java_runtime=java_runtime)
 
     @staticmethod
     def delete_build(id):
@@ -58,16 +90,17 @@ class Build:
         return None
 
     @staticmethod
-    def update(id, version, minecraft, is_published, private, min_java, min_memory, forge=None, modloader=None):
+    def update(id, version, minecraft, is_published, private, min_java, min_memory, forge=None, modloader=None, java_runtime=None):
+        modloader = normalize_modloader(modloader)
+        java_runtime = normalize_java_runtime(java_runtime)
+        if modloader is None and forge:
+            modloader = "FORGE"
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        modloader = normalize_modloader(modloader)
-        if modloader is None and forge:
-            modloader = "FORGE"
         cur.execute("""UPDATE builds 
-            SET version = %s, minecraft = %s, forge = %s, modloader = %s, is_published = %s, private = %s, min_java = %s, min_memory = %s
-            WHERE id = %s;""", (version, minecraft, forge, modloader, is_published, private, min_java, min_memory, id))
+            SET version = %s, minecraft = %s, forge = %s, modloader = %s, is_published = %s, private = %s, min_java = %s, java_runtime = %s, min_memory = %s
+            WHERE id = %s;""", (version, minecraft, forge, modloader, is_published, private, min_java, java_runtime, min_memory, id))
         conn.commit()
         return None
 

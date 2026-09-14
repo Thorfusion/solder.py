@@ -70,7 +70,8 @@ class Build_modversion:
                           builds.created_at, builds.updated_at, builds.minecraft,
                           builds.forge, builds.modloader,
                           builds.is_published, builds.private,
-                          builds.min_java, builds.min_memory, builds.marked,
+                          builds.min_java, builds.java_runtime,
+                          builds.min_memory, builds.marked,
                           modpacks.name AS modpack_name
                    FROM builds
                    INNER JOIN modpacks ON builds.modpack_id = modpacks.id
