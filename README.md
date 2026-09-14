@@ -10,7 +10,7 @@
 
 # About solder.py
 
-solder.py is solder written in python with major features over technic's solder.
+solder.py is solder written in python with major features over technic's solder. It started as a project so one could have mod uploading with Technic solder for the Terralization modpack, quickly moved to be fully independent when maggi373 and sebkuip wanted to solve the same issue, having an user friendly solder.
 
 The complete read API, including Technic-compatible routes and solder.py server
 and optional-manifest extensions, is documented in the
