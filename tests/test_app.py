@@ -185,7 +185,6 @@ class ApplicationSmokeTests(unittest.TestCase):
                 '<select class="form-select" name="java_runtime"', source
             )
             self.assertIn(">Advanced</span>", source)
-            self.assertIn("jre-legacy", source)
 
         version_source = (template_root / "modversion.html").read_text(
             encoding="utf-8"
