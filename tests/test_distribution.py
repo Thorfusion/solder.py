@@ -266,10 +266,10 @@ class DistributionDeploymentDocumentationTests(unittest.TestCase):
 
 class DistributionRouteTests(unittest.TestCase):
     def setUp(self):
-        application = Flask(__name__)
-        application.config.update(TESTING=True)
-        application.register_blueprint(routes.distribution_api)
-        self.client = application.test_client()
+        self.application = Flask(__name__)
+        self.application.config.update(TESTING=True)
+        self.application.register_blueprint(routes.distribution_api)
+        self.client = self.application.test_client()
 
     def test_formats_are_not_public_until_enabled(self):
         with patch.object(
@@ -401,6 +401,54 @@ class DistributionRouteTests(unittest.TestCase):
                 "recommended/mods.bundle.json"
             },
         )
+
+    def test_export_errors_are_logged_without_exposing_exception_text(self):
+        private_detail = "database password: do-not-return-this"
+        cases = (
+            ("/packwiz/example-pack/1.0/pack.toml", "load_build"),
+            ("/packwiz/example-pack/1.0/pack.toml", "load_packages"),
+            ("/packwiz/example-pack/1.0/index.toml", "load_packages"),
+            ("/packwiz/example-pack/1.0/mods/example-mod.pw.toml", "load_package"),
+            ("/filedirector/example-pack/1.0/mods.bundle.json", "load_packages"),
+            ("/filedirector/example-pack/1.0/mods.remote.json", "application_base"),
+        )
+
+        for endpoint, failing_method in cases:
+            with self.subTest(endpoint=endpoint, failing_method=failing_method):
+                error = DistributionExportError(private_detail)
+                with (
+                    patch.object(
+                        routes.DistributionSettings,
+                        "is_enabled",
+                        return_value=True,
+                    ),
+                    patch.object(
+                        routes.DistributionExport,
+                        "load_build",
+                        return_value=build(),
+                    ) as load_build,
+                    patch.object(
+                        routes.DistributionExport,
+                        failing_method,
+                        side_effect=error,
+                    ),
+                    patch.object(
+                        self.application.logger, "warning"
+                    ) as warning,
+                ):
+                    if failing_method == "load_build":
+                        load_build.side_effect = error
+                    response = self.client.get(endpoint)
+
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(
+                    response.get_data(as_text=True),
+                    routes.PUBLIC_EXPORT_ERROR,
+                )
+                self.assertNotIn(private_detail, response.get_data(as_text=True))
+                warning.assert_called_once_with(
+                    "Distribution export failed.", exc_info=True
+                )
 
 
 class PublicBuildLoadingTests(unittest.TestCase):
