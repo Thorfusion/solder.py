@@ -46,7 +46,7 @@ class ApiTests(unittest.TestCase):
             response.get_json(),
             {
                 "api": "solder.py",
-                "version": "v1.8.0",
+                "version": "v1.9.0",
                 "stream": "DEV",
                 "capabilities": {
                     "build_channels": True,

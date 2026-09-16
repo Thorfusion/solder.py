@@ -45,7 +45,7 @@ SUPPORTED_LOADERS = (
 MAX_INTEGRATION_FILE_SIZE = 512 * 1024 * 1024
 REQUEST_TIMEOUT = (5, 30)
 DOWNLOAD_TIMEOUT = (5, 120)
-USER_AGENT = "solder.py/1.8.0 (+https://github.com/Thorfusion/solder.py)"
+USER_AGENT = "solder.py/1.9.0 (+https://github.com/Thorfusion/solder.py)"
 
 
 class IntegrationError(ValueError):

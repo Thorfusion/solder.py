@@ -34,7 +34,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         cls.client = cls.app_module.app.test_client()
 
     def test_application_exposes_its_version(self):
-        self.assertEqual(self.app_module.__version__, "1.8.0")
+        self.assertEqual(self.app_module.__version__, "1.9.0")
 
     def test_api_blueprint_is_registered(self):
         response = self.client.get("/api/")
