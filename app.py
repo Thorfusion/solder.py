@@ -4,6 +4,7 @@ from api import api, solderpy_version
 from alogin import alogin
 from asetup import asetup
 from asite import asite
+from distribution_api import distribution_api
 from flask import Flask, jsonify, render_template, request
 from models.common import debug, host, port, api_only, management_only, migratetechnic, new_user, DB_IS_UP, reverse_proxy, write_api
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -20,6 +21,7 @@ if reverse_proxy:
 
 if management_only == False or DB_IS_UP != 2:
     app.register_blueprint(api)
+    app.register_blueprint(distribution_api)
 if write_api and DB_IS_UP == 1:
     from api_write import write_api_blueprint
 

@@ -59,6 +59,8 @@ class ApiDocumentationTests(unittest.TestCase):
             "/api/client",
             "/api/integration/modrinth/search",
             "/api/integration/modrinth/mod",
+            "/api/integration/maven/repository",
+            "/api/integration/maven/artifact",
             "/api/mod/{slug}/{version}/mcil-jar",
         )
         for route in routes:

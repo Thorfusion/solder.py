@@ -70,7 +70,8 @@ class Build_modversion:
                           builds.created_at, builds.updated_at, builds.minecraft,
                           builds.forge, builds.modloader,
                           builds.is_published, builds.private,
-                          builds.min_java, builds.min_memory, builds.marked,
+                          builds.min_java, builds.java_runtime,
+                          builds.min_memory, builds.marked,
                           modpacks.name AS modpack_name
                    FROM builds
                    INNER JOIN modpacks ON builds.modpack_id = modpacks.id
@@ -89,11 +90,18 @@ class Build_modversion:
                 """SELECT build_modversion.id, build_modversion.optional,
                           modversions.version, modversions.id AS modverid,
                           mods.name, mods.pretty_name, mods.id AS modid,
-                          mods.integration_provider
+                          mods.integration_provider,
+                          COALESCE(maven_repositories.name,
+                                   mods.integration_provider)
+                              AS integration_label
                    FROM build_modversion
                    INNER JOIN modversions
                        ON build_modversion.modversion_id = modversions.id
                    INNER JOIN mods ON modversions.mod_id = mods.id
+                   LEFT JOIN maven_artifacts
+                       ON maven_artifacts.mod_id = mods.id
+                   LEFT JOIN maven_repositories
+                       ON maven_artifacts.repository_id = maven_repositories.id
                    WHERE build_modversion.build_id = %s
                    ORDER BY mods.name""",
                 (id,),
@@ -101,17 +109,39 @@ class Build_modversion:
             build_rows = cur.fetchall() or []
 
             cur.execute(
-                """SELECT id, name, pretty_name, integration_provider
-                   FROM mods ORDER BY name"""
+                """SELECT mods.id, mods.name, mods.pretty_name,
+                          mods.integration_provider,
+                          COALESCE(maven_repositories.name,
+                                   mods.integration_provider)
+                              AS integration_label
+                   FROM mods
+                   LEFT JOIN maven_artifacts
+                       ON maven_artifacts.mod_id = mods.id
+                   LEFT JOIN maven_repositories
+                       ON maven_artifacts.repository_id = maven_repositories.id
+                   ORDER BY mods.name"""
             )
             mod_rows = cur.fetchall() or []
 
             cur.execute(
-                """SELECT id, mod_id, version, mcversion, modloader
+                """SELECT modversions.id, modversions.mod_id,
+                          modversions.version, modversions.mcversion,
+                          modversions.modloader,
+                          COALESCE(maven_repositories.name,
+                                   mods.integration_provider)
+                              AS integration_label
                    FROM modversions
-                   WHERE (mcversion = %s OR mcversion IS NULL)
-                     AND (%s IS NULL OR modloader = %s OR modloader IS NULL)
-                   ORDER BY mod_id, id DESC""",
+                   INNER JOIN mods ON modversions.mod_id = mods.id
+                   LEFT JOIN maven_artifacts
+                       ON maven_artifacts.mod_id = mods.id
+                   LEFT JOIN maven_repositories
+                       ON maven_artifacts.repository_id = maven_repositories.id
+                   WHERE (modversions.mcversion = %s
+                          OR modversions.mcversion IS NULL)
+                     AND (%s IS NULL
+                          OR modversions.modloader = %s
+                          OR modversions.modloader IS NULL)
+                   ORDER BY modversions.mod_id, modversions.id DESC""",
                 (
                     packbuild.minecraft,
                     packbuild.modloader,

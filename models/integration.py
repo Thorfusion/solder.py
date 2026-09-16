@@ -19,12 +19,22 @@ import requests
 from werkzeug.utils import secure_filename
 
 from .compatibility import normalize_modloader
+from .maven import (
+    MAVEN,
+    MavenArtifact,
+    MavenCatalog,
+    MavenError,
+    MavenMetadataClient,
+    MavenRepository,
+    MavenVersion,
+    artifact_file_url,
+)
 from .mod import DuplicateModError, Mod
 from .modversion import Modversion
 
 
 MODRINTH = "MODRINTH"
-SUPPORTED_PROVIDERS = (MODRINTH,)
+SUPPORTED_PROVIDERS = (MODRINTH, MAVEN)
 SUPPORTED_LOADERS = (
     "FORGE",
     "NEOFORGE",
@@ -35,7 +45,7 @@ SUPPORTED_LOADERS = (
 MAX_INTEGRATION_FILE_SIZE = 512 * 1024 * 1024
 REQUEST_TIMEOUT = (5, 30)
 DOWNLOAD_TIMEOUT = (5, 120)
-USER_AGENT = "solder.py/1.8.0 (+https://github.com/Thorfusion/solder.py)"
+USER_AGENT = "solder.py/1.9.0 (+https://github.com/Thorfusion/solder.py)"
 
 
 class IntegrationError(ValueError):
@@ -74,6 +84,7 @@ class ExternalVersion:
     hashes: dict[str, str]
     size: int
     dependencies: tuple[str, ...] = ()
+    integration_label: str | None = None
 
     def loader_for_build(self, build_loader):
         normalized_build = normalize_modloader(build_loader)
@@ -98,6 +109,7 @@ class ExternalVersion:
             "published": self.date_published,
             "filename": self.filename,
             "size": self.size,
+            "integration_label": self.integration_label,
         }
 
 
@@ -136,6 +148,7 @@ def _side_from_support(client_side, server_side):
 class ExternalProvider:
     provider = ""
     base_url = ""
+    require_download_hash = True
 
     def __init__(self, http=None):
         self.http = http or requests.Session()
@@ -225,6 +238,7 @@ class ExternalProvider:
 
             digests = {
                 "sha512": hashlib.sha512(),
+                "sha256": hashlib.sha256(),
                 # SHA-1 and MD5 are compatibility checks against provider
                 # metadata. SHA-512 is preferred whenever it is available.
                 "sha1": hashlib.sha1(usedforsecurity=False),
@@ -248,7 +262,7 @@ class ExternalProvider:
                 raise IntegrationError("The provider download size did not match its metadata.")
 
             verified = False
-            for algorithm in ("sha512", "sha1", "md5"):
+            for algorithm in ("sha512", "sha256", "sha1", "md5"):
                 expected = str(version.hashes.get(algorithm, "")).lower()
                 if not expected:
                     continue
@@ -258,7 +272,7 @@ class ExternalProvider:
                         f"The downloaded file failed {algorithm.upper()} verification."
                     )
                 break
-            if not verified:
+            if not verified and self.require_download_hash:
                 raise IntegrationError("The provider supplied no supported file hash.")
 
             try:
@@ -461,8 +475,134 @@ class ModrinthProvider(ExternalProvider):
         return version
 
 
+class MavenProvider(ExternalProvider):
+    """Expose a configured standard Maven artifact as an integration provider."""
+
+    provider = MAVEN
+    require_download_hash = False
+
+    def __init__(self, user_id=None, http=None):
+        super().__init__(http=http)
+        self.user_id = user_id
+        self._download_origin = None
+
+    @staticmethod
+    def _artifact(project_id):
+        project_id = external_id(project_id)
+        if not project_id.isdigit():
+            raise IntegrationError("The Maven artifact identifier is invalid.")
+        artifact = MavenArtifact.get(int(project_id))
+        if artifact is None:
+            raise IntegrationError("The configured Maven artifact no longer exists.")
+        return artifact
+
+    @staticmethod
+    def _repository(artifact):
+        return MavenRepository(
+            artifact.repository_id,
+            artifact.repository_name,
+            artifact.repository_url,
+        )
+
+    def get_project(self, project_id):
+        artifact = self._artifact(project_id)
+        return ExternalProject(
+            provider=MAVEN,
+            project_id=str(artifact.id),
+            slug=artifact.slug,
+            title=artifact.title,
+            description=artifact.description,
+            author=artifact.author,
+            link=artifact.project_url,
+            side=artifact.side,
+        )
+
+    @staticmethod
+    def _external_version(artifact, mapping, hashes=None, download_url=None):
+        download_url = download_url or artifact_file_url(
+            artifact, mapping.upstream_version
+        )
+        filename = urlparse(download_url).path.rsplit("/", 1)[-1]
+        loaders = (mapping.modloader,) if mapping.modloader else ()
+        return ExternalVersion(
+            provider=MAVEN,
+            project_id=str(artifact.id),
+            version_id=mapping.integration_version_id,
+            name=mapping.upstream_version,
+            version_number=mapping.mod_version,
+            game_versions=(mapping.minecraft,),
+            loaders=loaders,
+            release_type="release",
+            date_published=None,
+            filename=filename,
+            download_url=download_url,
+            hashes=hashes or {},
+            size=0,
+            integration_label=artifact.repository_name,
+        )
+
+    def list_versions(self, project_id, minecraft, modloader=None):
+        artifact = self._artifact(project_id)
+        try:
+            MavenCatalog.refresh(artifact, http=self.http)
+        except MavenError as error:
+            raise IntegrationError(str(error)) from error
+        mappings = MavenVersion.get_compatible(
+            artifact.id, minecraft, modloader
+        )
+        return [self._external_version(artifact, mapping) for mapping in mappings]
+
+    def get_version(self, project_id, version_id, minecraft, modloader=None):
+        artifact = self._artifact(project_id)
+        version_id = external_id(version_id)
+        mapping = MavenVersion.get_by_integration_id(artifact.id, version_id)
+        if mapping is None or not mapping.enabled or not mapping.available:
+            raise IntegrationError("The selected Maven version is not available.")
+        if mapping.minecraft != str(minecraft):
+            raise IntegrationError(
+                "The selected Maven version does not support this Minecraft version."
+            )
+        normalized_loader = normalize_modloader(modloader)
+        if mapping.modloader and normalized_loader != mapping.modloader:
+            raise IntegrationError(
+                "The selected Maven version does not support this modloader."
+            )
+        metadata = MavenMetadataClient(
+            self._repository(artifact), http=self.http
+        )
+        try:
+            filename_version = metadata.snapshot_value(
+                artifact, mapping.upstream_version
+            )
+            download_url = artifact_file_url(
+                artifact, mapping.upstream_version, filename_version
+            )
+            checksums = metadata.checksums(download_url)
+        except MavenError as error:
+            raise IntegrationError(str(error)) from error
+        self._download_origin = MavenMetadataClient._url_origin(download_url)
+        return self._external_version(
+            artifact, mapping, checksums, download_url=download_url
+        )
+
+    def _download_host_allowed(self, hostname):
+        return bool(
+            self._download_origin
+            and hostname.lower() == self._download_origin[1]
+        )
+
+    def _validate_download_url(self, url):
+        if (
+            not self._download_origin
+            or MavenMetadataClient._url_origin(url) != self._download_origin
+        ):
+            raise IntegrationError("Maven returned an untrusted download URL.")
+
+
 def provider_for_user(provider, user_id, *, http=None):
     provider = normalize_provider(provider)
+    if provider == MAVEN:
+        return MavenProvider(user_id=user_id, http=http)
     return ModrinthProvider(http=http)
 
 
@@ -477,7 +617,9 @@ class ModIntegration:
         return value[:255]
 
     @classmethod
-    def import_project(cls, provider_name, project_id, user_id, *, http=None):
+    def import_project(
+        cls, provider_name, project_id, user_id, *, http=None, metadata=None
+    ):
         provider = provider_for_user(provider_name, user_id, http=http)
         project = provider.get_project(external_id(project_id))
         if not project.available:
@@ -491,15 +633,23 @@ class ModIntegration:
         if existing:
             return existing, False
 
-        slug = cls._slug(project.slug or project.title)
+        metadata = metadata or {}
+        title = str(metadata.get("name") or project.title)[:255]
+        description = str(
+            metadata.get("description") or project.description
+        )[:255]
+        author = str(metadata.get("author") or project.author)[:255]
+        link = str(metadata.get("link") or project.link)[:255]
+        side = str(metadata.get("side") or project.side).upper()
+        slug = cls._slug(project.slug or title)
         try:
             mod = Mod.new(
                 slug,
-                project.description[:255],
-                project.author[:255],
-                project.link[:255],
-                project.title[:255],
-                project.side,
+                description,
+                author,
+                link,
+                title,
+                side,
                 "MOD",
                 f"Managed by {project.provider.title()} project {project.project_id}",
                 integration_provider=project.provider,
@@ -590,7 +740,7 @@ class ModIntegration:
             build.modloader,
         )
         selected_loader = external.loader_for_build(build.modloader)
-        if build.modloader and selected_loader is None:
+        if build.modloader and external.loaders and selected_loader is None:
             raise IntegrationError("The selected version does not support this modloader.")
 
         version_name = cls._local_version(mod, external, build.minecraft)

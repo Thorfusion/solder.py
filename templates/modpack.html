@@ -101,16 +101,20 @@
                 <input type="text" class="form-control" name="clonebuildman" id="clonebuildman"></input>
             </div>
         </div>
-        <div class="mb-3">
-            <label for="min_java" class="form-label">Minium Java Version</label>
-            <select class="form-select" name="min_java" id="min_java">
-                <option>NONE</option>
-                <option>1.6</option>
-                <option>1.7</option>
-                <option>1.8</option>
-                <option>16</option>
-                <option>17</option>
-            </select>
+        <div class="mb-3 gridswrapper">
+            <div class="grid1">
+                <label for="min_java" class="form-label">Minimum Java Version</label>
+                <input type="text" class="form-control" name="min_java" id="min_java" maxlength="255" placeholder="For example: 1.8.0_51">
+            </div>
+            <div class="grid2">
+                <label for="java_runtime" class="form-label">Mojang Java Runtime <span class="badge bg-warning text-dark">Advanced</span></label>
+                <select class="form-select" name="java_runtime" id="java_runtime" aria-describedby="java_runtime_help">
+                    <option value="">Automatic (no override)</option>
+                    {%for runtime, label in java_runtime_options%}
+                    <option value="{{runtime}}">{{label}}</option>
+                    {%endfor%}
+                </select>
+            </div>
         </div>
         <div class="mb-3">
             <label for="memory" class="form-label">Minimum Memory requirement in MB, 0 for disable</label>

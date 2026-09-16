@@ -46,7 +46,7 @@ class ApiTests(unittest.TestCase):
             response.get_json(),
             {
                 "api": "solder.py",
-                "version": "v1.8.0",
+                "version": "v1.9.0",
                 "stream": "DEV",
                 "capabilities": {
                     "build_channels": True,
@@ -165,7 +165,8 @@ class ApiTests(unittest.TestCase):
         build = Mock(
             id=7,
             minecraft="1.21.1",
-            min_java="21",
+            min_java="1.8.0_51",
+            java_runtime="java-runtime-delta",
             min_memory=4096,
             forge=None,
         )
@@ -279,7 +280,8 @@ class ApiTests(unittest.TestCase):
         build = Mock(
             id=7,
             minecraft="1.21.1",
-            min_java="21",
+            min_java="1.8.0_51",
+            java_runtime="java-runtime-delta",
             min_memory=4096,
             forge="52.0.1",
             modloader="FORGE",
@@ -303,6 +305,10 @@ class ApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["minecraft"], "1.21.1")
+        self.assertEqual(response.get_json()["java"], "1.8.0_51")
+        self.assertEqual(
+            response.get_json()["java_runtime"], "java-runtime-delta"
+        )
         self.assertEqual(
             response.get_json()["mods"],
             [

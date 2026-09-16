@@ -1,3 +1,4 @@
+from dataclasses import replace
 from types import SimpleNamespace
 from pathlib import Path
 import unittest
@@ -12,7 +13,8 @@ configure_test_environment()
 
 from api_write import write_api_blueprint  # noqa: E402
 from models.api_token import ApiPrincipal, ApiToken, TOKENABLE_TYPE  # noqa: E402
-from models.integration import MODRINTH  # noqa: E402
+from models.integration import MAVEN, MODRINTH, ExternalVersion  # noqa: E402
+from models.maven import MavenArtifact, MavenRepository, MavenVersion  # noqa: E402
 
 
 FULL_PRINCIPAL = ApiPrincipal(1, 7, {"solder_full": True})
@@ -49,6 +51,7 @@ def build_row(**changes):
         "is_published": 0,
         "private": 0,
         "min_java": None,
+        "java_runtime": None,
         "min_memory": None,
         "created_at": None,
         "updated_at": None,
@@ -145,6 +148,86 @@ class WriteApiRouteTests(unittest.TestCase):
         self.assertTrue(values["enable_optionals"])
         self.assertTrue(values["enable_server"])
         self.assertTrue(response.get_json()["enable_server"])
+
+    def test_create_build_preserves_java_version_and_runtime_override(self):
+        created = build_row(
+            min_java="1.8.0_51", java_runtime="java-runtime-delta"
+        )
+        with (
+            patch(
+                "api_write.WriteApiStore.get_modpack",
+                return_value=modpack_row(),
+            ),
+            patch(
+                "api_write.WriteApiStore.create_build", return_value=created
+            ) as create,
+        ):
+            response = self.client.post(
+                "/api/modpack/example-pack/build",
+                headers=self.headers,
+                json={
+                    "version": "1.0",
+                    "minecraft": "1.20.1",
+                    "min_java": "1.8.0_51",
+                    "java_runtime": "java-runtime-delta",
+                },
+            )
+
+        self.assertEqual(response.status_code, 201)
+        values = create.call_args.args[1]
+        self.assertEqual(values["min_java"], "1.8.0_51")
+        self.assertEqual(values["java_runtime"], "java-runtime-delta")
+        self.assertEqual(response.get_json()["min_java"], "1.8.0_51")
+        self.assertEqual(
+            response.get_json()["java_runtime"], "java-runtime-delta"
+        )
+
+    def test_build_rejects_an_unknown_java_runtime_component(self):
+        with (
+            patch(
+                "api_write.WriteApiStore.get_modpack",
+                return_value=modpack_row(),
+            ),
+            patch("api_write.WriteApiStore.create_build") as create,
+        ):
+            response = self.client.post(
+                "/api/modpack/example-pack/build",
+                headers=self.headers,
+                json={
+                    "version": "1.0",
+                    "minecraft": "1.20.1",
+                    "java_runtime": "1.8.0_401",
+                },
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("java_runtime", response.get_json()["error"])
+        create.assert_not_called()
+
+    def test_build_update_can_clear_the_runtime_override(self):
+        existing = build_row(java_runtime="java-runtime-delta")
+        updated = build_row(java_runtime=None)
+        with (
+            patch(
+                "api_write.WriteApiStore.get_modpack",
+                return_value=modpack_row(),
+            ),
+            patch(
+                "api_write.WriteApiStore.get_build", return_value=existing
+            ),
+            patch(
+                "api_write.WriteApiStore.update_build", return_value=updated
+            ) as update,
+        ):
+            response = self.client.put(
+                "/api/modpack/example-pack/1.0",
+                headers=self.headers,
+                json={"java_runtime": ""},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(update.call_args.args[1]["java_runtime"])
+        self.assertIsNone(response.get_json()["java_runtime"])
 
     def test_permission_is_enforced_before_mod_creation(self):
         restricted = ApiPrincipal(2, 8, {})
@@ -384,6 +467,108 @@ class WriteApiRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 201)
         import_project.assert_called_once_with(MODRINTH, "PROJECT", 7)
+
+    def test_maven_repository_can_be_created_through_write_api(self):
+        repository = MavenRepository(
+            8, "Example Maven", "https://maven.example.test/releases/"
+        )
+        with patch(
+            "api_write.MavenRepository.new", return_value=repository
+        ) as create:
+            response = self.client.post(
+                "/api/integration/maven/repository",
+                headers=self.headers,
+                json={
+                    "name": "Example Maven",
+                    "base_url": "https://maven.example.test/releases/",
+                },
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["repository"]["id"], 8)
+        create.assert_called_once_with(
+            "Example Maven", "https://maven.example.test/releases/"
+        )
+
+    def test_maven_artifact_creation_refreshes_metadata_and_links_mod(self):
+        configured = MavenArtifact(
+            9, 8, "Example Maven", "https://maven.example.test/releases/",
+            "example.group", "example-mod", "all", "jar", "EMBEDDED",
+            "{minecraft}-{version}", None, "FORGE", "example-mod",
+            "Example Mod", "Description", "Author",
+            "https://example.test/mod", "BOTH", None,
+        )
+        attached = replace(configured, mod_id=4)
+        mapping = MavenVersion(
+            1, 9, "1.20.1-2.0", "f" * 64, "1.20.1", "2.0",
+            "FORGE", "RULE", True, True, 1,
+        )
+        with (
+            patch("api_write.MavenArtifact.new", return_value=configured),
+            patch("api_write.MavenCatalog.refresh", return_value=[mapping]) as refresh,
+            patch(
+                "api_write.ModIntegration.import_project",
+                return_value=(SimpleNamespace(id=4), True),
+            ) as import_project,
+            patch("api_write.MavenArtifact.attach_mod") as attach,
+            patch("api_write.MavenArtifact.get", return_value=attached),
+        ):
+            response = self.client.post(
+                "/api/integration/maven/artifact",
+                headers=self.headers,
+                json={
+                    "repository_id": 8,
+                    "group_id": "example.group",
+                    "artifact_id": "example-mod",
+                    "classifier": "all",
+                    "slug": "example-mod",
+                    "title": "Example Mod",
+                    "description": "Description",
+                    "author": "Author",
+                    "link": "https://example.test/mod",
+                    "side": "BOTH",
+                    "modloader": "FORGE",
+                    "version_mode": "EMBEDDED",
+                    "version_pattern": "{minecraft}-{version}",
+                    "redistribution_confirmed": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["artifact"]["mod_id"], 4)
+        self.assertEqual(response.get_json()["versions"][0]["minecraft"], "1.20.1")
+        refresh.assert_called_once_with(configured)
+        import_project.assert_called_once_with(MAVEN, "9", 7)
+        attach.assert_called_once_with(9, 4)
+
+    def test_maven_versions_use_the_generic_integration_listing_route(self):
+        external = ExternalVersion(
+            MAVEN, "9", "f" * 64, "1.20.1-2.0", "2.0",
+            ("1.20.1",), ("FORGE",), "release", None,
+            "example.jar", "https://maven.example.test/example.jar", {}, 0,
+        )
+        with (
+            patch("api_write.WriteApiStore.get_modpack", return_value=modpack_row()),
+            patch("api_write.WriteApiStore.get_build", return_value=build_row()),
+            patch(
+                "api_write.WriteApiStore.get_mod",
+                return_value=mod_row(
+                    integration_provider=MAVEN,
+                    integration_project_id="9",
+                ),
+            ),
+            patch("api_write.Mod.get_by_id", return_value=SimpleNamespace(id=4)),
+            patch("api_write.Build.get_by_id", return_value=SimpleNamespace(id=3)),
+            patch("api_write.ModIntegration.list_versions", return_value=[external]),
+            patch("api_write.Modversion.get_integration_version_ids", return_value=set()),
+        ):
+            response = self.client.get(
+                "/api/modpack/example-pack/1.0/mod/example-mod/integration-versions",
+                headers=self.headers,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["versions"][0]["id"], "f" * 64)
 
     def test_mcil_jar_generation_uses_configured_repository(self):
         with (

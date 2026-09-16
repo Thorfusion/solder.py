@@ -1,0 +1,93 @@
+{%extends "layout.html"%} {% set active_page = "maven" %}
+{%block head%}
+<title>{{artifact.title}} Maven versions - solder.py</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" />
+{%endblock%}
+{%block main%}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-start gap-3">
+        <div>
+            <h2>{{artifact.title}}</h2>
+            <p><code>{{artifact.coordinates}}</code> from <span class="badge bg-info text-dark">{{artifact.repository_name}}</span></p>
+        </div>
+        <form method="post"><button class="btn btn-primary" name="refresh_versions" value="1">Refresh Maven metadata</button></form>
+    </div>
+    <p class="text-muted">Only enabled versions with a Minecraft mapping appear in build version selectors and Update All. Refreshing metadata never downloads the artifact JAR.</p>
+
+    <div class="mb-3 tablewidthsearch">
+        <input type="search" class="form-control" id="search" placeholder="Search versions" onkeyup="tablesearches(0);">
+    </div>
+    {%if versions%}
+    <table class="table table-striped table-hover" id="table">
+        <thead><tr><th>Upstream Maven version</th><th>Minecraft</th><th>Mod version</th><th>Modloader</th><th>State</th><th></th></tr></thead>
+        <tbody>
+        {%for version in versions%}
+        <tr class="{%if not version.available%}text-muted{%endif%}">
+            <td>{{version.upstream_version}} <span class="badge bg-info text-dark">{{artifact.repository_name}}</span></td>
+            <td><input class="form-control" name="minecraft" value="{{version.minecraft or ''}}" form="mapping_{{version.id}}"></td>
+            <td><input class="form-control" name="mod_version" value="{{version.mod_version or ''}}" form="mapping_{{version.id}}"></td>
+            <td>
+                <select class="form-select" name="modloader" form="mapping_{{version.id}}">
+                    <option value="" {%if not version.modloader%}selected{%endif%}>No loader restriction</option>
+                    {%for loader in ('FORGE', 'NEOFORGE', 'FABRIC', 'QUILT', 'LITELOADER', 'VANILLA')%}
+                    <option value="{{loader}}" {%if version.modloader == loader%}selected{%endif%}>{{loader|title}}</option>
+                    {%endfor%}
+                </select>
+            </td>
+            <td>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="enabled" value="1" id="enabled_{{version.id}}" form="mapping_{{version.id}}" {%if version.enabled%}checked{%endif%} {%if not version.available%}disabled{%endif%}>
+                    <label class="form-check-label" for="enabled_{{version.id}}">{%if version.available%}Enabled{%else%}Removed upstream{%endif%}</label>
+                </div>
+                <small class="text-muted">{{version.mapping_source|title}}</small>
+            </td>
+            <td>
+                <form method="post" id="mapping_{{version.id}}">
+                    <input type="hidden" name="mapping_id" value="{{version.id}}">
+                    <button class="btn btn-secondary" name="save_mapping" value="1">Save</button>
+                </form>
+            </td>
+        </tr>
+        {%endfor%}
+        </tbody>
+    </table>
+    {%else%}<p>No Maven metadata has been loaded.</p>{%endif%}
+</div>
+{%endblock%}
+{%block aside%}
+<h5>Version mapping rule</h5>
+<form method="post">
+    <div class="mb-3">
+        <label for="version_mode" class="form-label">Minecraft mapping</label>
+        <select class="form-select" name="version_mode" id="version_mode" onchange="updatemavenmappingfields('version_mode', 'version_pattern');">
+            <option value="EMBEDDED" {%if artifact.version_mode == 'EMBEDDED'%}selected{%endif%}>Contained in Maven version</option>
+            <option value="FIXED" {%if artifact.version_mode == 'FIXED'%}selected{%endif%}>Always one Minecraft version</option>
+            <option value="MANUAL" {%if artifact.version_mode == 'MANUAL'%}selected{%endif%}>Manual per version</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label for="version_pattern" class="form-label">Embedded format</label>
+        <input class="form-control" name="version_pattern" id="version_pattern" value="{%if artifact.version_mode == 'FIXED'%}{version}{%else%}{{artifact.version_pattern}}{%endif%}" data-embedded-pattern="{%if artifact.version_mode == 'EMBEDDED'%}{{artifact.version_pattern}}{%else%}{{default_pattern}}{%endif%}" {%if artifact.version_mode == 'FIXED'%}readonly{%endif%}>
+        <div class="form-text">Example: {minecraft}-{version}</div>
+    </div>
+    <div class="mb-3">
+        <label for="fixed_minecraft" class="form-label">Fixed Minecraft</label>
+        <input class="form-control" name="fixed_minecraft" id="fixed_minecraft" value="{{artifact.fixed_minecraft or ''}}">
+    </div>
+    <div class="mb-3">
+        <label for="rule_modloader" class="form-label">Modloader</label>
+        <select class="form-select" name="modloader" id="rule_modloader">
+            <option value="" {%if not artifact.modloader%}selected{%endif%}>No loader restriction</option>
+            {%for loader in ('FORGE', 'NEOFORGE', 'FABRIC', 'QUILT', 'LITELOADER', 'VANILLA')%}
+            <option value="{{loader}}" {%if artifact.modloader == loader%}selected{%endif%}>{{loader|title}}</option>
+            {%endfor%}
+        </select>
+    </div>
+    <button class="btn btn-success" name="save_rule" value="1">Save rule</button>
+</form>
+<hr>
+<p><a href="{{url_for('asite.modversion', id=artifact.mod_id)}}">Open mod versions</a></p>
+<p><a href="{{url_for('asite.maven')}}">Back to Maven</a></p>
+<script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
+<script>updatemavenmappingfields('version_mode', 'version_pattern');</script>
+{%endblock%}

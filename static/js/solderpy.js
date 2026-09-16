@@ -200,6 +200,51 @@ function string_to_slug(str) {
     return str;
 }
 
+function updatemavenslug() {
+    const repository = document.getElementById("repository_id");
+    const modName = document.getElementById("title");
+    const slug = document.getElementById("slug");
+    if (!repository || !modName || !slug || repository.selectedIndex < 0) {
+        return;
+    }
+    const repositoryName = repository.options[repository.selectedIndex].dataset.name || "";
+    slug.value = string_to_slug(modName.value + "-" + repositoryName);
+}
+
+function updatemavenmodname() {
+    const artifact = document.getElementById("artifact_id");
+    const modName = document.getElementById("title");
+    if (!artifact || !modName) {
+        return;
+    }
+    modName.value = artifact.value;
+    updatemavenslug();
+}
+
+function updatemavenmappingfields(modeId, patternId) {
+    const mode = document.getElementById(modeId);
+    const pattern = document.getElementById(patternId);
+    if (!mode || !pattern) {
+        return;
+    }
+    if (mode.value === "FIXED") {
+        if (pattern.value.includes("{minecraft}")) {
+            pattern.dataset.embeddedPattern = pattern.value;
+        }
+        pattern.value = "{version}";
+        pattern.readOnly = true;
+        return;
+    }
+
+    pattern.readOnly = false;
+    if (mode.value === "EMBEDDED") {
+        if (!pattern.value.includes("{minecraft}")) {
+            pattern.value = pattern.dataset.embeddedPattern || "{minecraft}-{version}";
+        }
+        pattern.dataset.embeddedPattern = pattern.value;
+    }
+}
+
 function hideoptions(optiontoshow, integrationUrl) {
     const modSelect = document.getElementById(optiontoshow);
     const versionSelect = document.getElementById("modversion");
@@ -237,6 +282,9 @@ function integrationversionlabel(version) {
     }
     if (version.loaders && version.loaders.length) {
         label += " (" + version.loaders.join(", ") + ")";
+    }
+    if (version.integration_label) {
+        label += " [" + version.integration_label + "]";
     }
     return label;
 }

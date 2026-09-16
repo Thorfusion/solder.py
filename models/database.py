@@ -34,6 +34,13 @@ CORE_TABLES = {
 
 
 class Database:
+    SOLDER_SETTINGS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS solder_settings (
+        name VARCHAR(64) NOT NULL PRIMARY KEY,
+        value VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )"""
+
     PERSONAL_ACCESS_TOKENS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS personal_access_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         tokenable_type VARCHAR(255) NOT NULL,
@@ -70,6 +77,69 @@ class Database:
         INDEX idx_user_modpack_pack_user (modpack_id, user_id)
     )"""
 
+    MAVEN_REPOSITORIES_TABLE_SQL = """CREATE TABLE IF NOT EXISTS maven_repositories (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        base_url VARCHAR(2048) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )"""
+
+    MAVEN_ARTIFACTS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS maven_artifacts (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        repository_id INT NOT NULL,
+        group_id VARCHAR(191) NOT NULL,
+        artifact_id VARCHAR(191) NOT NULL,
+        classifier VARCHAR(128) NOT NULL DEFAULT '',
+        extension VARCHAR(16) NOT NULL DEFAULT 'jar',
+        version_mode VARCHAR(16) NOT NULL DEFAULT 'MANUAL',
+        version_pattern VARCHAR(255),
+        fixed_minecraft VARCHAR(255),
+        modloader VARCHAR(32),
+        slug VARCHAR(255) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        description VARCHAR(255) NOT NULL DEFAULT '',
+        author VARCHAR(255),
+        link VARCHAR(255),
+        side ENUM('CLIENT', 'SERVER', 'BOTH') NOT NULL DEFAULT 'BOTH',
+        mod_id INT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_maven_artifact_coordinates
+            (repository_id, group_id, artifact_id, classifier, extension),
+        UNIQUE KEY uq_maven_artifact_mod (mod_id),
+        INDEX idx_maven_artifacts_repository (repository_id)
+    )"""
+
+    MAVEN_VERSIONS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS maven_versions (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        maven_artifact_id INT NOT NULL,
+        upstream_version VARCHAR(255) NOT NULL,
+        integration_version_id CHAR(64) NOT NULL,
+        minecraft VARCHAR(255),
+        mod_version VARCHAR(255),
+        modloader VARCHAR(32),
+        mapping_source VARCHAR(16) NOT NULL DEFAULT 'UNMAPPED',
+        enabled TINYINT(1) NOT NULL DEFAULT 0,
+        available TINYINT(1) NOT NULL DEFAULT 1,
+        metadata_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_maven_version_source
+            (maven_artifact_id, upstream_version),
+        UNIQUE KEY uq_maven_version_integration
+            (maven_artifact_id, integration_version_id),
+        INDEX idx_maven_version_compatibility
+            (maven_artifact_id, minecraft, modloader, enabled, available,
+             metadata_order)
+    )"""
+
+    MAVEN_TABLES_SQL = (
+        MAVEN_REPOSITORIES_TABLE_SQL,
+        MAVEN_ARTIFACTS_TABLE_SQL,
+        MAVEN_VERSIONS_TABLE_SQL,
+    )
+
     MODLOADER_COLUMN_MIGRATIONS = (
         (
             "builds",
@@ -80,6 +150,14 @@ class Database:
             "modversions",
             "modloader",
             "ALTER TABLE modversions ADD COLUMN modloader VARCHAR(32) NULL AFTER mcversion",
+        ),
+    )
+
+    JAVA_RUNTIME_COLUMN_MIGRATIONS = (
+        (
+            "builds",
+            "java_runtime",
+            "ALTER TABLE builds ADD COLUMN java_runtime VARCHAR(255) NULL AFTER min_java",
         ),
     )
 
@@ -402,6 +480,7 @@ class Database:
                         is_published TINYINT(1) DEFAULT(0),
                         private TINYINT(1) DEFAULT(0),
                         min_java VARCHAR(255),
+                        java_runtime VARCHAR(255),
                         min_memory INT,
                         marked TINYINT(1) NOT NULL DEFAULT(0),
                         INDEX idx_builds_modpack_version_access
@@ -461,6 +540,9 @@ class Database:
             )
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
+            cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
+            for query in Database.MAVEN_TABLES_SQL:
+                cur.execute(query)
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS users (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -617,6 +699,7 @@ class Database:
                 "ALTER TABLE user_permissions ADD COLUMN solder_env BOOLEAN DEFAULT 0",
             ),
             *Database.MODLOADER_COLUMN_MIGRATIONS,
+            *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
             *Database.NOTES_COLUMN_MIGRATIONS,
             *Database.INTEGRATION_COLUMN_MIGRATIONS,
         )
@@ -659,6 +742,9 @@ class Database:
 
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
+            cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
+            for query in Database.MAVEN_TABLES_SQL:
+                cur.execute(query)
 
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS sessions (
@@ -698,9 +784,13 @@ class Database:
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
             cur.execute(Database.USER_MODPACK_TABLE_SQL)
+            cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
+            for query in Database.MAVEN_TABLES_SQL:
+                cur.execute(query)
 
             for table, column, query in (
                 *Database.MODLOADER_COLUMN_MIGRATIONS,
+                *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
                 *Database.NOTES_COLUMN_MIGRATIONS,
                 *Database.INTEGRATION_COLUMN_MIGRATIONS,
             ):

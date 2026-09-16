@@ -54,5 +54,27 @@
     {%elif query%}
     <p>No matching mods were found.</p>
     {%endif%}
+
+    <hr>
+    <h4>Import integration manifest</h4>
+    <p class="text-muted">Import a reviewed JSON list resolved to Modrinth project IDs or Maven coordinates. Existing mods are left unchanged.</p>
+    <form method="post" action="{{url_for('asite.import_integration_manifest')}}" enctype="multipart/form-data" class="row g-3">
+        <div class="col-md-8">
+            <label for="manifest" class="form-label">Manifest JSON</label>
+            <input class="form-control" type="file" name="manifest" id="manifest" accept="application/json,.json" required>
+        </div>
+        <div class="col-md-8">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="1" name="redistribution_confirmed" id="manifest_redistribution_confirmed">
+                <label class="form-check-label" for="manifest_redistribution_confirmed">I have permission to download and rehost Maven artifacts in this manifest.</label>
+            </div>
+            {%if not can_manage_repositories%}<div class="form-text">Maven entries also require environment permission. Modrinth-only manifests do not.</div>{%endif%}
+        </div>
+        <div class="col-12">
+            <button class="btn btn-success" type="submit">Import manifest</button>
+            <a class="btn btn-secondary" href="{{url_for('asite.export_integration_manifest')}}">Export configured integrations</a>
+            <a class="btn btn-link" href="{{url_for('static', filename='examples/integration-manifest.json')}}">Example manifest</a>
+        </div>
+    </form>
 </div>
 {%endblock%}

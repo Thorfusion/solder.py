@@ -7,13 +7,23 @@ import requests
 
 from api import solderpy_version
 from flask import Blueprint, app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
-from models.build import Build
+from models.build import (
+    Build,
+    InvalidJavaRuntimeError,
+    MOJANG_JAVA_RUNTIME_OPTIONS,
+)
+from models.build_export import BuildCsvExport, BuildExportError
 from models.build_modversion import Build_modversion
 from models.api_token import ApiToken
 from models.client import Client
 from models.client_modpack import Client_modpack
 from models.compatibility import InvalidModloaderError
 from models.database import Database
+from models.dashboard import Dashboard
+from models.distribution_settings import (
+    DistributionSettings,
+    DistributionSettingsError,
+)
 from models.key import Key
 from models.mcinstance import (
     MCInstanceExport,
@@ -21,12 +31,26 @@ from models.mcinstance import (
     MCInstanceJar,
 )
 from models.integration import (
+    MAVEN,
     MODRINTH,
     IntegrationError,
     ModIntegration,
     external_id,
     normalize_provider,
     provider_for_user,
+)
+from models.integration_manifest import (
+    IntegrationManifest,
+    IntegrationManifestError,
+)
+from models.maven import (
+    DEFAULT_VERSION_PATTERN,
+    MAVEN_VERSION_MODES,
+    MavenArtifact,
+    MavenCatalog,
+    MavenError,
+    MavenRepository,
+    MavenVersion,
 )
 from models.mod import DuplicateModError, Mod, UploadVerificationError
 from models.mod_dependency import DependencyError, ModDependency
@@ -36,7 +60,7 @@ from models.session import Session
 from models.user import User
 from mysql import connector
 from werkzeug.utils import secure_filename
-from models.common import public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl, write_api
+from models.common import api_only, app_url, public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl, write_api
 from models.user_modpack import User_modpack
 from models.errorPrinter import ErrorPrinter
 
@@ -44,7 +68,7 @@ __version__ = solderpy_version
 
 asite = Blueprint("asite", __name__)
 
-if DB_IS_UP == 1:
+if DB_IS_UP == 1 and not api_only:
     Session.start_session_loop()
 
 ## Allowed extensions to be uploaded
@@ -120,7 +144,11 @@ def index():
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
 
-    return render_template('index.html')
+    dashboard = Dashboard.load(Session.get_user_id(session["token"]))
+    dashboard["repository_health"] = Dashboard.repository_health(
+        public_repo_url, md5_repo_url, R2_BUCKET
+    )
+    return render_template("index.html", dashboard=dashboard)
 
 
 @asite.route("/logout")
@@ -415,6 +443,211 @@ def integrations():
         query=query,
         projects=projects,
         modrinth=MODRINTH,
+        can_manage_repositories=bool(
+            User.get_permission_token(session["token"], "solder_env")
+        ),
+    )
+
+
+@asite.route("/integrations/manifest", methods=["POST"])
+def import_integration_manifest():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "mods_create") == 0:
+        return redirect(url_for("asite.index"))
+
+    try:
+        manifest = IntegrationManifest.parse(request.files.get("manifest"))
+        if manifest.includes_maven:
+            if User.get_permission_token(session["token"], "solder_env") == 0:
+                raise IntegrationManifestError(
+                    "Environment permission is required for Maven manifest entries."
+                )
+            if request.form.get("redistribution_confirmed") != "1":
+                raise IntegrationManifestError(
+                    "Confirm permission to download and rehost Maven artifacts."
+                )
+        result = manifest.import_all(Session.get_user_id(session["token"]))
+    except IntegrationManifestError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.integrations"))
+
+    flash(
+        f"Manifest import: {result.created} added, "
+        f"{result.existing} already configured, {len(result.errors)} failed.",
+        "success" if not result.errors else "error",
+    )
+    for error in result.errors[:10]:
+        flash(error, "error")
+    return redirect(url_for("asite.integrations"))
+
+
+@asite.route("/integrations/manifest/export", methods=["GET"])
+def export_integration_manifest():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "mods_create") == 0:
+        return redirect(url_for("asite.index"))
+
+    try:
+        output = IntegrationManifest.from_database().render()
+    except IntegrationManifestError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.integrations"))
+
+    return send_file(
+        output,
+        mimetype="application/json",
+        as_attachment=True,
+        download_name="solder.py-integration-manifest.json",
+    )
+
+
+@asite.route("/maven", methods=["GET", "POST"])
+def maven():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    can_create_mods = bool(
+        User.get_permission_token(session["token"], "mods_create")
+    )
+    can_manage_mods = bool(
+        User.get_permission_token(session["token"], "mods_manage")
+    )
+    can_manage_repositories = bool(
+        User.get_permission_token(session["token"], "solder_env")
+    )
+    if not (can_create_mods or can_manage_mods or can_manage_repositories):
+        return redirect(url_for("asite.index"))
+
+    if request.method == "POST":
+        artifact = None
+        try:
+            if "add_repository" in request.form:
+                if not can_manage_repositories:
+                    raise MavenError(
+                        "Environment permission is required to add a repository."
+                    )
+                repository = MavenRepository.new(
+                    request.form.get("repository_name"),
+                    request.form.get("base_url"),
+                )
+                flash(f"added Maven repository {repository.name}", "success")
+            elif "delete_repository" in request.form:
+                if not can_manage_repositories:
+                    raise MavenError(
+                        "Environment permission is required to delete a repository."
+                    )
+                MavenRepository.delete(request.form.get("repository_id"))
+                flash("deleted Maven repository", "success")
+            elif "add_artifact" in request.form:
+                if not can_create_mods:
+                    raise MavenError(
+                        "Mod creation permission is required to add an artifact."
+                    )
+                if request.form.get("redistribution_confirmed") != "1":
+                    raise MavenError(
+                        "Confirm that this mod may be downloaded and rehosted."
+                    )
+                artifact = MavenArtifact.new(
+                    request.form.get("repository_id"),
+                    request.form.get("group_id"),
+                    request.form.get("artifact_id"),
+                    request.form.get("classifier"),
+                    request.form.get("extension", "jar"),
+                    request.form.get("version_mode"),
+                    request.form.get("version_pattern"),
+                    request.form.get("fixed_minecraft"),
+                    request.form.get("modloader"),
+                    request.form.get("slug"),
+                    request.form.get("title"),
+                    request.form.get("description"),
+                    request.form.get("author"),
+                    request.form.get("link"),
+                    request.form.get("side"),
+                )
+                MavenCatalog.refresh(artifact)
+                mod, _created = ModIntegration.import_project(
+                    MAVEN, str(artifact.id),
+                    Session.get_user_id(session["token"]),
+                )
+                MavenArtifact.attach_mod(artifact.id, mod.id)
+                flash(f"added {artifact.title} from Maven", "success")
+                return redirect(url_for("asite.maven_artifact", artifact_id=artifact.id))
+        except (MavenError, IntegrationError, InvalidModloaderError) as error:
+            if artifact is not None:
+                MavenArtifact.delete_unlinked(artifact.id)
+            flash(str(error), "error")
+        except connector.IntegrityError:
+            if artifact is not None:
+                MavenArtifact.delete_unlinked(artifact.id)
+            flash("That Maven repository, artifact, or mod already exists.", "error")
+        return redirect(url_for("asite.maven"))
+
+    return render_template(
+        "maven.html",
+        repositories=MavenRepository.get_all(),
+        artifacts=MavenArtifact.get_all(),
+        version_modes=MAVEN_VERSION_MODES,
+        default_pattern=DEFAULT_VERSION_PATTERN,
+        can_create_mods=can_create_mods,
+        can_manage_mods=can_manage_mods,
+        can_manage_repositories=can_manage_repositories,
+    )
+
+
+@asite.route("/maven/<int:artifact_id>", methods=["GET", "POST"])
+def maven_artifact(artifact_id):
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "mods_manage") == 0:
+        return redirect(url_for("asite.index"))
+
+    artifact = MavenArtifact.get(artifact_id)
+    if artifact is None:
+        return render_template("404.html", error="Maven artifact not found"), 404
+    if request.method == "POST":
+        try:
+            if "save_rule" in request.form:
+                MavenArtifact.update_rule(
+                    artifact_id,
+                    request.form.get("version_mode"),
+                    request.form.get("version_pattern"),
+                    request.form.get("fixed_minecraft"),
+                    request.form.get("modloader"),
+                )
+                flash("updated Maven version mapping rule", "success")
+            elif "refresh_versions" in request.form:
+                versions = MavenCatalog.refresh(artifact)
+                flash(f"loaded {len(versions)} Maven version(s)", "success")
+            elif "save_mapping" in request.form:
+                MavenVersion.update_manual(
+                    request.form.get("mapping_id"),
+                    artifact_id,
+                    request.form.get("minecraft"),
+                    request.form.get("mod_version"),
+                    request.form.get("modloader"),
+                    request.form.get("enabled") == "1",
+                )
+                flash("updated Maven version mapping", "success")
+        except (MavenError, InvalidModloaderError) as error:
+            flash(str(error), "error")
+        return redirect(url_for("asite.maven_artifact", artifact_id=artifact_id))
+
+    versions = MavenVersion.get_all(artifact_id)
+    return render_template(
+        "mavenartifact.html",
+        artifact=artifact,
+        versions=versions,
+        version_modes=MAVEN_VERSION_MODES,
+        default_pattern=DEFAULT_VERSION_PATTERN,
     )
 
 
@@ -446,10 +679,10 @@ def modpack(id):
             
             publish = "0"
             private = "0"
-            if "min_java" in request.form:
-                min_java = request.form['min_java']
-                if "NONE" in min_java:
-                    min_java = None
+            min_java = request.form.get("min_java", "").strip()
+            if not min_java or min_java.upper() == "NONE":
+                min_java = None
+            java_runtime = request.form.get("java_runtime") or None
             if "publish" in request.form:
                 publish = request.form['publish']
             if "private" in request.form:
@@ -460,8 +693,8 @@ def modpack(id):
             if "clonebuildman" in request.form and request.form['clonebuildman'] != "":
                 clonebuild = request.form['clonebuildman']
             try:
-                Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild, request.form.get("forge") or None, request.form.get("modloader"))
-            except InvalidModloaderError as error:
+                Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild, request.form.get("forge") or None, request.form.get("modloader"), java_runtime)
+            except (InvalidJavaRuntimeError, InvalidModloaderError) as error:
                 flash(str(error), "error")
                 return redirect(url_for("asite.modpack", id=id))
             flash("added build", "success")
@@ -501,7 +734,12 @@ def modpack(id):
             flash("deleted " + id, "success")
             return redirect(url_for('asite.modpacklibrary'))
 
-    return render_template("modpack.html", modpack=builds, modpackname=modpack)
+    return render_template(
+        "modpack.html",
+        modpack=builds,
+        modpackname=modpack,
+        java_runtime_options=MOJANG_JAVA_RUNTIME_OPTIONS,
+    )
 
 
 @asite.route("/changelog/<oldver>-<newver>", methods=["GET"])
@@ -521,7 +759,7 @@ def changelog(oldver, newver):
     return render_template("changelog.html", changelog=changelog)
 
 
-@asite.route("/mainsettings")
+@asite.route("/mainsettings", methods=["GET", "POST"])
 def mainsettings():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -529,8 +767,21 @@ def mainsettings():
 
     if User.get_permission_token(session["token"], "solder_env") == 0:
         return redirect(request.referrer)
-    
-    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_ttl=cache_ttl)
+
+    if request.method == "POST" and "export_settings_submit" in request.form:
+        try:
+            DistributionSettings.update_exports(
+                packwiz="packwiz_enabled" in request.form,
+                filedirector="filedirector_enabled" in request.form,
+            )
+            flash("Public distribution settings updated.", "success")
+        except DistributionSettingsError as error:
+            ErrorPrinter.message("Unable to update distribution settings", error)
+            flash(str(error), "error")
+        return redirect(url_for("asite.mainsettings"))
+
+    distribution_settings = DistributionSettings.get_all()
+    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, app_url=app_url, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_ttl=cache_ttl, distribution_settings=distribution_settings)
 
 
 @asite.route("/apikeylibrary", methods=["GET"])
@@ -747,17 +998,17 @@ def modpackbuild(id):
         if "form-submit" in request.form:
             publish = "0"
             private = "0"
-            if "min_java" in request.form:
-                min_java = request.form['min_java']
-                if "NONE" in min_java:
-                    min_java = None
+            min_java = request.form.get("min_java", "").strip()
+            if not min_java or min_java.upper() == "NONE":
+                min_java = None
+            java_runtime = request.form.get("java_runtime") or None
             if "publish" in request.form:
                 publish = request.form['publish']
             if "private" in request.form:
                 private = request.form['private']
             try:
-                Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], request.form.get("forge") or None, request.form.get("modloader"))
-            except InvalidModloaderError as error:
+                Build.update(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], request.form.get("forge") or None, request.form.get("modloader"), java_runtime)
+            except (InvalidJavaRuntimeError, InvalidModloaderError) as error:
                 flash(str(error), "error")
                 return redirect(url_for("asite.modpackbuild", id=id))
             flash("updated " + id, "success")
@@ -908,6 +1159,7 @@ def modpackbuild(id):
         packbuildname=editor.packbuildname,
         listmodversions=editor.listmodversions,
         buildlist=editor.buildlist,
+        java_runtime_options=MOJANG_JAVA_RUNTIME_OPTIONS,
     )
 
 
@@ -986,6 +1238,36 @@ def export_mcinstance(id):
     return send_file(
         archive,
         mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@asite.route("/modpackbuild/<int:id>/csv", methods=["GET"])
+def export_build_csv(id):
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+        return redirect(url_for("asite.modpacklibrary"))
+
+    modpack_id = Build.get_modpackid_by_id(id)
+    if not modpack_id or not User_modpack.get_user_modpackpermission(
+        session["token"], modpack_id
+    ):
+        return redirect(url_for("asite.modpacklibrary"))
+
+    try:
+        build, rows = BuildCsvExport.load(id)
+    except BuildExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpack", id=modpack_id))
+
+    filename = secure_filename(f"{build.modpack_slug}_{build.version}.csv")
+    return send_file(
+        BuildCsvExport.render(rows),
+        mimetype="text/csv",
         as_attachment=True,
         download_name=filename,
     )

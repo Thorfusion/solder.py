@@ -19,11 +19,11 @@
         <tbody class="">
             {% for combo in buildlist %}
             <tr>
-                <td class="tablewidth70 tablemaxwidth">{{combo.pretty_name}} ({{combo.name}}){%if combo.integration_provider%} <span class="badge bg-info text-dark">{{combo.integration_provider|title}}</span>{%endif%}</td>
+                <td class="tablewidth70 tablemaxwidth">{{combo.pretty_name}} ({{combo.name}}){%if combo.integration_provider%} <span class="badge bg-info text-dark">{{combo.integration_label}}</span>{%endif%}</td>
                 <td class="tablewidth20">
                     <select class="form-select" name="selmodver_{{combo.modid}}" id="selmodver_{{combo.modid}}" {%if combo.integration_provider%}data-integration-url="{{url_for('asite.integration_versions', build_id=packbuild.id, mod_id=combo.modid)}}" onfocus="loadintegrationversions(this.id, this.dataset.integrationUrl);"{%endif%} onchange="submitoptionpress('selmodver_oldver', '{{combo.modverid}}', 'selmodver_ver', 'selmodver_{{combo.modid}}', 'selmodver_submit');">
                         {%for modlist in combo.versions%}
-                        <option {%if combo.version==modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}{%if modlist.modloader %} ({{modlist.modloader}}){%endif%}</option>
+                        <option {%if combo.version==modlist.version %} selected="selected" {%endif%} value="{{modlist.id}}">{{modlist.version}}{%if modlist.modloader %} ({{modlist.modloader}}){%endif%}{%if modlist.integration_label%} [{{modlist.integration_label}}]{%endif%}</option>
                         {%endfor%}
                     </select>
                 </td>
@@ -69,7 +69,7 @@
                     <input type="search" class="form-control mb-2" id="build_mod_search" placeholder="Search mods" autocomplete="off" oninput="dropdownsearches('build_mod_search', 'build_mod_dropdown_options', 'build_mod_no_results');">
                     <div class="overflow-auto" id="build_mod_dropdown_options" style="max-height: 18rem;">
                         {%for lmod in listmod%}
-                        <button type="button" class="dropdown-item" data-searchable-option data-value="{{lmod.id}}" {%if lmod.integration_provider%}data-integration-url="{{url_for('asite.integration_versions', build_id=packbuild.id, mod_id=lmod.id)}}"{%endif%} onclick="selectbuildmod(this, 'modnames', 'build_mod_selection', 'build_mod_dropdown', 'add_mod_submit');">{{lmod.pretty_name}}{%if lmod.integration_provider%} <span class="badge bg-info text-dark">{{lmod.integration_provider|title}}</span>{%endif%}</button>
+                        <button type="button" class="dropdown-item" data-searchable-option data-value="{{lmod.id}}" {%if lmod.integration_provider%}data-integration-url="{{url_for('asite.integration_versions', build_id=packbuild.id, mod_id=lmod.id)}}"{%endif%} onclick="selectbuildmod(this, 'modnames', 'build_mod_selection', 'build_mod_dropdown', 'add_mod_submit');">{{lmod.pretty_name}}{%if lmod.integration_provider%} <span class="badge bg-info text-dark">{{lmod.integration_label}}</span>{%endif%}</button>
                         {%endfor%}
                         <p class="dropdown-item-text text-muted mb-0" id="build_mod_no_results" hidden>No matching mods</p>
                     </div>
@@ -82,7 +82,7 @@
             <select class="form-select" name="modversion" id="modversion" required>
                 <option class="is-invalid" name="modfirst" value="">Select mod first</option>
                 {%for modlist in listmodversions%}
-                <option value="{{modlist.id}}" id="modversion_{{modlist.mod_id}}" name="modlist" hidden="true">{{modlist.version}}{%if modlist.modloader %} ({{modlist.modloader}}){%endif%}</option>
+                <option value="{{modlist.id}}" id="modversion_{{modlist.mod_id}}" name="modlist" hidden="true">{{modlist.version}}{%if modlist.modloader %} ({{modlist.modloader}}){%endif%}{%if modlist.integration_label%} [{{modlist.integration_label}}]{%endif%}</option>
                 {%endfor%}
             </select>
         </div>
@@ -96,6 +96,9 @@
             <button class="btn btn-primary" type="submit" name="update_all_mods_submit" value="1" form="update_all_mods_form">Update all mods</button>
             {%endif%}
         </div>
+        <div class="mt-2">
+            <a class="btn btn-secondary" href="{{url_for('asite.export_build_csv', id=packbuild.id)}}">Export mod list (CSV)</a>
+        </div>
     </form>
         {%if buildlist%}
         <form method="post" action="" id="update_all_mods_form"></form>
@@ -106,13 +109,15 @@
             <label for="build_name" class="form-label">Selected modpack</label>
             <input type="text" class="form-control" name="build_name" id="build_name" value="{{ packbuildname }}" disabled readonly></input>
         </div>
-        <div class="mb-3">
-            <label for="version" class="form-label">Build number</label>
-            <input type="text" class="form-control" name="version" id="version" value="{{ packbuild.version }}" required></input>
-        </div>
-        <div class="mb-3">
-            <label for="mcversion" class="form-label">Minecraft version</label>
-            <input type="text" class="form-control" name="mcversion" id="mcversion" value="{{ packbuild.minecraft }}" required></input>
+        <div class="mb-3 gridswrapper" id="build_version_fields">
+            <div class="grid1">
+                <label for="version" class="form-label">Build number</label>
+                <input type="text" class="form-control" name="version" id="version" value="{{ packbuild.version }}" required></input>
+            </div>
+            <div class="grid2">
+                <label for="mcversion" class="form-label">Minecraft version</label>
+                <input type="text" class="form-control" name="mcversion" id="mcversion" value="{{ packbuild.minecraft }}" required></input>
+            </div>
         </div>
         <div class="mb-3">
             <label for="modloader" class="form-label">Modloader</label>
@@ -130,29 +135,20 @@
             <label for="forge" class="form-label">Modloader version (optional)</label>
             <input type="text" class="form-control" name="forge" id="forge" value="{{ packbuild.forge or '' }}"></input>
         </div>
-        <div class="mb-3">
-            <label for="min_java" class="form-label">Minimum Java Version</label>
-            <select class="form-select" name="min_java" id="min_java">
-                <option>{{ packbuild.min_java }}</option>
-                {% if packbuild.min_java != "None" %}
-                <option>None</option>
-                {% endif %}
-                {% if packbuild.min_java != "1.6" %}
-                <option>1.6</option>
-                {% endif %}
-                {% if packbuild.min_java != "1.7" %}
-                <option>1.7</option>
-                {% endif %}
-                {% if packbuild.min_java != "1.8" %}
-                <option>1.8</option>
-                {% endif %}
-                {% if packbuild.min_java != "16" %}
-                <option>16</option>
-                {% endif %}
-                {% if packbuild.min_java != "17" %}
-                <option>17</option>
-                {% endif %}
-            </select>
+        <div class="mb-3 gridswrapper">
+            <div class="grid1">
+                <label for="min_java" class="form-label">Minimum Java Version</label>
+                <input type="text" class="form-control" name="min_java" id="min_java" value="{{ packbuild.min_java or '' }}" maxlength="255" placeholder="For example: 1.8.0_51">
+            </div>
+            <div class="grid2">
+                <label for="java_runtime" class="form-label">Mojang Java Runtime <span class="badge bg-warning text-dark">Advanced</span></label>
+                <select class="form-select" name="java_runtime" id="java_runtime" aria-describedby="java_runtime_help">
+                    <option value="" {%if not packbuild.java_runtime%}selected{%endif%}>Automatic (no override)</option>
+                    {%for runtime, label in java_runtime_options%}
+                    <option value="{{runtime}}" {%if packbuild.java_runtime == runtime%}selected{%endif%}>{{label}}</option>
+                    {%endfor%}
+                </select>
+            </div>
         </div>
         <div class="mb-3">
             <label for="memory" class="form-label">Minimum Memory requirement in MB, 0 for disable</label>

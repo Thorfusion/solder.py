@@ -1,0 +1,35 @@
+{
+  "format": "solder.py-integration-manifest",
+  "version": 1,
+  "mods": [
+    {
+      "provider": "modrinth",
+      "project_id": "AANobbMI",
+      "name": "Sodium",
+      "description": "Modern rendering optimization mod",
+      "author": "CaffeineMC",
+      "link": "https://modrinth.com/mod/sodium",
+      "side": "CLIENT"
+    },
+    {
+      "provider": "maven",
+      "repository": {
+        "name": "GTNH",
+        "url": "https://nexus.gtnewhorizons.com/repository/releases/"
+      },
+      "group_id": "com.github.GTNewHorizons",
+      "artifact_id": "ExampleArtifact",
+      "classifier": "",
+      "name": "Example Mod",
+      "description": "Replace this example with the resolved project metadata",
+      "author": "Example author",
+      "link": "https://github.com/GTNewHorizons/ExampleArtifact",
+      "side": "BOTH",
+      "modloader": "FORGE",
+      "minecraft": {
+        "mode": "FIXED",
+        "version": "1.7.10"
+      }
+    }
+  ]
+}

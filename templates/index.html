@@ -5,8 +5,157 @@
 <link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}" />
 {%endblock%}{%block main%}
 
-<div class="center">
-  <input type="text" class="form-control" id="search" placeholder="Type to search" onkeyup="tablesearches();">
+<div class="dashboard container-fluid py-3">
+  <h1 class="h3 mb-3">Dashboard</h1>
+
+  {%if dashboard.counts%}
+  <div class="row row-cols-2 row-cols-xl-5 g-3 mb-3">
+    {%if 'modpacks' in dashboard.counts%}
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small">Modpacks</div>
+          <div class="dashboard-count">{{dashboard.counts.modpacks}}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small">Builds</div>
+          <div class="dashboard-count">{{dashboard.counts.builds}}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small">Unpublished builds</div>
+          <div class="dashboard-count">{{dashboard.counts.unpublished_builds}}</div>
+        </div>
+      </div>
+    </div>
+    {%endif%}
+    {%if 'mods' in dashboard.counts%}
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small">Mods</div>
+          <div class="dashboard-count">{{dashboard.counts.mods}}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="text-muted small">Mod versions</div>
+          <div class="dashboard-count">{{dashboard.counts.modversions}}</div>
+        </div>
+      </div>
+    </div>
+    {%endif%}
+  </div>
+  {%endif%}
+
+  <div class="row g-3 mb-3">
+    <div class="{%if dashboard.marked_build%}col-xl-8{%else%}col-12{%endif%}">
+      <section class="card h-100">
+        <div class="card-header">Needs attention</div>
+        {%if dashboard.attention%}
+        <ul class="list-group list-group-flush">
+          {%for item in dashboard.attention%}
+          <li class="list-group-item">
+            <div class="fw-semibold">
+              {%if item.target == 'modpack'%}
+              <a href="{{url_for('asite.modpack', id=item.target_id)}}">{{item.title}}</a>
+              {%elif item.target == 'build'%}
+              <a href="{{url_for('asite.modpackbuild', id=item.target_id)}}">{{item.title}}</a>
+              {%else%}
+              {{item.title}}
+              {%endif%}
+            </div>
+            <div class="small text-muted">{{item.detail}}</div>
+          </li>
+          {%endfor%}
+        </ul>
+        {%else%}
+        <div class="card-body text-muted">Nothing currently needs attention.</div>
+        {%endif%}
+      </section>
+    </div>
+
+    {%if dashboard.marked_build%}
+    <div class="col-xl-4">
+      <section class="card h-100">
+        <div class="card-header">Marked build</div>
+        <div class="card-body">
+          <h2 class="h5">
+            <a href="{{url_for('asite.modpackbuild', id=dashboard.marked_build.id)}}">
+              {{dashboard.marked_build.modpack_name}} {{dashboard.marked_build.version}}
+            </a>
+          </h2>
+          <dl class="row small mb-0">
+            <dt class="col-6">Minecraft</dt>
+            <dd class="col-6">{{dashboard.marked_build.minecraft}}</dd>
+            <dt class="col-6">Modloader</dt>
+            <dd class="col-6">{{dashboard.marked_build.modloader or ('FORGE' if dashboard.marked_build.forge else 'Unspecified')}}</dd>
+            <dt class="col-6">Mods</dt>
+            <dd class="col-6">{{dashboard.marked_build.mod_count}}</dd>
+            <dt class="col-6">Published</dt>
+            <dd class="col-6">{{'Yes' if dashboard.marked_build.is_published else 'No'}}</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+    {%endif%}
+  </div>
+
+  <section class="card">
+    <div class="card-header">Recent changes</div>
+    {%if dashboard.recent%}
+    <ul class="list-group list-group-flush">
+      {%for item in dashboard.recent%}
+      <li class="list-group-item d-flex justify-content-between align-items-start gap-3">
+        <div>
+          <span class="badge bg-secondary me-1">{{item.item_type|replace('modversion', 'mod version')|title}}</span>
+          {%if item.item_type == 'modpack'%}
+          <a href="{{url_for('asite.modpack', id=item.item_id)}}">{{item.title}}</a>
+          {%elif item.item_type == 'build'%}
+          <a href="{{url_for('asite.modpackbuild', id=item.item_id)}}">{{item.title}}</a>
+          {%else%}
+          <a href="{{url_for('asite.modversion', id=item.item_id)}}">{{item.title}}</a>
+          {%endif%}
+          {%if item.integration_provider%}
+          <span class="badge bg-info text-dark">{{item.integration_label or item.integration_provider|title}}</span>
+          {%endif%}
+          <div class="small text-muted mt-1">{{item.detail}}</div>
+        </div>
+        <time class="small text-muted text-nowrap" datetime="{{item.updated_at.isoformat() if item.updated_at else ''}}">
+          {{item.updated_at.strftime('%Y-%m-%d %H:%M') if item.updated_at else 'No timestamp'}}
+        </time>
+      </li>
+      {%endfor%}
+    </ul>
+    {%else%}
+    <div class="card-body text-muted">No recent changes are visible.</div>
+    {%endif%}
+  </section>
 </div>
 
 {% endblock %}
+{%block aside%}
+<section class="mt-3">
+  <h2 class="h5">Repository health</h2>
+  <ul class="list-group">
+    {%for check in dashboard.repository_health%}
+    <li class="list-group-item px-2 d-flex gap-2 align-items-start">
+      <span class="dashboard-status {{'dashboard-status-ok' if check.ready else 'dashboard-status-warning'}}" aria-hidden="true"></span>
+      <div>
+        <div class="small fw-semibold">{{check.name}}</div>
+        <div class="small text-muted">{{check.detail}}</div>
+      </div>
+    </li>
+    {%endfor%}
+  </ul>
+</section>
+{%endblock%}

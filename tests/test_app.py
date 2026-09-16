@@ -1,6 +1,7 @@
 import hashlib
 import io
 import importlib
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -14,6 +15,7 @@ from tests.environment import configure_test_environment
 configure_test_environment()
 
 from models.integration import IntegrationError  # noqa: E402
+from models.dashboard import Dashboard  # noqa: E402
 from models.mod import DuplicateModError  # noqa: E402
 
 
@@ -32,7 +34,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         cls.client = cls.app_module.app.test_client()
 
     def test_application_exposes_its_version(self):
-        self.assertEqual(self.app_module.__version__, "1.8.0")
+        self.assertEqual(self.app_module.__version__, "1.9.0")
 
     def test_api_blueprint_is_registered(self):
         response = self.client.get("/api/")
@@ -46,12 +48,112 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("/login", routes)
         self.assertIn("/modlibrary", routes)
         self.assertIn("/integrations", routes)
+        self.assertIn("/maven", routes)
+        self.assertIn("/maven/<int:artifact_id>", routes)
+        self.assertIn("/integrations/manifest", routes)
+        self.assertIn("/integrations/manifest/export", routes)
         self.assertIn("/modpackbuild/<int:id>/mcinstance", routes)
+        self.assertIn("/modpackbuild/<int:id>/csv", routes)
         self.assertIn(
             "/modpackbuild/<int:build_id>/integration-versions/<int:mod_id>",
             routes,
         )
         self.assertIn("/api/modpack/<slugstring>/<buildstring>", routes)
+        self.assertIn(
+            "/packwiz/<pack_slug>/<selector>/pack.toml", routes
+        )
+        self.assertIn(
+            "/filedirector/<pack_slug>/<selector>/<bundle_name>.bundle.json",
+            routes,
+        )
+
+    def test_dashboard_is_a_status_view_without_duplicate_action_buttons(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        changed_at = datetime(2026, 9, 12, 10, 30)
+        dashboard = {
+            "counts": {
+                "modpacks": 2,
+                "builds": 5,
+                "unpublished_builds": 1,
+                "mods": 20,
+                "modversions": 40,
+            },
+            "attention": [
+                {
+                    "title": "Example Pack",
+                    "detail": "Latest build is unpublished",
+                    "target": "modpack",
+                    "target_id": 3,
+                }
+            ],
+            "marked_build": {
+                "id": 7,
+                "modpack_name": "Example Pack",
+                "version": "2.0",
+                "minecraft": "1.21.1",
+                "modloader": "FABRIC",
+                "forge": None,
+                "mod_count": 20,
+                "is_published": 0,
+            },
+            "recent": [
+                {
+                    "item_id": 12,
+                    "item_type": "modversion",
+                    "title": "Example Mod - 2.0",
+                    "detail": "1.21.1 / FABRIC",
+                    "integration_provider": "MODRINTH",
+                    "updated_at": changed_at,
+                }
+            ],
+        }
+        health = [
+            {
+                "name": "Public repository",
+                "ready": True,
+                "detail": "Configured",
+            }
+        ]
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.Session.get_user_id", return_value=4),
+            patch("asite.Dashboard.load", return_value=dashboard) as load,
+            patch("asite.Dashboard.repository_health", return_value=health),
+            patch("asite.Build.get_marked_build", return_value=7),
+            patch("asite.Modpack.get_by_pinned", return_value=[]),
+        ):
+            response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Needs attention", response.data)
+        self.assertIn(b"Latest build is unpublished", response.data)
+        self.assertIn(b"Marked build", response.data)
+        self.assertIn(b"Recent changes", response.data)
+        self.assertIn(b">Modrinth</span>", response.data)
+        self.assertIn(b"Repository health", response.data)
+        self.assertNotIn(b"<button", response.data)
+        self.assertNotIn(b"solderpy.js", response.data)
+        load.assert_called_once_with(4)
+
+    def test_dashboard_repository_health_accepts_url_or_local_md5_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            local_health = Dashboard.repository_health(
+                "https://cdn.example.test/mods/", directory
+            )
+        remote_health = Dashboard.repository_health(
+            "https://cdn.example.test/mods/",
+            "https://private.example.test/mods/",
+            "bucket",
+        )
+
+        self.assertTrue(local_health[0]["ready"])
+        self.assertTrue(local_health[1]["ready"])
+        self.assertEqual(local_health[1]["detail"], "Local path accessible")
+        self.assertTrue(remote_health[1]["ready"])
+        self.assertEqual(remote_health[1]["detail"], "Remote source configured")
+        self.assertEqual(remote_health[2]["detail"], "Enabled")
 
     def test_modloader_controls_and_dependency_search_use_existing_ui_styles(self):
         template_root = Path(__file__).resolve().parents[1] / "templates"
@@ -69,6 +171,20 @@ class ApplicationSmokeTests(unittest.TestCase):
             )
             self.assertNotIn('<datalist id="modloaders">', source)
             self.assertNotIn("or 'ANY'", source)
+
+        for template_name in ("modpack.html", "modpackbuild.html"):
+            source = (template_root / template_name).read_text(encoding="utf-8")
+            self.assertIn(
+                '<input type="text" class="form-control" name="min_java"',
+                source,
+            )
+            self.assertNotIn(
+                '<select class="form-select" name="min_java"', source
+            )
+            self.assertIn(
+                '<select class="form-select" name="java_runtime"', source
+            )
+            self.assertIn(">Advanced</span>", source)
 
         version_source = (template_root / "modversion.html").read_text(
             encoding="utf-8"
@@ -88,7 +204,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         self.assertIn("selectsearchabledropdown(this", version_source)
         self.assertIn(
-            '<span class="badge bg-info text-dark">{{dependency.integration_provider|title}}</span>',
+            '<span class="badge bg-info text-dark">{{dependency.integration_label}}</span>',
             version_source,
         )
         self.assertIn(
@@ -118,17 +234,28 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn('type="hidden" name="modnames" id="modnames"', build_source)
         self.assertIn("selectbuildmod(this", build_source)
         self.assertIn(
-            '<span class="badge bg-info text-dark">{{lmod.integration_provider|title}}</span>',
+            '<span class="badge bg-info text-dark">{{lmod.integration_label}}</span>',
             build_source,
         )
         self.assertIn(
-            '<span class="badge bg-info text-dark">{{combo.integration_provider|title}}</span>',
+            '<span class="badge bg-info text-dark">{{combo.integration_label}}</span>',
             build_source,
         )
         self.assertIn('name="update_all_mods_submit"', build_source)
         self.assertIn('form="update_all_mods_form"', build_source)
         self.assertIn('id="update_all_mods_form"', build_source)
         self.assertIn('<div class="d-flex gap-2 mt-3">', build_source)
+        self.assertIn('>Export mod list (CSV)</a>', build_source)
+        self.assertNotIn('>Export mod list</button>', build_source)
+        self.assertNotIn('>MCIL</a>', build_source)
+        self.assertLess(
+            build_source.index('id="add_mod_submit"'),
+            build_source.index('>Export mod list (CSV)</a>'),
+        )
+        self.assertIn(
+            '<div class="mb-3 gridswrapper" id="build_version_fields">',
+            build_source,
+        )
 
         script_source = (
             Path(__file__).resolve().parents[1] / "static" / "js" / "solderpy.js"
@@ -173,6 +300,62 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"9|copy-this-once", response.data)
         create.assert_called_once_with(4, "Deployment")
+
+    def test_environment_settings_can_toggle_public_distribution_formats(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch(
+                "asite.DistributionSettings.get_all",
+                return_value={
+                    "packwiz_enabled": True,
+                    "filedirector_enabled": False,
+                },
+            ),
+            patch("asite.Build.get_marked_build", return_value=0),
+            patch("asite.Modpack.get_by_pinned", return_value=[]),
+        ):
+            response = self.client.get("/mainsettings")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Public distribution formats", response.data)
+        self.assertIn(b'id="packwiz_enabled"', response.data)
+        self.assertIn(b'id="filedirector_enabled"', response.data)
+        self.assertIn(b"API-only mode", response.data)
+        self.assertLess(
+            response.data.index(b'id="distribution_settings"'),
+            response.data.index(b'id="manual_md5_hashing"'),
+        )
+
+        settings_source = (
+            Path(__file__).resolve().parents[1]
+            / "templates"
+            / "mainsettings.html"
+        ).read_text(encoding="utf-8")
+        self.assertGreater(
+            settings_source.index('id="distribution_settings"'),
+            settings_source.index("{%block aside%}"),
+        )
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.DistributionSettings.update_exports") as update,
+        ):
+            saved = self.client.post(
+                "/mainsettings",
+                data={
+                    "export_settings_submit": "1",
+                    "filedirector_enabled": "on",
+                },
+            )
+
+        self.assertEqual(saved.status_code, 302)
+        self.assertEqual(saved.headers["Location"], "/mainsettings")
+        update.assert_called_once_with(packwiz=False, filedirector=True)
 
     def test_authenticated_user_can_download_mcinstance_export(self):
         with self.client.session_transaction() as flask_session:
@@ -223,6 +406,118 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(integration_response.headers["Location"], "/")
         self.assertEqual(export_response.status_code, 302)
         self.assertEqual(export_response.headers["Location"], "/modpacklibrary")
+
+    def test_maven_management_page_renders_with_configured_repositories(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        repository = SimpleNamespace(
+            id=2,
+            name="Example Maven",
+            base_url="https://maven.example.test/releases/",
+        )
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.MavenRepository.get_all", return_value=[repository]),
+            patch("asite.MavenArtifact.get_all", return_value=[]),
+            patch("asite.Build.get_marked_build", return_value=0),
+            patch("asite.Modpack.get_by_pinned", return_value=[]),
+        ):
+            response = self.client.get("/maven")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Example Maven", response.data)
+        self.assertIn(b"Contained in Maven version", response.data)
+        self.assertIn(b"Add Maven mod", response.data)
+        self.assertLess(
+            response.data.index(b"Add Maven mod"),
+            response.data.index(b"Configured artifacts"),
+        )
+        self.assertIn(b'data-name="Example Maven"', response.data)
+        self.assertIn(b"updatemavenmodname", response.data)
+
+    def test_authenticated_user_can_export_technic_csv(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        build = SimpleNamespace(modpack_slug="example-pack", version="2.0")
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Build.get_modpackid_by_id", return_value=3),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch(
+                "asite.BuildCsvExport.load",
+                return_value=(build, [{"mod_name": "Example"}]),
+            ),
+            patch(
+                "asite.BuildCsvExport.render",
+                return_value=io.BytesIO(b"mod_name,mod_slug,version,md5,filesize\n"),
+            ),
+        ):
+            response = self.client.get("/modpackbuild/7/csv")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "text/csv")
+        self.assertIn(
+            "example-pack_2.0.csv", response.headers["Content-Disposition"]
+        )
+
+    def test_maven_manifest_requires_environment_permission(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        manifest = Mock(includes_maven=True)
+
+        def permission(_token, permission):
+            return 0 if permission == "solder_env" else 1
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", side_effect=permission),
+            patch(
+                "asite.IntegrationManifest.parse", return_value=manifest
+            ),
+        ):
+            response = self.client.post(
+                "/integrations/manifest",
+                data={"redistribution_confirmed": "1"},
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/integrations")
+        manifest.import_all.assert_not_called()
+
+    def test_integration_manifest_export_downloads_json(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        manifest = Mock()
+        manifest.render.return_value = io.BytesIO(
+            b'{"format":"solder.py-integration-manifest","version":1,'
+            b'"mods":[{"provider":"modrinth","project_id":"AANobbMI"}]}'
+        )
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch(
+                "asite.IntegrationManifest.from_database",
+                return_value=manifest,
+            ),
+        ):
+            response = self.client.get("/integrations/manifest/export")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/json")
+        self.assertIn(
+            "solder.py-integration-manifest.json",
+            response.headers["Content-Disposition"],
+        )
+        manifest.render.assert_called_once_with()
 
     def test_integration_version_error_does_not_expose_exception_details(self):
         with self.client.session_transaction() as flask_session:
@@ -328,6 +623,41 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         materialize.assert_called_once_with(9, "7", "LATEST")
         update_all.assert_called_once_with("7", {9: 33})
+
+    def test_build_update_accepts_arbitrary_minimum_java_text(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Build.get_modpackid_by_id", return_value=3),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch("asite.Build.update") as update,
+        ):
+            response = self.client.post(
+                "/modpackbuild/7",
+                data={
+                    "form-submit": "1",
+                    "version": "2.0",
+                    "mcversion": "1.21.1",
+                    "min_java": " 1.8.0_51 ",
+                    "java_runtime": "java-runtime-delta",
+                    "memory": "4096",
+                    "forge": "",
+                    "modloader": "",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/modpackbuild/7")
+        update.assert_called_once_with(
+            "7", "2.0", "1.21.1", "0", "0", "1.8.0_51", "4096", None, "",
+            "java-runtime-delta"
+        )
 
     def test_unknown_route_uses_the_solder_404_page(self):
         response = self.client.get("/this-route-does-not-exist")

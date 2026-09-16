@@ -1,0 +1,159 @@
+{%extends "layout.html"%} {% set active_page = "maven" %}
+{%block head%}
+<title>Maven - solder.py</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" />
+{%endblock%}
+{%block main%}
+<div class="container-fluid">
+    <h2>Maven</h2>
+    <p class="text-muted">Configure standard Maven coordinates. Metadata is read without downloading JARs; a JAR is downloaded and packaged only when its version is selected for a build.</p>
+
+    {%if repositories and can_create_mods%}
+    <h4>Add Maven mod</h4>
+    <form method="post" action="{{url_for('asite.maven')}}" class="row g-3 mb-4">
+        <div class="col-md-4">
+            <label for="repository_id" class="form-label">Repository</label>
+            <select class="form-select" name="repository_id" id="repository_id" onchange="updatemavenslug();" required>
+                {%for repository in repositories%}<option value="{{repository.id}}" data-name="{{repository.name}}">{{repository.name}}</option>{%endfor%}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label for="group_id" class="form-label">Group ID</label>
+            <input class="form-control" name="group_id" id="group_id" placeholder="mekanism" required>
+        </div>
+        <div class="col-md-4">
+            <label for="artifact_id" class="form-label">Artifact ID</label>
+            <input class="form-control" name="artifact_id" id="artifact_id" placeholder="Mekanism-Community-Edition" oninput="updatemavenmodname();" required>
+        </div>
+        <div class="col-md-4">
+            <label for="classifier" class="form-label">Classifier</label>
+            <input class="form-control" name="classifier" id="classifier" placeholder="ALL">
+        </div>
+        <div class="col-md-2">
+            <label for="extension" class="form-label">Extension</label>
+            <input class="form-control" name="extension" id="extension" value="jar" required>
+        </div>
+        <div class="col-md-3">
+            <label for="version_mode" class="form-label">Minecraft mapping</label>
+            <select class="form-select" name="version_mode" id="version_mode" onchange="updatemavenmappingfields('version_mode', 'version_pattern');" required>
+                <option value="EMBEDDED">Contained in Maven version</option>
+                <option value="FIXED">Always one Minecraft version</option>
+                <option value="MANUAL">Manual per version</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label for="version_pattern" class="form-label">Embedded format</label>
+            <input class="form-control" name="version_pattern" id="version_pattern" value="{{default_pattern}}" data-embedded-pattern="{{default_pattern}}">
+            <div class="form-text">Mark the parts with {minecraft} and {version}.</div>
+        </div>
+        <div class="col-md-3">
+            <label for="fixed_minecraft" class="form-label">Fixed Minecraft version</label>
+            <input class="form-control" name="fixed_minecraft" id="fixed_minecraft" placeholder="1.7.10">
+        </div>
+        <div class="col-md-3">
+            <label for="modloader" class="form-label">Modloader</label>
+            <select class="form-select" name="modloader" id="modloader">
+                <option value="">No loader restriction</option>
+                <option value="FORGE">Forge</option><option value="NEOFORGE">NeoForge</option>
+                <option value="FABRIC">Fabric</option><option value="QUILT">Quilt</option>
+                <option value="LITELOADER">LiteLoader</option><option value="VANILLA">Vanilla</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label for="title" class="form-label">Mod name</label>
+            <input class="form-control" name="title" id="title" oninput="updatemavenslug();" required>
+        </div>
+        <div class="col-md-4">
+            <label for="slug" class="form-label">Solder slug</label>
+            <input class="form-control" name="slug" id="slug" readonly>
+        </div>
+        <div class="col-md-4">
+            <label for="author" class="form-label">Author</label>
+            <input class="form-control" name="author" id="author">
+        </div>
+        <div class="col-md-8">
+            <label for="description" class="form-label">Description</label>
+            <input class="form-control" name="description" id="description" maxlength="255">
+        </div>
+        <div class="col-md-4">
+            <label for="link" class="form-label">Project link</label>
+            <input class="form-control" type="url" name="link" id="link">
+        </div>
+        <div class="col-md-3">
+            <label for="side" class="form-label">Side</label>
+            <select class="form-select" name="side" id="side">
+                <option value="BOTH">Client and server</option>
+                <option value="CLIENT">Client</option><option value="SERVER">Server</option>
+            </select>
+        </div>
+        <div class="col-md-9 d-flex align-items-end">
+            <div class="form-check mb-2">
+                <input class="form-check-input" type="checkbox" value="1" name="redistribution_confirmed" id="redistribution_confirmed" required>
+                <label class="form-check-label" for="redistribution_confirmed">I have permission to download and rehost this artifact through Solder.</label>
+            </div>
+        </div>
+        <div class="col-12"><button class="btn btn-success" type="submit" name="add_artifact" value="1">Add Maven mod</button></div>
+    </form>
+    {%elif can_create_mods%}
+    <p>Add a Maven repository before adding an artifact.</p>
+    {%endif%}
+
+    <hr>
+    <h4>Configured artifacts</h4>
+    {%if artifacts%}
+    <div class="mb-3 tablewidthsearch">
+        <input type="search" class="form-control" id="search" placeholder="Search configured artifacts" onkeyup="tablesearches(0);">
+    </div>
+    <table class="table table-striped table-hover maxheighttable table-sm" id="table">
+        <thead class="table-light sticky-md-top"><tr><th>Mod</th><th>Coordinates</th><th>Repository</th><th>Mapping</th><th></th></tr></thead>
+        <tbody>
+        {%for artifact in artifacts%}
+        <tr>
+            <td>{{artifact.title}} ({{artifact.slug}})</td>
+            <td><code>{{artifact.coordinates}}</code></td>
+            <td><span class="badge bg-info text-dark">{{artifact.repository_name}}</span></td>
+            <td>
+                {%if artifact.version_mode == 'FIXED'%}Always {{artifact.fixed_minecraft}}
+                {%elif artifact.version_mode == 'EMBEDDED'%}<code>{{artifact.version_pattern}}</code>
+                {%else%}Manual per version{%endif%}
+            </td>
+            <td>{%if can_manage_mods%}<a class="btn btn-secondary" href="{{url_for('asite.maven_artifact', artifact_id=artifact.id)}}">Manage versions</a>{%endif%}</td>
+        </tr>
+        {%endfor%}
+        </tbody>
+    </table>
+    {%else%}
+    <p>No Maven artifacts have been configured.</p>
+    {%endif%}
+</div>
+<script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
+{%endblock%}
+{%block aside%}
+<h5>Repositories</h5>
+{%for repository in repositories%}
+<div class="mb-3">
+    <strong>{{repository.name}}</strong><br><small class="text-break">{{repository.base_url}}</small>
+    {%if can_manage_repositories%}
+    <form method="post" action="{{url_for('asite.maven')}}" class="mt-1">
+        <input type="hidden" name="repository_id" value="{{repository.id}}">
+        <button class="btn btn-sm btn-outline-danger" type="submit" name="delete_repository" value="1">Delete</button>
+    </form>
+    {%endif%}
+</div>
+{%endfor%}
+{%if can_manage_repositories%}
+<form method="post" action="{{url_for('asite.maven')}}">
+    <div class="mb-3">
+        <label for="repository_name" class="form-label">Name</label>
+        <input class="form-control" name="repository_name" id="repository_name" required>
+    </div>
+    <div class="mb-3">
+        <label for="base_url" class="form-label">Base URL</label>
+        <input class="form-control" type="url" name="base_url" id="base_url" placeholder="https://repo.example/maven/" required>
+    </div>
+    <button class="btn btn-success" type="submit" name="add_repository" value="1">Add repository</button>
+</form>
+{%else%}
+<p class="text-muted">Environment permission is required to add repository URLs.</p>
+{%endif%}
+{%endblock%}
