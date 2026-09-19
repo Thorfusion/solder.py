@@ -426,6 +426,11 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn('name="update_all_mods_submit"', build_source)
         self.assertIn('form="update_all_mods_form"', build_source)
         self.assertIn('id="update_all_mods_form"', build_source)
+        self.assertIn("{%if optional_mode == 1%}List in advanced optional page{%else%}Optional{%endif%}", build_source)
+        self.assertIn('name="newoptional"', build_source)
+        self.assertIn('name="newadvancedoptional"', build_source)
+        self.assertIn("{%if combo.optional%}checked{%endif%}", build_source)
+        self.assertIn("{%if combo.advanced_listed%}checked{%endif%}", build_source)
         self.assertIn('<div class="d-flex gap-2 mt-3">', build_source)
         self.assertIn(
             "url_for('asite.modpackbuild', id=packbuild.id, export=1)",
@@ -1287,7 +1292,12 @@ class ApplicationSmokeTests(unittest.TestCase):
                 "asite.User_modpack.get_user_modpackpermission",
                 return_value=True,
             ),
+            patch(
+                "asite.Modpack.get_by_id",
+                return_value=SimpleNamespace(optional_mode=1),
+            ),
             patch("asite.AdvancedOptional.set_listing") as set_listing,
+            patch("asite.Build_modversion.update_optional") as update_optional,
         ):
             response = self.client.post(
                 "/modpackbuild/7",
@@ -1300,6 +1310,119 @@ class ApplicationSmokeTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 302)
         set_listing.assert_called_once_with("7", "41", "1")
+        update_optional.assert_not_called()
+
+    def test_build_checkbox_updates_legacy_optional_state_in_basic_mode(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Build.get_modpackid_by_id", return_value=3),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch(
+                "asite.Modpack.get_by_id",
+                return_value=SimpleNamespace(optional_mode=0),
+            ),
+            patch("asite.AdvancedOptional.set_listing") as set_listing,
+            patch("asite.Build_modversion.update_optional") as update_optional,
+        ):
+            response = self.client.post(
+                "/modpackbuild/7",
+                data={
+                    "optional_submit": "1",
+                    "optional_modid": "12",
+                    "optional_check": "1",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        update_optional.assert_called_once_with("12", "1", "7")
+        set_listing.assert_not_called()
+
+    def test_add_mod_uses_legacy_optional_state_in_basic_mode(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Build.get_modpackid_by_id", return_value=3),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch(
+                "asite.Modpack.get_by_id",
+                return_value=SimpleNamespace(optional_mode=0),
+            ),
+            patch(
+                "asite.Modversion.add_modversion_to_selected_build",
+                return_value=[],
+            ) as add_modversion,
+            patch(
+                "asite.AdvancedOptional.set_modversion_listing"
+            ) as set_listing,
+        ):
+            response = self.client.post(
+                "/modpackbuild/7",
+                data={
+                    "add_mod_submit": "1",
+                    "modnames": "9",
+                    "modversion": "12",
+                    "newoptional": "1",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        add_modversion.assert_called_once_with("12", "9", "7", "0", "1")
+        set_listing.assert_not_called()
+
+    def test_add_mod_uses_work_list_checkbox_in_advanced_mode(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Build.get_modpackid_by_id", return_value=3),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch(
+                "asite.Modpack.get_by_id",
+                return_value=SimpleNamespace(optional_mode=1),
+            ),
+            patch(
+                "asite.Mod.get_by_id",
+                return_value=SimpleNamespace(modtype="MOD"),
+            ),
+            patch(
+                "asite.Modversion.add_modversion_to_selected_build",
+                return_value=[],
+            ) as add_modversion,
+            patch(
+                "asite.AdvancedOptional.set_modversion_listing"
+            ) as set_listing,
+        ):
+            response = self.client.post(
+                "/modpackbuild/7",
+                data={
+                    "add_mod_submit": "1",
+                    "modnames": "9",
+                    "modversion": "12",
+                    "newadvancedoptional": "1",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        add_modversion.assert_called_once_with("12", "9", "7", "0", "0")
+        set_listing.assert_called_once_with("7", "12")
 
     def test_advanced_optional_page_lists_only_selected_build_mods(self):
         with self.client.session_transaction() as flask_session:

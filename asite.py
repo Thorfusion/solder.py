@@ -1365,7 +1365,8 @@ def modpackbuild(id):
     if User.get_permission_token(session["token"], "modpacks_manage") == 0:
                 return redirect(request.referrer)
     
-    if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(id)) == False:
+    modpack_id = Build.get_modpackid_by_id(id)
+    if User_modpack.get_user_modpackpermission(session["token"], modpack_id) == False:
         return redirect(request.referrer)
 
     if request.method == "POST":
@@ -1434,19 +1435,31 @@ def modpackbuild(id):
                 flash("; ".join(integration_errors), "error")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "optional_submit" in request.form:
+            modpack = Modpack.get_by_id(modpack_id)
+            if modpack is None:
+                return redirect(url_for("asite.modpacklibrary"))
             try:
-                AdvancedOptional.set_listing(
-                    id,
-                    request.form["optional_modid"],
-                    request.form["optional_check"],
-                )
-            except AdvancedOptionalError as error:
+                if modpack.optional_mode == ADVANCED_MODE:
+                    AdvancedOptional.set_listing(
+                        id,
+                        request.form["optional_modid"],
+                        request.form["optional_check"],
+                    )
+                    message = "Advanced optional list updated."
+                else:
+                    Build_modversion.update_optional(
+                        request.form["optional_modid"],
+                        request.form["optional_check"],
+                        id,
+                    )
+                    message = "Optional state updated."
+            except (AdvancedOptionalError, ValueError) as error:
                 flash(str(error), "error")
             else:
                 from api import clear_api_caches
 
                 clear_api_caches()
-                flash("Advanced optional list updated.", "success")
+                flash(message, "success")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "selmodver_submit" in request.form:
             try:
@@ -1489,13 +1502,24 @@ def modpackbuild(id):
             flash("deleted build" + id, "success")
             return redirect(url_for('asite.modpacklibrary'))
         if "add_mod_submit" in request.form:
-            list_in_advanced = "newadvancedoptional" in request.form
+            modpack = Modpack.get_by_id(modpack_id)
+            if modpack is None:
+                return redirect(url_for("asite.modpacklibrary"))
+            advanced_mode = modpack.optional_mode == ADVANCED_MODE
+            list_in_advanced = (
+                advanced_mode and "newadvancedoptional" in request.form
+            )
+            newoptional = (
+                request.form.get("newoptional", "0")
+                if not advanced_mode
+                else "0"
+            )
             mod_id = request.form.get("modnames", "").strip()
             selected_version = request.form.get("modversion", "").strip()
             if not mod_id or not selected_version:
                 flash("select a mod and compatible version", "error")
                 return redirect(url_for("asite.modpackbuild", id=id))
-            selected_mod = Mod.get_by_id(mod_id)
+            selected_mod = Mod.get_by_id(mod_id) if list_in_advanced else None
             if (
                 list_in_advanced
                 and selected_mod is not None
@@ -1522,7 +1546,7 @@ def modpackbuild(id):
                     mod_id,
                     id,
                     "0",
-                    "0",
+                    newoptional,
                 )
                 if list_in_advanced:
                     AdvancedOptional.set_modversion_listing(

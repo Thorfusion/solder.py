@@ -8,7 +8,7 @@
             <tr>
                 <th scope="col" class="tablewidth70 tablemaxwidth">Name (Slug)</th>
                 <th scope="col" class="tablewidth20">Version</th>
-                <th scope="col">List in advanced optional page</th>
+                <th scope="col">{%if optional_mode == 1%}List in advanced optional page{%else%}Optional{%endif%}</th>
                 <th>
                     <div class="maxcont">
                         <input type="text" class="form-control tablewidthsearch" id="search" placeholder="Type to search" onkeyup="tablesearches(0);">
@@ -28,8 +28,12 @@
                     </select>
                 </td>
                 <td>
+                    {%if optional_mode == 1%}
                     {%if combo.modtype in ['LAUNCHER', 'MCIL']%}<span class="text-muted" title="Modloader and downloader packages are not advanced choices">&mdash;</span>{%else%}
                     <input class="form-check-input" type="checkbox" value="" id="advanced_optional_{{combo.id}}" aria-label="List {{combo.pretty_name}} in advanced optional page" onclick="submitecheckedpress('optional_modid', '{{combo.id}}', 'optional_check', 'advanced_optional_{{combo.id}}', 'optional_submit')" {%if combo.advanced_listed%}checked{%endif%}>
+                    {%endif%}
+                    {%else%}
+                    <input class="form-check-input" type="checkbox" value="" id="optional_{{combo.modverid}}" aria-label="Make {{combo.pretty_name}} optional" onclick="submitecheckedpress('optional_modid', '{{combo.modverid}}', 'optional_check', 'optional_{{combo.modverid}}', 'optional_submit')" {%if combo.optional%}checked{%endif%}>
                     {%endif%}
                 </td>
                 <td>
@@ -89,8 +93,13 @@
             </select>
         </div>
         <div class="form-check">
+            {%if optional_mode == 1%}
             <input class="form-check-input" type="checkbox" value="1" id="newadvancedoptional" name="newadvancedoptional">
             <label class="form-check-label" for="newadvancedoptional">List the mod in advanced optional page</label>
+            {%else%}
+            <input class="form-check-input" type="checkbox" value="1" id="newoptional" name="newoptional">
+            <label class="form-check-label" for="newoptional">Optional</label>
+            {%endif%}
         </div>
         <div class="d-flex gap-2 mt-3">
             <input class="btn btn-success" type="submit" value="Add Mod" name="add_mod_submit" id="add_mod_submit" disabled>

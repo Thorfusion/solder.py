@@ -96,9 +96,11 @@ API key or other credential.
 
 ### Advanced optional delivery
 
-Select **List the mod in advanced optional page** while adding a mod, or use the
-same checkbox in the build table. This work-list flag is separate from the
-normal build optional state. The **Advanced optionals** page stores named groups
+In Basic mode, the **Optional** checkbox in the build editor directly controls
+the legacy Technic optional state. In Advanced mode, select **List the mod in
+advanced optional page** while adding a mod, or use the same checkbox in the
+build table. This work-list flag is separate from the normal build optional
+state. The **Advanced optionals** page stores named groups
 while retaining one Technic/basic state per configured entry:
 `0` is required, `1` is optional, and `2` is excluded. State `2` is never
 returned to Technic, Packwiz, or the native MRPack file list. It remains

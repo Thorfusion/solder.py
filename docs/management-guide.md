@@ -192,8 +192,9 @@ Open **Manage** beside a build.
 
 1. Search the mod dropdown and select a mod.
 2. Select a compatible local or provider version.
-3. Select **List the mod in advanced optional page** if it needs advanced
-   delivery choices.
+3. In Basic mode, select **Optional** to use the legacy Technic optional
+   behavior. In Advanced mode, select **List the mod in advanced optional
+   page** if it needs advanced delivery choices.
 4. Select **Add Mod**. Required dependencies are added automatically.
 
 For a provider-managed mod, merely opening the version selector reads upstream
@@ -204,10 +205,11 @@ materialized versions are reused.
 available, enabled versions compatible with the build's Minecraft version and
 modloader. Review the changed build before publishing it.
 
-Use the build table to change a single selected version, choose which mods are
-listed on the advanced-optionals page, or remove a mod. The listing flag is
-separate from the Technic/basic optional state configured on that page. A mod
-type badge identifies the package role; a separate green
+Use the build table to change a single selected version or remove a mod. Its
+checkbox follows the modpack's optional mode: in Basic mode it directly changes
+the legacy required/optional state, while in Advanced mode it controls which
+mods are listed on the advanced-optionals page. A mod type badge identifies the
+package role; a separate green
 Modrinth or Maven-repository badge identifies the source integration.
 
 ### Basic and advanced optionals
