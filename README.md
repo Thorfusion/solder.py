@@ -128,10 +128,10 @@ export usage, and file layouts are documented in the
 
 + **SolderPy Loader, Packwiz, FileDirector, and Modpack Director support**
 
-  Export a ready-to-install SolderPy Loader ZIP containing the verified Loader,
-  Relauncher, and build API configuration, or bootstrap Technic and launcher
-  exports from the same dedicated API. Packwiz metadata and
-  Director-compatible bundles remain available as separate formats.
+  Export a SolderPy Loader configuration ZIP, or let Technic, Modrinth,
+  CurseForge, and Prism deliver the Loader and Relauncher while using the same
+  dedicated API. Packwiz metadata and Director-compatible bundles remain
+  available as separate formats.
   Modpack Director exports include its `modpack.json` pack identity and update
   metadata. Each format is independently enabled in the settings GUI, and the
   hosted routes are available in API-only mode.

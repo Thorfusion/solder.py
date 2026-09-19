@@ -128,9 +128,7 @@
                         {%if distribution_settings.solderpy_loader_enabled%}
                         <div class="border-top pt-3">
                         <h6>SolderPy Loader</h6>
-                        {%if solderpy_loader_downloader_error%}<div class="alert alert-warning" role="alert">{{solderpy_loader_downloader_error}}</div>{%endif%}
-                        {{downloader_select('solderpy_loader_downloader', 'solderpy_loader_downloader', 'SolderPy Loader version', solderpy_loader_downloaders)}}
-                        <div class="form-text mb-2">Exports the verified Loader and Relauncher JARs with this build's Solder API configuration.</div>
+                        <div class="form-text mb-2">Exports this build's Solder API configuration. Install the Loader and Relauncher through Modrinth, CurseForge, or Technic.</div>
                         </div>
                         {%endif%}
 

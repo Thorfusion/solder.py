@@ -1583,12 +1583,10 @@ def modpackbuild(id):
     )
     modrinth_downloaders, modrinth_downloader_error = (), None
     prism_downloaders, prism_downloader_error = (), None
-    solderpy_loader_downloaders, solderpy_loader_downloader_error = (), None
     curseforge_downloaders, curseforge_downloader_error = (), None
     if export_requested and (
         distribution_settings[DistributionSettings.MRPACK]
         or distribution_settings[DistributionSettings.PRISM]
-        or distribution_settings[DistributionSettings.SOLDERPY_LOADER]
     ):
         resolved_downloaders, resolved_error = _available_downloaders(
             editor.packbuild, distribution_settings, "modrinth"
@@ -1599,21 +1597,6 @@ def modpackbuild(id):
         if distribution_settings[DistributionSettings.PRISM]:
             prism_downloaders = resolved_downloaders
             prism_downloader_error = resolved_error
-        if distribution_settings[DistributionSettings.SOLDERPY_LOADER]:
-            solderpy_loader_downloaders = tuple(
-                downloader
-                for downloader in resolved_downloaders
-                if downloader.key == "solderpyloader"
-            )
-            solderpy_loader_downloader_error = resolved_error
-            if (
-                not solderpy_loader_downloaders
-                and solderpy_loader_downloader_error is None
-            ):
-                solderpy_loader_downloader_error = (
-                    "No compatible public SolderPy Loader release was found "
-                    "for this Minecraft and modloader version."
-                )
     if (
         export_requested
         and distribution_settings[DistributionSettings.CURSEFORGE]
@@ -1639,8 +1622,6 @@ def modpackbuild(id):
         modrinth_downloader_error=modrinth_downloader_error,
         prism_downloaders=prism_downloaders,
         prism_downloader_error=prism_downloader_error,
-        solderpy_loader_downloaders=solderpy_loader_downloaders,
-        solderpy_loader_downloader_error=solderpy_loader_downloader_error,
         curseforge_downloaders=curseforge_downloaders,
         curseforge_downloader_error=curseforge_downloader_error,
     )
@@ -1981,13 +1962,9 @@ def export_solderpy_loader(id):
     if failure is not None:
         return failure
     build, _packages = loaded
-    downloader = request.args.get("solderpy_loader_downloader")
-    if not _downloader_export_enabled(downloader):
-        return redirect(url_for("asite.modpackbuild", id=id))
     try:
         archive = PlatformPackExport.render_solderpy_loader(
             build,
-            downloader,
             app_url,
             selector=request.args.get("selector"),
         )

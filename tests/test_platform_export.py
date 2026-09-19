@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import ANY, patch
+from unittest.mock import patch
 import zipfile
 
 from tests.environment import configure_test_environment
@@ -19,11 +19,9 @@ from models.mcinstance import MCInstanceBuild, MCInstancePackage  # noqa: E402
 from models.platform_export import (  # noqa: E402
     CurseForgeDownloaderAPI,
     CurseForgeFile,
-    DownloaderRelease,
     NativeModrinthFile,
     PlatformExportError,
     PlatformPackExport,
-    SelectedDownloader,
 )
 
 
@@ -315,88 +313,20 @@ class PlatformPackExportTests(unittest.TestCase):
         with self.assertRaisesRegex(PlatformExportError, "CURSEFORGE_API_KEY"):
             CurseForgeDownloaderAPI(None)
 
-    def test_solderpy_loader_export_contains_runtime_and_api_config(self):
-        loader_body = b"solderpy loader"
-        runtime_body = b"relauncher"
-
-        def native_file(project_id, version_id, filename, body):
-            return NativeModrinthFile(
-                project_id=project_id,
-                version_id=version_id,
-                filename=filename,
-                download_url=(
-                    f"https://cdn.modrinth.com/data/{project_id}/versions/"
-                    f"{version_id}/{filename}"
-                ),
-                sha1=hashlib.sha1(body, usedforsecurity=False).hexdigest(),
-                sha512=hashlib.sha512(body).hexdigest(),
-                size=len(body),
-            )
-
-        selected = SelectedDownloader(
-            PlatformPackExport.downloader_spec("solderpyloader"),
-            DownloaderRelease(
-                selector="loader-version",
-                version="0.1.0",
-                default=True,
-                modrinth=native_file(
-                    "5LpwENAj", "loader-version", "loader.jar", loader_body
-                ),
-                modrinth_dependencies=(
-                    native_file(
-                        "zCFNaupz",
-                        "runtime-version",
-                        "relauncher.jar",
-                        runtime_body,
-                    ),
-                ),
-            ),
+    def test_solderpy_loader_export_contains_only_api_config(self):
+        archive = PlatformPackExport.render_solderpy_loader(
+            build(), APPLICATION, selector="recommended"
         )
-        with patch.object(
-            PlatformPackExport,
-            "resolve_downloader",
-            return_value=selected,
-        ) as resolve:
-            archive = PlatformPackExport.render_solderpy_loader(
-                build(),
-                "solderpyloader:loader-version",
-                APPLICATION,
-                selector="recommended",
-                http=FakeHTTP(
-                    [
-                        FakeResponse(None, body=loader_body),
-                        FakeResponse(None, body=runtime_body),
-                    ]
-                ),
-            )
 
         with archive, zipfile.ZipFile(archive) as result:
             self.assertEqual(
                 set(result.namelist()),
-                {
-                    "mods/!solderpy-loader.jar",
-                    "mods/!relauncher.jar",
-                    "config/solderpy-loader.json",
-                },
-            )
-            self.assertEqual(
-                result.read("mods/!solderpy-loader.jar"), loader_body
-            )
-            self.assertEqual(
-                result.read("mods/!relauncher.jar"),
-                runtime_body,
+                {"config/solderpy-loader.json"},
             )
             config = json.loads(result.read("config/solderpy-loader.json"))
         self.assertEqual(config["api"], "https://solder.example.test/api/")
         self.assertEqual(config["modpack"], "example-pack")
         self.assertEqual(config["build"], "recommended")
-        resolve.assert_called_once_with(
-            "solderpyloader:loader-version",
-            ANY,
-            "modrinth",
-            required=True,
-            http=ANY,
-        )
 
     def test_mrpack_routes_native_modrinth_and_solder_fallback_separately(self):
         with patch(

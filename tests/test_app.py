@@ -448,7 +448,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("{%if export_requested%}", build_source)
         self.assertIn('document.body.appendChild(exportModalElement)', build_source)
         self.assertIn("downloader_select('modrinth_downloader'", build_source)
-        self.assertIn("downloader_select('solderpy_loader_downloader'", build_source)
+        self.assertNotIn("downloader_select('solderpy_loader_downloader'", build_source)
         self.assertIn("downloader_select('curseforge_downloader'", build_source)
         self.assertIn("{{export_settings(packbuild)}}", build_source)
         self.assertIn('>Export CSV</button>', build_source)
@@ -815,9 +815,7 @@ class ApplicationSmokeTests(unittest.TestCase):
             ) as render,
         ):
             response = self.client.get(
-                "/modpackbuild/7/solderpy-loader?"
-                "solderpy_loader_downloader=solderpyloader:release-id&"
-                "selector=recommended"
+                "/modpackbuild/7/solderpy-loader?selector=recommended"
             )
 
         self.assertEqual(response.status_code, 200)
@@ -826,9 +824,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(
             "example-pack-2.0-solderpy-loader.zip",
             response.headers["Content-Disposition"],
-        )
-        self.assertEqual(
-            render.call_args.args[1], "solderpyloader:release-id"
         )
         self.assertEqual(render.call_args.kwargs["selector"], "recommended")
 
@@ -1608,7 +1603,6 @@ class ApplicationSmokeTests(unittest.TestCase):
             self.assertFalse(context["export_requested"])
             self.assertEqual(context["modrinth_downloaders"], ())
             self.assertEqual(context["prism_downloaders"], ())
-            self.assertEqual(context["solderpy_loader_downloaders"], ())
             self.assertEqual(context["curseforge_downloaders"], ())
 
             response = self.client.get("/modpackbuild/7?export=1")
@@ -1697,7 +1691,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.data.count(b'name="delivery"'), 2)
         self.assertEqual(response.data.count(b'name="selector"'), 1)
         self.assertIn(b'name="modrinth_downloader"', response.data)
-        self.assertIn(b'name="solderpy_loader_downloader"', response.data)
+        self.assertNotIn(b'name="solderpy_loader_downloader"', response.data)
         self.assertIn(b'name="prism_downloader"', response.data)
         self.assertIn(b'name="curseforge_downloader"', response.data)
         self.assertIn(b"Self-contained archive", response.data)

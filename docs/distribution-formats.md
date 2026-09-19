@@ -11,7 +11,7 @@ format receives.
 | Output | Use it for | Delivery |
 | --- | --- | --- |
 | CSV | Auditing a build or moving a simple mod list into another tool | Downloaded CSV |
-| SolderPy Loader | Runtime installation from the dedicated bootstrap API, including interactive basic and advanced optionals | Dedicated bootstrap ZIP, or embedded in a Modrinth, CurseForge, or Prism archive |
+| SolderPy Loader | Runtime installation from the dedicated bootstrap API, including interactive basic and advanced optionals | Dedicated configuration ZIP, or Loader delivery through Modrinth, CurseForge, Prism, or Technic |
 | MCInstance Loader (MCIL) | A self-contained MCIL pack with downloadable mods and bundled overrides | Downloaded `.mcinstance` archive |
 | FileDirector | Installing individual files or Solder ZIPs with optional and side metadata | Downloaded config ZIP or hosted config |
 | Modpack Director | Runtime installation using a FileDirector-compatible bundle plus pack/update metadata | Downloaded config ZIP or hosted config |
@@ -211,29 +211,27 @@ modpack and does not require a distribution-format switch.
 ## SolderPy Loader
 
 Enable **SolderPy Loader** to add **Export SolderPy Loader**, Technic delivery,
-and the Modrinth, CurseForge, and Prism downloader selectors. The registered
-projects are Modrinth `5LpwENAj` and CurseForge `1702825`; its required
-Relauncher dependency is Modrinth `zCFNaupz` or CurseForge `1491728`.
+and the Modrinth, CurseForge, and Prism downloader selectors. The dedicated
+export contains configuration only. The launcher-specific exports deliver the
+Loader and Relauncher themselves. The registered projects are Modrinth
+`5LpwENAj` and CurseForge `1702825`; its required Relauncher dependency is
+Modrinth `zCFNaupz` or CurseForge `1491728`.
 
 SolderPy Loader uses the dedicated bootstrap API, so it supports basic
 optionals and advanced independent or exact-one groups without generating a
-FileDirector-style package list. Select a compatible release and **Export
-SolderPy Loader** to download:
+FileDirector-style package list. Select **Export SolderPy Loader** to download:
 
 ```text
-mods/!solderpy-loader.jar
-mods/!relauncher.jar
 config/solderpy-loader.json
 ```
 
-The JARs are downloaded from Modrinth during export and verified against the
-declared size, SHA-1, and SHA-512. The configuration contains the public
-`APP_URL`, modpack slug, and selected exact build, `latest`, or `recommended`
-channel. Its target is `auto`, so Relauncher selects the client or
-dedicated-server manifest at launch. Extract the ZIP into the instance root.
-The build must be published and non-private. The bootstrap API owns the
-complete Solder-only package plan, so hybrid downloads are not used by this
-format.
+The configuration contains the public `APP_URL`, modpack slug, and selected
+exact build, `latest`, or `recommended` channel. Its target is `auto`, so
+Relauncher selects the client or dedicated-server manifest at launch. Extract
+the ZIP into an instance where SolderPy Loader and Relauncher are already
+installed. The build must be published and non-private. The bootstrap API owns
+the complete Solder-only package plan, so hybrid downloads are not used by
+this format.
 
 ## MCInstance Loader
 

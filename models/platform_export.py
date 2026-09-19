@@ -913,28 +913,17 @@ class PlatformPackExport:
     def render_solderpy_loader(
         cls,
         build,
-        downloader,
         application_url,
         *,
         selector="build",
-        http=None,
     ):
-        """Create a directly installable SolderPy Loader bootstrap ZIP."""
-        selected = cls.resolve_downloader(
-            downloader,
-            build,
-            "modrinth",
-            required=True,
-            http=http,
-        )
-        if selected.key != "solderpyloader":
-            raise PlatformExportError("Select a SolderPy Loader release.")
+        """Create the configuration archive for an installed Loader."""
         config = cls.solderpy_loader_config(
             build, application_url, selector
         )
-        return cls.render_solderpy_loader_archive(
-            selected, config, http=http
-        )
+        with cls._zip_archive() as (archive, target):
+            target.writestr("config/solderpy-loader.json", config)
+        return archive
 
     @staticmethod
     def _copy_archive(source, target, destination):
