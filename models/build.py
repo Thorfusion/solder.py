@@ -307,6 +307,7 @@ class Build:
                               modversions.version, modversions.mcversion,
                               modversions.modloader,
                               modversions.md5, modversions.jarmd5,
+                              modversions.jarfilesize,
                               modversions.created_at,
                               modversions.updated_at, modversions.filesize,
                               mods.name AS modname, mods.pretty_name,
@@ -335,6 +336,7 @@ class Build:
                               modversions.version, modversions.mcversion,
                               modversions.modloader,
                               modversions.md5, modversions.jarmd5,
+                              modversions.jarfilesize,
                               modversions.created_at,
                               modversions.updated_at, modversions.filesize,
                               mods.name AS modname, mods.pretty_name,
@@ -360,7 +362,7 @@ class Build:
             modversions = cursor.fetchall()
             versions = []
             for mv in modversions:
-                v = Modversion(mv["id"], mv["mod_id"], mv["version"], mv["mcversion"], mv["md5"], mv["created_at"], mv["updated_at"], mv["filesize"], mv["optional"], mv.get("modloader"), jarmd5=mv.get("jarmd5"))
+                v = Modversion(mv["id"], mv["mod_id"], mv["version"], mv["mcversion"], mv["md5"], mv["created_at"], mv["updated_at"], mv["filesize"], mv["optional"], mv.get("modloader"), jarmd5=mv.get("jarmd5"), jarfilesize=mv.get("jarfilesize"))
                 v.modname = mv["modname"]
                 v.pretty_name = mv["pretty_name"]
                 v.author = mv["author"]

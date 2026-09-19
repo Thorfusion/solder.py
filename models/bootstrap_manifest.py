@@ -42,9 +42,7 @@ class BootstrapManifest:
                         repository_url, slug, version, "jar"
                     ),
                     "md5": jar_md5.lower(),
-                    # Solder stores the ZIP size but not a separate raw-JAR
-                    # size. Clients still verify the JAR using its stored MD5.
-                    "filesize": None,
+                    "filesize": getattr(package, "jarfilesize", None),
                     "format": "jar",
                     "path": f"mods/{filename}",
                 }

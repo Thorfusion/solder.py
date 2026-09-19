@@ -132,11 +132,11 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "bootstrap_managed": true,
       "url": "https://cdn.example.com/mods/example-library/example-library-1.20.1-4.0.jar",
       "md5": "0123456789abcdef0123456789abcdef",
-      "filesize": null,
+      "filesize": 24680,
       "download": {
         "url": "https://cdn.example.com/mods/example-library/example-library-1.20.1-4.0.jar",
         "md5": "0123456789abcdef0123456789abcdef",
-        "filesize": null,
+        "filesize": 24680,
         "format": "jar",
         "path": "mods/example-library-1.20.1-4.0.jar"
       },
@@ -249,12 +249,14 @@ headless mode.
 
 ## Package ownership and updates
 
-`download.format: jar` means download the raw JAR, verify its MD5, and store it
-at the relative `download.path`. Raw-JAR size is currently `null` because the
-Technic-compatible database stores the Solder ZIP size separately; enforce a
-reasonable client download limit while streaming it. A `MOD` without a
-verified raw JAR falls back to its normal `solder_zip` instruction, preserving
-legacy build compatibility while making the extra extraction cost explicit.
+`download.format: jar` means download the raw JAR, verify its byte size and
+MD5, and store it at the relative `download.path`. The raw-JAR size is kept
+separate from the Solder ZIP size. It may be `null` for a legacy row migrated
+before solder.py verified or regenerated that JAR; in that case, enforce a
+reasonable client download limit while streaming and still verify the MD5. A
+`MOD` without a verified raw JAR falls back to its normal `solder_zip`
+instruction, preserving legacy build compatibility while making the extra
+extraction cost explicit.
 
 `download.format: solder_zip` is used by `CONFIG`, `RES`, `NONE`, and other
 non-mod content. Download the archive, verify its byte size when supplied,

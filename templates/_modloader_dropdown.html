@@ -1,0 +1,39 @@
+{% macro modloader_dropdown(id, loaders, selected_loaders=(), input_name='', form_id='', empty_label='All modloaders', require_one=false, small=false) -%}
+{% set loader_labels = {
+    'FORGE': 'Forge',
+    'NEOFORGE': 'NeoForge',
+    'FABRIC': 'Fabric',
+    'QUILT': 'Quilt',
+    'LITELOADER': 'LiteLoader',
+    'VANILLA': 'Vanilla'
+} %}
+<div class="dropdown" id="{{id}}_container" data-multiselect-dropdown
+    data-empty-label="{{empty_label}}"{%if require_one%} data-require-one="true"{%endif%}>
+    <button class="form-select text-start{%if small%} form-select-sm{%endif%}" type="button"
+        id="{{id}}" data-bs-toggle="dropdown" data-bs-auto-close="outside"
+        aria-haspopup="listbox" aria-expanded="false">
+        <span id="{{id}}_selection">
+            {%if selected_loaders|length == 0%}{{empty_label}}
+            {%elif selected_loaders|length <= 2%}{%for selected_loader in selected_loaders%}{{loader_labels.get(selected_loader|upper, selected_loader)}}{%if not loop.last%}, {%endif%}{%endfor%}
+            {%else%}{{selected_loaders|length}} selected{%endif%}
+        </span>
+    </button>
+    <div class="dropdown-menu w-100 p-2" aria-labelledby="{{id}}"
+        role="listbox" aria-multiselectable="true">
+        {%for loader in loaders%}
+        {%set normalized_loader = loader|upper%}
+        {%set loader_label = loader_labels.get(normalized_loader, loader)%}
+        <label class="dropdown-item d-flex align-items-center gap-2" for="{{id}}_{{loop.index}}">
+            <input class="form-check-input mt-0" type="checkbox"
+                id="{{id}}_{{loop.index}}" value="{{loader}}"
+                data-multiselect-option data-label="{{loader_label}}"
+                {%if input_name%}name="{{input_name}}"{%endif%}
+                {%if form_id%}form="{{form_id}}"{%endif%}
+                {%if loader in selected_loaders%}checked{%endif%}
+                onchange="updatemultiselectdropdown('{{id}}_container', '{{id}}_selection', this);">
+            <span>{{loader_label}}</span>
+        </label>
+        {%endfor%}
+    </div>
+</div>
+{%- endmacro %}

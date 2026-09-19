@@ -424,6 +424,7 @@ class MCInstanceJarTests(unittest.TestCase):
             version="1.7.10-1.0",
             md5=md5(package_data),
             jarmd5=None,
+            jarfilesize=None,
         )
 
     @staticmethod
@@ -461,7 +462,9 @@ class MCInstanceJarTests(unittest.TestCase):
             )
             self.assertEqual(final_jar.read_bytes(), jar_data)
             self.assertEqual(jar_hash, md5(jar_data))
-            update_hash.assert_called_once_with(9, md5(jar_data))
+            update_hash.assert_called_once_with(
+                9, md5(jar_data), len(jar_data)
+            )
             r2.upload_file.assert_called_once_with(
                 str(final_jar),
                 "bucket",
@@ -509,7 +512,7 @@ class MCInstanceJarTests(unittest.TestCase):
             timeout=(5, 60),
         )
         response.raise_for_status.assert_called_once_with()
-        update_hash.assert_called_once_with(9, md5(jar_data))
+        update_hash.assert_called_once_with(9, md5(jar_data), len(jar_data))
 
     def test_create_legacy_jar_reads_md5_repository_path(self):
         jar_data = b"legacy repository jar"
@@ -546,7 +549,7 @@ class MCInstanceJarTests(unittest.TestCase):
 
         self.assertEqual(jar_hash, md5(jar_data))
         get.assert_not_called()
-        update_hash.assert_called_once_with(9, md5(jar_data))
+        update_hash.assert_called_once_with(9, md5(jar_data), len(jar_data))
 
     def test_create_legacy_jar_rejects_a_changed_package(self):
         package_data = self.legacy_package()
@@ -635,6 +638,10 @@ class MCInstanceJarTests(unittest.TestCase):
             [(item.version_id, item.jar_md5) for item in prepared],
             [(9, md5(first_jar)), (10, md5(second_jar))],
         )
+        self.assertEqual(
+            [item.jar_filesize for item in prepared],
+            [len(first_jar), len(second_jar)],
+        )
 
     def test_promote_none_mod_leaves_all_versions_when_one_has_extra_files(self):
         jar_only_package = self.jar_only_package(b"eligible jar")
@@ -692,8 +699,8 @@ class MCInstanceJarTests(unittest.TestCase):
         cursor.fetchall.return_value = [{"id": 9}, {"id": 10}]
         cursor.rowcount = 1
         prepared = [
-            SimpleNamespace(version_id=9, jar_md5="a" * 32),
-            SimpleNamespace(version_id=10, jar_md5="b" * 32),
+            SimpleNamespace(version_id=9, jar_md5="a" * 32, jar_filesize=10),
+            SimpleNamespace(version_id=10, jar_md5="b" * 32, jar_filesize=20),
         ]
 
         with patch(
@@ -704,12 +711,16 @@ class MCInstanceJarTests(unittest.TestCase):
 
         self.assertEqual(cursor.execute.call_count, 5)
         cursor.execute.assert_any_call(
-            "UPDATE modversions SET jarmd5 = %s WHERE id = %s",
-            ("a" * 32, 9),
+            """UPDATE modversions
+                       SET jarmd5 = %s, jarfilesize = %s
+                       WHERE id = %s""",
+            ("a" * 32, 10, 9),
         )
         cursor.execute.assert_any_call(
-            "UPDATE modversions SET jarmd5 = %s WHERE id = %s",
-            ("b" * 32, 10),
+            """UPDATE modversions
+                       SET jarmd5 = %s, jarfilesize = %s
+                       WHERE id = %s""",
+            ("b" * 32, 20, 10),
         )
         connection.commit.assert_called_once_with()
         connection.rollback.assert_not_called()

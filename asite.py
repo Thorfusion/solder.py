@@ -526,7 +526,7 @@ def newmodversion(id):
             return redirect(url_for("asite.modversion", id=id))
         if request.form["newmodvermanual_md5"] != "":
             try:
-                Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0", modloader=request.form.get("newmodvermanual_modloader"))
+                Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0", modloader=request.form.getlist("newmodvermanual_modloader"))
             except ValueError as error:
                 flash(str(error), "error")
         else:
@@ -540,7 +540,7 @@ def newmodversion(id):
                     filesie2,
                     "0",
                     md5_repo_url,
-                    modloader=request.form.get("newmodvermanual_modloader"),
+                    modloader=request.form.getlist("newmodvermanual_modloader"),
                     repository_mod_slug=mod.name,
                 )
             except ValueError as error:
@@ -2413,6 +2413,7 @@ def modlibrary_post():
                         staged_zip, request.form.get("md5"), "the Solder ZIP"
                     )
                     staged_jar = None
+                    actual_jarfilesize = None
                     if jarmd5 != "0":
                         Mod.extract_jar_from_zip(
                             staged_zip,
@@ -2420,6 +2421,7 @@ def modlibrary_post():
                             expected_md5=jarmd5,
                         )
                         staged_jar = Path(staging_directory, jarfilename)
+                        actual_jarfilesize = staged_jar.stat().st_size
 
                     actual_filesize = staged_zip.stat().st_size
                     Modversion.new(
@@ -2431,7 +2433,8 @@ def modlibrary_post():
                         markedbuild,
                         "0",
                         jarmd5.lower(),
-                        modloader=request.form.get("modloader"),
+                        modloader=request.form.getlist("modloader"),
+                        jarfilesize=actual_jarfilesize,
                     )
                     final_zip = destination_folder / filename
                     os.replace(staged_zip, final_zip)

@@ -89,6 +89,7 @@ def version_row(**changes):
         "modloader": "FORGE",
         "md5": "a" * 32,
         "jarmd5": None,
+        "jarfilesize": None,
         "filesize": 123,
         "integration_version_id": None,
         "created_at": None,
@@ -266,7 +267,7 @@ class WriteApiRouteTests(unittest.TestCase):
         self.assertEqual(dependencies, [9, "library-mod"])
 
     def test_create_modversion_accepts_compatibility_and_jar_hash(self):
-        created = version_row(jarmd5="b" * 32)
+        created = version_row(jarmd5="b" * 32, jarfilesize=456)
         with (
             patch("api_write.WriteApiStore.get_mod", return_value=mod_row()),
             patch(
@@ -280,6 +281,7 @@ class WriteApiRouteTests(unittest.TestCase):
                     "version": "1.0",
                     "md5": "A" * 32,
                     "jarmd5": "B" * 32,
+                    "jarfilesize": 456,
                     "filesize": 123,
                     "mcversion": "1.20.1",
                     "modloader": "forge",
@@ -290,6 +292,8 @@ class WriteApiRouteTests(unittest.TestCase):
         values = create.call_args.args[1]
         self.assertEqual(values["md5"], "a" * 32)
         self.assertEqual(values["jarmd5"], "b" * 32)
+        self.assertEqual(values["jarfilesize"], 456)
+        self.assertEqual(response.get_json()["jarfilesize"], 456)
         self.assertEqual(values["modloader"], "FORGE")
 
     def test_modversion_rejects_an_invalid_md5(self):
@@ -302,6 +306,25 @@ class WriteApiRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 422)
         self.assertIn("md5", response.get_json()["error"])
+
+    def test_modversion_rejects_jar_filesize_without_jar_hash(self):
+        with (
+            patch("api_write.WriteApiStore.get_mod", return_value=mod_row()),
+            patch("api_write.WriteApiStore.create_modversion") as create,
+        ):
+            response = self.client.post(
+                "/api/mod/example-mod/version",
+                headers=self.headers,
+                json={
+                    "version": "1.0",
+                    "md5": "a" * 32,
+                    "jarfilesize": 456,
+                },
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("jarfilesize", response.get_json()["error"])
+        create.assert_not_called()
 
     def test_integer_fields_reject_json_floats(self):
         with (

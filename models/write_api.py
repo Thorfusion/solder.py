@@ -27,7 +27,7 @@ _WRITABLE_FIELDS = {
     },
     "modversions": {
         "mod_id", "version", "mcversion", "modloader", "md5", "jarmd5",
-        "filesize", "integration_version_id",
+        "jarfilesize", "filesize", "integration_version_id",
     },
     "clients": {"name", "uuid"},
 }
@@ -566,6 +566,15 @@ class WriteApiStore:
 
     @classmethod
     def create_modversion(cls, mod_id, values):
+        if (
+            values.get("jarfilesize") is not None
+            and Modversion.JAR_MD5_PATTERN.fullmatch(
+                str(values.get("jarmd5") or "").strip()
+            ) is None
+        ):
+            raise WriteApiProblem(
+                "A JAR filesize requires a valid JAR MD5."
+            )
         try:
             with _transaction() as cur:
                 cur.execute(
@@ -591,6 +600,15 @@ class WriteApiStore:
         with _transaction() as cur:
             compatibility = dict(modversion)
             compatibility.update(values)
+            if (
+                compatibility.get("jarfilesize") is not None
+                and Modversion.JAR_MD5_PATTERN.fullmatch(
+                    str(compatibility.get("jarmd5") or "").strip()
+                ) is None
+            ):
+                raise WriteApiProblem(
+                    "A JAR filesize requires a valid JAR MD5."
+                )
             cur.execute(
                 """SELECT builds.minecraft, builds.forge, builds.modloader
                    FROM build_modversion

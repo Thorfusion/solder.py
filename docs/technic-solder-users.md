@@ -166,8 +166,9 @@ write API is deliberately enabled on the API process.
 The migration recognizes current Technic Solder and solder.py 1.7.4 data. It
 adds the current fields and feature tables, preserves old versions, converts
 legacy private notes to the current field, restores Forge loader metadata, and
-adds query indexes. It does not require a chain of one migration per solder.py
-release.
+adds query indexes. It also adds a separate nullable raw-JAR filesize column
+for the bootstrap API; existing JAR rows remain usable when that value is
+unknown. It does not require a chain of one migration per solder.py release.
 
 ## A safe first tour
 

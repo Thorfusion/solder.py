@@ -648,6 +648,17 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertIn("NOT REGEXP '[^0-9A-Fa-f]'", query)
         self.assertIn("NOT IN ('MOD', 'BOOTSTRAP', 'LAUNCHER')", query)
 
+    def test_jar_filesize_column_is_in_the_current_database_migration(self):
+        migration = next(
+            item
+            for item in Database.JAR_COLUMN_MIGRATIONS
+            if item[1] == "jarfilesize"
+        )
+
+        self.assertEqual(migration[0], "modversions")
+        self.assertIn("BIGINT UNSIGNED", migration[2])
+        self.assertIn("AFTER jarmd5", migration[2])
+
     @patch("models.database.db_name", "solder_test")
     def test_mcil_package_type_is_migrated_to_bootstrap(self):
         cursor = Mock()
@@ -790,6 +801,7 @@ class ModelBehaviorTests(unittest.TestCase):
                 123,
                 "0",
                 jarmd5=jar_md5,
+                jarfilesize=99,
                 modloader="fabric",
             )
 
@@ -798,6 +810,7 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertIn("jarmd5", query)
         self.assertEqual(parameters[3], "FABRIC")
         self.assertEqual(parameters[6], jar_md5)
+        self.assertEqual(parameters[7], 99)
         self.assertEqual(
             calls[1].args[1],
             (3,),
@@ -806,6 +819,7 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertIn("NOT IN ('MOD', 'BOOTSTRAP', 'LAUNCHER')", calls[1].args[0])
         self.assertEqual(version.id, 42)
         self.assertEqual(version.modloader, "FABRIC")
+        self.assertEqual(version.jarfilesize, 99)
         connection.cursor.return_value.close.assert_called_once_with()
         connection.close.assert_called_once_with()
 
@@ -828,6 +842,21 @@ class ModelBehaviorTests(unittest.TestCase):
             )
 
         self.assertEqual(connection.cursor.return_value.execute.call_count, 1)
+
+    def test_generated_jar_stores_hash_and_filesize_together(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+
+        with patch(
+            "models.modversion.Database.get_connection",
+            return_value=connection,
+        ):
+            Modversion.update_modversion_jarmd5(9, "a" * 32, 456)
+
+        query, parameters = cursor.execute.call_args_list[0].args
+        self.assertIn("jarfilesize = %s", query)
+        self.assertEqual(parameters, ("a" * 32, 456, 9))
+        connection.commit.assert_called_once_with()
 
     def test_repository_file_source_keeps_the_configured_origin(self):
         url = Modversion.repository_file_source(

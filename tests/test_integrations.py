@@ -577,6 +577,7 @@ class MaterializationTests(unittest.TestCase):
         self.assertEqual(packaged_jar, jar_data)
         self.assertEqual(new.call_args.kwargs["integration_version_id"], "VERSION")
         self.assertEqual(new.call_args.kwargs["modloader"], "FABRIC")
+        self.assertEqual(new.call_args.kwargs["jarfilesize"], len(jar_data))
 
     def test_selected_modrinth_version_imports_required_dependencies(self):
         jar_data = self.jar_bytes()

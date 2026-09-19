@@ -317,8 +317,19 @@ class ApplicationSmokeTests(unittest.TestCase):
 
     def test_modloader_controls_and_dependency_search_use_existing_ui_styles(self):
         template_root = Path(__file__).resolve().parents[1] / "templates"
+        project_root = Path(__file__).resolve().parents[1]
+        layout_source = (template_root / "layout.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("js/bootstrap.bundle.min.js", layout_source)
+        self.assertNotIn("js/bootstrap.min.js", layout_source)
+        bootstrap_bundle = (
+            project_root / "static" / "js" / "bootstrap.bundle.min.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn("Bootstrap v5.3.8", bootstrap_bundle[:500])
+        self.assertIn("popperGenerator", bootstrap_bundle)
+
         loader_templates = (
-            "modlibrary.html",
             "modpack.html",
             "modpackbuild.html",
         )
@@ -335,9 +346,31 @@ class ApplicationSmokeTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn(
-            '<select class="form-select" name="modloader" id="modloader" multiple',
+            "{{modloader_dropdown(",
             version_loader_source,
         )
+        self.assertNotIn(
+            "Select every compatible loader; no selection supports all.",
+            version_loader_source,
+        )
+        self.assertNotIn('name="modloader" id="modloader" multiple', version_loader_source)
+        modlibrary_source = (template_root / "modlibrary.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("{{modloader_dropdown(", modlibrary_source)
+        self.assertIn("input_name='modloader'", modlibrary_source)
+        self.assertNotIn('name="modloader" id="modloader">', modlibrary_source)
+        self.assertNotIn(
+            "Select every compatible loader; no selection supports all.",
+            modlibrary_source,
+        )
+        loader_dropdown_source = (
+            template_root / "_modloader_dropdown.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn('data-bs-toggle="dropdown"', loader_dropdown_source)
+        self.assertIn('data-bs-auto-close="outside"', loader_dropdown_source)
+        self.assertIn('type="checkbox"', loader_dropdown_source)
+        self.assertIn("data-multiselect-option", loader_dropdown_source)
 
         for template_name in ("modpack.html", "modpackbuild.html"):
             source = (template_root / template_name).read_text(encoding="utf-8")
@@ -360,6 +393,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("import_integration_version_submit", version_source)
         self.assertIn("ZIP / JAR", version_source)
         self.assertNotIn("Download URL", version_source)
+        self.assertNotIn("versions.jarfilesize", version_source)
         new_mod_source = (template_root / "newmod.html").read_text(
             encoding="utf-8"
         )
@@ -485,6 +519,9 @@ class ApplicationSmokeTests(unittest.TestCase):
             "function hideoptions(optiontoshow, integrationUrl)", script_source
         )
         self.assertIn("function togglesearchabledropdown(toggle)", script_source)
+        self.assertIn(
+            "function updatemultiselectdropdown(", script_source
+        )
         self.assertNotIn("function filterconfigdelivery", script_source)
         self.assertNotIn("bootstrap.Dropdown", script_source)
         self.assertNotIn('document.addEventListener("click"', script_source)
@@ -1863,6 +1900,7 @@ class ApplicationSmokeTests(unittest.TestCase):
                         "version": "1.0",
                         "md5": package_md5,
                         "jarmd5": jar_md5,
+                        "modloader": ["FORGE", "FABRIC"],
                         "filesize": "untrusted client value",
                         "file": (io.BytesIO(package_data), "upload.zip"),
                     },
@@ -1879,7 +1917,8 @@ class ApplicationSmokeTests(unittest.TestCase):
                 "0",
                 "0",
                 jar_md5,
-                modloader=None,
+                modloader=["FORGE", "FABRIC"],
+                jarfilesize=len(jar_data),
             )
             artifact_dir = Path(directory, "example-mod")
             self.assertEqual(

@@ -83,6 +83,32 @@ function selectbuildmod(option, valueId, labelId, toggleId, submitId) {
     }
 }
 
+// Keeps a compact Bootstrap dropdown in sync with its checked loader values.
+function updatemultiselectdropdown(containerId, labelId, changedOption) {
+    const container = document.getElementById(containerId);
+    const label = document.getElementById(labelId);
+    if (!container || !label) {
+        return;
+    }
+
+    let selected = Array.from(
+        container.querySelectorAll("[data-multiselect-option]:checked")
+    );
+    if (container.dataset.requireOne === "true" && selected.length === 0) {
+        changedOption.checked = true;
+        selected = [changedOption];
+    }
+
+    const names = selected.map(option => option.dataset.label || option.value);
+    if (names.length === 0) {
+        label.textContent = container.dataset.emptyLabel || "None selected";
+    } else if (names.length <= 2) {
+        label.textContent = names.join(", ");
+    } else {
+        label.textContent = names.length + " selected";
+    }
+}
+
 // sleep function
 // https://stackoverflow.com/questions/16873323/javascript-sleep-wait-before-continuing
 function sleep(milliseconds) {

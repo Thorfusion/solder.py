@@ -1,4 +1,4 @@
-{%extends "layout.html"%} {%from "_badges.html" import integration_badge%} {% set active_page = "modversion" %} {%block head%}
+{%extends "layout.html"%} {%from "_badges.html" import integration_badge%} {%from "_modloader_dropdown.html" import modloader_dropdown%} {% set active_page = "modversion" %} {%block head%}
 <title>solder.py</title>
 <link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" /> {%endblock%}{%block main%}
 
@@ -152,19 +152,25 @@
                                     <input type="hidden" form="upstream_import_{{loop.index}}" name="integration_modloader" value="{{upstream.loaders[0]}}">
                                     <span>{{upstream.loaders[0]}}</span>
                                     {%elif upstream.loaders%}
-                                    <select class="form-select form-select-sm" form="upstream_import_{{loop.index}}" name="integration_modloader" aria-label="Modloaders for {{upstream.name}}" multiple required>
-                                        {%for loader in upstream.loaders%}<option value="{{loader}}" selected>{{loader}}</option>{%endfor%}
-                                    </select>
+                                    {{modloader_dropdown(
+                                        'integration_modloader_' ~ loop.index,
+                                        upstream.loaders,
+                                        upstream.loaders,
+                                        input_name='integration_modloader',
+                                        form_id='upstream_import_' ~ loop.index,
+                                        empty_label='Select modloaders',
+                                        require_one=true,
+                                        small=true
+                                    )}}
                                     {%else%}
-                                    <select class="form-select form-select-sm" form="upstream_import_{{loop.index}}" name="integration_modloader" aria-label="Modloader for {{upstream.name}}">
-                                        <option value="">No loader restriction</option>
-                                        <option value="FORGE">Forge</option>
-                                        <option value="NEOFORGE">NeoForge</option>
-                                        <option value="FABRIC">Fabric</option>
-                                        <option value="QUILT">Quilt</option>
-                                        <option value="LITELOADER">LiteLoader</option>
-                                        <option value="VANILLA">Vanilla</option>
-                                    </select>
+                                    {{modloader_dropdown(
+                                        'integration_modloader_' ~ loop.index,
+                                        ['FORGE', 'NEOFORGE', 'FABRIC', 'QUILT', 'LITELOADER', 'VANILLA'],
+                                        input_name='integration_modloader',
+                                        form_id='upstream_import_' ~ loop.index,
+                                        empty_label='All modloaders',
+                                        small=true
+                                    )}}
                                     {%endif%}
                             </td>
                             <td>{{upstream.date_published or ''}}</td>
@@ -206,17 +212,14 @@
                     <input type="text" class="form-control" name="mcversion" id="mcversion" placeholder="1.20.1,1.20.2" required>
                 </th>
                 <th scope="col">
-                    <label for="modloader" class="form-label">Modloaders</label>
-                    <select class="form-select" name="modloader" id="modloader" multiple size="6">
-                        <option value="">No loader restriction</option>
-                        <option value="FORGE">Forge</option>
-                        <option value="NEOFORGE">NeoForge</option>
-                        <option value="FABRIC">Fabric</option>
-                        <option value="QUILT">Quilt</option>
-                        <option value="LITELOADER">LiteLoader</option>
-                        <option value="VANILLA">Vanilla</option>
-                    </select>
-                    <div class="form-text">Select every compatible loader; no selection supports all.</div>
+                    <label for="modloader_dropdown" class="form-label">Modloaders</label>
+                    {{modloader_dropdown(
+                        'modloader_dropdown',
+                        ['FORGE', 'NEOFORGE', 'FABRIC', 'QUILT', 'LITELOADER', 'VANILLA'],
+                        input_name='newmodvermanual_modloader',
+                        form_id='newmodversion_form',
+                        empty_label='All modloaders'
+                    )}}
                 </th>
                 <th scope="col">
                     <label for="md5" class="form-label">md5</label>
@@ -225,7 +228,7 @@
                 <th scope="col">ZIP / JAR</th>
                 <th scope="col">Filesize</th>
                 <th>
-                    <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_modloader', 'modloader');copyformtext('newmodvermanual_md5', 'md5');submitform('newmodvermanual_submit')">Add Version</button>
+                    <button type="button" class="btn btn-success tableaddversion" onclick="copyformtext('newmodvermanual_version', 'version');copyformtext('newmodvermanual_mcversion', 'mcversion');copyformtext('newmodvermanual_md5', 'md5');submitform('newmodvermanual_submit')">Add Version</button>
                 </th>
                 {%endif%}
             </tr>
@@ -323,11 +326,10 @@
         <input class="btn btn-danger invisible" type="submit" name="rehash_submit" id="rehash_submit" value="Delete">
     </form>
     {%if not mod.integration_provider%}
-    <form method="post" action="">
+    <form method="post" action="" id="newmodversion_form">
         <input type="text" class="form-control invisible" name="newmodvermanual_md5" id="newmodvermanual_md5" readonly>
         <input type="text" class="form-control invisible" name="newmodvermanual_version" id="newmodvermanual_version" readonly>
         <input type="text" class="form-control invisible" name="newmodvermanual_mcversion" id="newmodvermanual_mcversion" readonly>
-        <input type="text" class="form-control invisible" name="newmodvermanual_modloader" id="newmodvermanual_modloader" readonly>
         <input class="btn btn-danger invisible" type="submit" name="newmodvermanual_submit" id="newmodvermanual_submit" value="Delete">
     </form>
     {%endif%}

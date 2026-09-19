@@ -126,10 +126,12 @@ def _boolean(data, field, default=_MISSING):
     _validation(field, f"The {field} field must be true or false.")
 
 
-def _integer(data, field, default=_MISSING, minimum=None):
+def _integer(data, field, default=_MISSING, minimum=None, nullable=False):
     if field not in data:
         return default
     value = data[field]
+    if value is None and nullable:
+        return None
     if isinstance(value, (bool, float)):
         _validation(field, f"The {field} field must be an integer.")
     if isinstance(value, str) and not re.fullmatch(r"[+-]?\d+", value.strip()):
@@ -316,7 +318,8 @@ def _mod_json(row):
 def _modversion_json(row):
     fields = (
         "id", "mod_id", "version", "mcversion", "modloader", "md5", "jarmd5",
-        "filesize", "integration_version_id", "created_at", "updated_at",
+        "jarfilesize", "filesize", "integration_version_id", "created_at",
+        "updated_at",
     )
     result = {field: row.get(field) for field in fields}
     result["minecraft_versions"] = list(
@@ -637,6 +640,20 @@ def _modversion_values(data, *, partial=False):
         _include(values, "version", _string(data, "version", required=True))
     _include(values, "md5", _md5(data, "md5", required=not partial))
     _include(values, "jarmd5", _md5(data, "jarmd5", nullable=True))
+    _include(
+        values,
+        "jarfilesize",
+        _integer(data, "jarfilesize", minimum=0, nullable=True),
+    )
+    if "jarmd5" in values and "jarfilesize" not in values:
+        # A changed JAR hash invalidates the size recorded for the old JAR.
+        values["jarfilesize"] = None
+    if (
+        not partial
+        and values.get("jarfilesize") is not None
+        and not values.get("jarmd5")
+    ):
+        _validation("jarfilesize", "A JAR filesize requires a JAR MD5.")
     _include(values, "filesize", _integer(data, "filesize", minimum=0))
     if "mcversion" in data:
         try:

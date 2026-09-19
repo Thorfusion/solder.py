@@ -53,6 +53,7 @@ class JarOnlyMigrationResult:
 class _PreparedJarArtifact:
     version_id: int
     jar_md5: str
+    jar_filesize: int
     staged_path: Path
     final_path: Path
     object_key: str
@@ -192,7 +193,9 @@ class MCInstanceJar:
                     ExtraArgs={"ContentType": "application/jar"},
                 )
 
-            Modversion.update_modversion_jarmd5(version.id, prepared.jar_md5)
+            Modversion.update_modversion_jarmd5(
+                version.id, prepared.jar_md5, prepared.jar_filesize
+            )
             return prepared.jar_md5
         except MCInstanceJarError:
             raise
@@ -262,6 +265,7 @@ class MCInstanceJar:
         return _PreparedJarArtifact(
             version_id=int(version_id),
             jar_md5=Mod.file_md5(staged_jar),
+            jar_filesize=staged_jar.stat().st_size,
             staged_path=staged_jar,
             final_path=destination_folder / jar_filename,
             object_key=f"mods/{mod_name}/{jar_filename}",
@@ -317,8 +321,10 @@ class MCInstanceJar:
 
             for item in prepared:
                 cur.execute(
-                    "UPDATE modversions SET jarmd5 = %s WHERE id = %s",
-                    (item.jar_md5, item.version_id),
+                    """UPDATE modversions
+                       SET jarmd5 = %s, jarfilesize = %s
+                       WHERE id = %s""",
+                    (item.jar_md5, item.jar_filesize, item.version_id),
                 )
             cur.execute(
                 """UPDATE mods SET modtype = 'MOD'
@@ -511,9 +517,9 @@ class MCInstanceExport:
                           modversions.mcversion AS mod_minecraft,
                           modversions.md5,
                           modversions.jarmd5,
-                           modversions.modloader,
-                           modversions.integration_version_id,
-                           build_modversion.optional
+                          modversions.modloader,
+                          modversions.integration_version_id,
+                          build_modversion.optional
                    FROM builds
                    INNER JOIN modpacks ON builds.modpack_id = modpacks.id
                    LEFT JOIN build_modversion

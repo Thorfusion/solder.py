@@ -780,6 +780,7 @@ class ApiTests(unittest.TestCase):
                 modtype=modtype,
                 md5=str(identifier) * 32,
                 jarmd5=str(identifier) * 32,
+                jarfilesize=identifier * 90,
                 filesize=identifier * 100,
                 optional=state,
             )
@@ -876,6 +877,7 @@ class ApiTests(unittest.TestCase):
         )
         self.assertTrue(by_name["core"]["url"].endswith("core-1.0.jar"))
         self.assertEqual(by_name["core"]["download"]["format"], "jar")
+        self.assertEqual(by_name["core"]["download"]["filesize"], 90)
         self.assertFalse(by_name["modpack"]["bootstrap_managed"])
         self.assertEqual(
             payload["selection_policy"]["required_memberships"], [11]

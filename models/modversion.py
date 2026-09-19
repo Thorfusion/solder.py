@@ -36,7 +36,7 @@ class IncompatibleModVersionError(ValueError):
 class Modversion:
     JAR_MD5_PATTERN = re.compile(r"^[0-9A-Fa-f]{32}$")
 
-    def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0, modloader=None, integration_version_id=None, jarmd5=None):
+    def __init__(self, id, mod_id, version, mcversion, md5, created_at, updated_at, filesize, optional=0, modloader=None, integration_version_id=None, jarmd5=None, jarfilesize=None):
         self.id = id
         self.mod_id = mod_id
         self.version = version
@@ -51,6 +51,7 @@ class Modversion:
             str(integration_version_id) if integration_version_id else None
         )
         self.jarmd5 = jarmd5
+        self.jarfilesize = jarfilesize
 
     @classmethod
     def new(
@@ -66,6 +67,7 @@ class Modversion:
         modloader=None,
         integration_version_id=None,
         repository_mod_slug=None,
+        jarfilesize=None,
     ):
         if md5 == "0":
             cls.repository_file_source(
@@ -80,10 +82,10 @@ class Modversion:
             cur.execute(
                 """INSERT INTO modversions
                           (mod_id, version, mcversion, modloader,
-                           integration_version_id, md5, jarmd5,
+                           integration_version_id, md5, jarmd5, jarfilesize,
                            created_at, updated_at, filesize)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-                (mod_id, version, mcversion, modloader, integration_version_id, md5, jarmd5, now, now, filesize),
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (mod_id, version, mcversion, modloader, integration_version_id, md5, jarmd5, jarfilesize, now, now, filesize),
             )
             id = cur.lastrowid
             cls.promote_parent_mod_for_jar_md5(cur, mod_id, jarmd5)
@@ -123,6 +125,7 @@ class Modversion:
             modloader=modloader,
             integration_version_id=integration_version_id,
             jarmd5=jarmd5,
+            jarfilesize=jarfilesize,
         )
 
     @classmethod
@@ -420,13 +423,15 @@ class Modversion:
             conn.close()
 
     @staticmethod
-    def update_modversion_jarmd5(id, jarmd5):
+    def update_modversion_jarmd5(id, jarmd5, jarfilesize=None):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
             cur.execute(
-                "UPDATE modversions SET jarmd5 = %s WHERE id = %s",
-                (jarmd5, id),
+                """UPDATE modversions
+                   SET jarmd5 = %s, jarfilesize = %s
+                   WHERE id = %s""",
+                (jarmd5, jarfilesize, id),
             )
             if Modversion.JAR_MD5_PATTERN.fullmatch(str(jarmd5 or "").strip()):
                 cur.execute(
@@ -464,7 +469,7 @@ class Modversion:
             cur.execute("SELECT * FROM modversions WHERE id = %s", (id,))
             row = cur.fetchone()
             if row:
-                return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"), integration_version_id=row.get("integration_version_id"), jarmd5=row.get("jarmd5"))
+                return cls(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"), integration_version_id=row.get("integration_version_id"), jarmd5=row.get("jarmd5"), jarfilesize=row.get("jarfilesize"))
             return None
         finally:
             cur.close()
@@ -489,6 +494,7 @@ class Modversion:
                 row["filesize"], modloader=row.get("modloader"),
                 integration_version_id=row.get("integration_version_id"),
                 jarmd5=row.get("jarmd5"),
+                jarfilesize=row.get("jarfilesize"),
             )
         finally:
             cur.close()

@@ -21,6 +21,7 @@ def package(identifier, membership_id, slug, state=0):
         modtype="MOD",
         md5=str(identifier) * 32,
         jarmd5="a" * 32,
+        jarfilesize=80,
         filesize=100,
         optional=state,
     )
@@ -88,7 +89,7 @@ class BootstrapManifestTests(unittest.TestCase):
             "https://cdn.example.test/mods/example-mod/example-mod-1.0.jar",
         )
         self.assertEqual(result["md5"], "a" * 32)
-        self.assertIsNone(result["filesize"])
+        self.assertEqual(result["filesize"], 80)
         self.assertEqual(result["download"]["format"], "jar")
         self.assertEqual(
             result["download"]["path"], "mods/example-mod-1.0.jar"

@@ -218,6 +218,19 @@ class Database:
         ),
     )
 
+    JAR_COLUMN_MIGRATIONS = (
+        (
+            "modversions",
+            "jarmd5",
+            "ALTER TABLE modversions ADD COLUMN jarmd5 VARCHAR(255) AFTER md5",
+        ),
+        (
+            "modversions",
+            "jarfilesize",
+            "ALTER TABLE modversions ADD COLUMN jarfilesize BIGINT UNSIGNED NULL AFTER jarmd5",
+        ),
+    )
+
     NOTES_COLUMN_MIGRATIONS = (
         (
             "mods",
@@ -643,6 +656,7 @@ class Database:
                         integration_version_id VARCHAR(64),
                         md5 VARCHAR(255) NOT NULL,
                         jarmd5 VARCHAR(255),
+                        jarfilesize BIGINT UNSIGNED,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         filesize INT,
@@ -821,11 +835,7 @@ class Database:
                 "optional",
                 "ALTER TABLE build_modversion ADD COLUMN optional TINYINT(1) NOT NULL DEFAULT 0",
             ),
-            (
-                "modversions",
-                "jarmd5",
-                "ALTER TABLE modversions ADD COLUMN jarmd5 VARCHAR(255) AFTER md5",
-            ),
+            *Database.JAR_COLUMN_MIGRATIONS,
             (
                 "modversions",
                 "mcversion",
@@ -948,6 +958,7 @@ class Database:
                 cur.execute(query)
 
             for table, column, query in (
+                *Database.JAR_COLUMN_MIGRATIONS,
                 *Database.MODLOADER_COLUMN_MIGRATIONS,
                 *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
                 *Database.NOTES_COLUMN_MIGRATIONS,

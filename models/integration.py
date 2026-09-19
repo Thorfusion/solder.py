@@ -1641,6 +1641,7 @@ class ModIntegration:
                 _downloaded_size, jar_md5 = provider.download(
                     external, staged_jar
                 )
+                jar_filesize = staged_jar.stat().st_size
                 with zipfile.ZipFile(
                     staged_zip, "w", compression=zipfile.ZIP_STORED
                 ) as package:
@@ -1676,6 +1677,7 @@ class ModIntegration:
                 jar_md5,
                 modloader=stored_modloader,
                 integration_version_id=external.version_id,
+                jarfilesize=jar_filesize,
             )
             return MaterializedVersion(version, True)
         except Exception:

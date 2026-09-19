@@ -345,6 +345,7 @@ def verify_technic_migration(database_container: str) -> None:
         ("modpacks", "logo_url"),
         ("modpacks", "background_url"),
         ("modversions", "jarmd5"),
+        ("modversions", "jarfilesize"),
         ("modversions", "mcversion"),
         ("modversions", "modloader"),
         ("modversions", "integration_version_id"),
@@ -1656,6 +1657,14 @@ def exercise_synthetic_user_login(
     if stored_jar_md5 != expected_legacy_jar_md5:
         raise AssertionError(
             f"The converted MCIL JAR MD5 was not stored: {stored_jar_md5}"
+        )
+    stored_jar_size = mysql(
+        database_container,
+        "SELECT jarfilesize FROM modversions WHERE id = 3;",
+    )
+    if int(stored_jar_size) != len(b"legacy Technic Solder JAR"):
+        raise AssertionError(
+            f"The converted MCIL JAR size was not stored: {stored_jar_size}"
         )
     artifact_hash = subprocess.check_output(
         [
