@@ -71,6 +71,7 @@ class MCInstanceBuild:
     modloader: str | None = None
     is_published: bool = False
     private: bool = False
+    min_java: str | None = None
 
     @property
     def pack_name(self):
@@ -501,6 +502,7 @@ class MCInstanceExport:
                           builds.modloader AS build_modloader,
                           builds.is_published,
                           builds.private,
+                          builds.min_java,
                           modpacks.id AS modpack_id,
                           modpacks.name AS modpack_name,
                           modpacks.slug AS modpack_slug,
@@ -553,6 +555,7 @@ class MCInstanceExport:
             ),
             is_published=bool(first.get("is_published")),
             private=bool(first.get("private")),
+            min_java=first.get("min_java"),
         )
         packages = [
             MCInstancePackage(

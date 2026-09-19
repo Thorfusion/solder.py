@@ -223,6 +223,7 @@ FileDirector-style package list. Select **Export SolderPy Loader** to download:
 
 ```text
 config/solderpy-loader.json
+config/relauncher/config.cfg  (when Minimum Java Version is set)
 ```
 
 The configuration contains the public `APP_URL`, modpack slug, and selected
@@ -232,6 +233,18 @@ the ZIP into an instance where SolderPy Loader and Relauncher are already
 installed. The build must be published and non-private. The bootstrap API owns
 the complete Solder-only package plan, so hybrid downloads are not used by
 this format.
+
+When the build has a **Minimum Java Version**, solder.py also writes a
+Relauncher Java-major rule. For example, `1.8.0_422` produces
+`java.versions = 8`. Relauncher then uses a matching system installation when
+the launcher's current Java has the wrong major. The complete value remains in
+the Solder and bootstrap APIs as the actual minimum requirement.
+
+Relauncher 1.1.x only models acceptable Java majors and keeps the current JVM
+when its major already matches. It therefore cannot yet prefer an installed
+8u422 over a Mojang 8u51 runtime; that same-major upgrade requires Relauncher
+to add a minimum patch and prefer-newest policy. solder.py does not emit
+unsupported Relauncher keys because 1.1.x would treat them as JVM arguments.
 
 ## MCInstance Loader
 

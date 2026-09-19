@@ -45,11 +45,22 @@ class TechnicSolderPyLoader:
         return Path(name)
 
     @classmethod
-    def _write_archive(cls, directory, selected, config, *, http=None):
+    def _write_archive(
+        cls,
+        directory,
+        selected,
+        config,
+        *,
+        relauncher_config=None,
+        http=None,
+    ):
         archive_path = cls._temporary_path(directory)
         try:
             rendered = PlatformPackExport.render_solderpy_loader_archive(
-                selected, config, http=http
+                selected,
+                config,
+                relauncher_config=relauncher_config,
+                http=http,
             )
             with rendered, archive_path.open("wb") as destination:
                 shutil.copyfileobj(
@@ -115,6 +126,7 @@ class TechnicSolderPyLoader:
             selector="build",
             modpack_slug=getattr(modpack, "slug", None),
         )
+        relauncher_config = PlatformPackExport.relauncher_java_config(build)
 
         root = Path(repository_root).resolve()
         directory = (
@@ -127,7 +139,11 @@ class TechnicSolderPyLoader:
         temporary = None
         try:
             temporary = cls._write_archive(
-                directory, selected, config, http=http
+                directory,
+                selected,
+                config,
+                relauncher_config=relauncher_config,
+                http=http,
             )
             bootstrap_md5, bootstrap_size = cls._checksum(temporary)
             relative = (

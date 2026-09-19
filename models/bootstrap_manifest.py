@@ -30,22 +30,43 @@ class BootstrapManifest:
         return f"{repository_url}{slug}/{slug}-{version}.{extension}"
 
     @classmethod
-    def _download(cls, package, repository_url, modtype):
+    def _download(
+        cls, package, repository_url, modtype, modrinth_downloads
+    ):
         slug = package.modname
         version = package.version
         if modtype == "MOD":
             jar_md5 = str(getattr(package, "jarmd5", "") or "").strip()
             if _MD5_RE.fullmatch(jar_md5) is not None:
                 filename = f"{slug}-{version}.jar"
-                return {
-                    "url": cls._download_url(
-                        repository_url, slug, version, "jar"
-                    ),
+                solder_url = cls._download_url(
+                    repository_url, slug, version, "jar"
+                )
+                download = {
+                    "url": solder_url,
                     "md5": jar_md5.lower(),
                     "filesize": getattr(package, "jarfilesize", None),
                     "format": "jar",
                     "path": f"mods/{filename}",
                 }
+                provider = str(
+                    getattr(package, "integration_provider", "") or ""
+                ).upper()
+                project_id = str(
+                    getattr(package, "integration_project_id", "") or ""
+                )
+                version_id = str(
+                    getattr(package, "integration_version_id", "") or ""
+                )
+                modrinth_url = modrinth_downloads.get(
+                    (project_id, version_id)
+                )
+                if provider == "MODRINTH" and modrinth_url:
+                    download["sources"] = [
+                        {"provider": "modrinth", "url": modrinth_url},
+                        {"provider": "solder", "url": solder_url},
+                    ]
+                return download
 
         return {
             "url": cls._download_url(
@@ -125,8 +146,10 @@ class BootstrapManifest:
         dependencies,
         *,
         target="client",
+        modrinth_downloads=None,
     ):
         packages = list(packages)
+        modrinth_downloads = modrinth_downloads or {}
         missing_memberships = [
             package
             for package in packages
@@ -174,7 +197,9 @@ class BootstrapManifest:
 
             slug = package.modname
             version = package.version
-            download = cls._download(package, repository_url, modtype)
+            download = cls._download(
+                package, repository_url, modtype, modrinth_downloads
+            )
             package_dependencies = []
             for dependency in dependencies.get(
                 getattr(package, "mod_id", None), []

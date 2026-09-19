@@ -99,6 +99,7 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
                 Path(directory),
                 selected,
                 config,
+                relauncher_config=b"enabled = false\njava.versions = 8\n",
                 http=FakeHTTP((loader_body, runtime_body)),
             )
             try:
@@ -109,6 +110,7 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
                             "mods/!solderpy-loader.jar",
                             "mods/!relauncher.jar",
                             "config/solderpy-loader.json",
+                            "config/relauncher/config.cfg",
                         },
                     )
                     self.assertEqual(
@@ -117,6 +119,10 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
                     self.assertEqual(
                         archive.read("mods/!relauncher.jar"),
                         runtime_body,
+                    )
+                    self.assertEqual(
+                        archive.read("config/relauncher/config.cfg"),
+                        b"enabled = false\njava.versions = 8\n",
                     )
             finally:
                 archive_path.unlink(missing_ok=True)

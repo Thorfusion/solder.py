@@ -138,7 +138,17 @@ This abbreviated example is a complete, valid schema-version 1 response:
         "md5": "0123456789abcdef0123456789abcdef",
         "filesize": 24680,
         "format": "jar",
-        "path": "mods/example-library-1.20.1-4.0.jar"
+        "path": "mods/example-library-1.20.1-4.0.jar",
+        "sources": [
+          {
+            "provider": "modrinth",
+            "url": "https://cdn.modrinth.com/data/project/version/upstream-name.jar"
+          },
+          {
+            "provider": "solder",
+            "url": "https://cdn.example.com/mods/example-library/example-library-1.20.1-4.0.jar"
+          }
+        ]
       },
       "optional": false,
       "selection": {
@@ -257,6 +267,16 @@ reasonable client download limit while streaming and still verify the MD5. A
 `MOD` without a verified raw JAR falls back to its normal `solder_zip`
 instruction, preserving legacy build compatibility while making the extra
 extraction cost explicit.
+
+A Modrinth-managed raw JAR may include an ordered `download.sources` list.
+SolderPy Loader tries the native Modrinth file first and the Solder-hosted JAR
+second. It retries the next source after a transport, size, or MD5 failure.
+Every source represents the same bytes and therefore uses the one parent
+`download.md5` and `download.filesize`; renaming a file does not change either
+value. `download.url` remains the Solder-hosted URL, so clients that do not
+understand `sources` retain the existing behavior. If solder.py cannot resolve
+Modrinth while producing the manifest, it omits `sources` and still returns the
+Solder URL.
 
 `download.format: solder_zip` is used by `CONFIG`, `RES`, `NONE`, and other
 non-mod content. Download the archive, verify its byte size when supplied,

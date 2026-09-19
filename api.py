@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 from threading import RLock
 
 from cachetools import cached, TTLCache
@@ -24,10 +25,12 @@ from models.mod import Mod
 from models.mod_dependency import ModDependency
 from models.modpack import Modpack
 from models.advanced_optional import AdvancedOptional
+from models.integration import IntegrationError, ModrinthProvider
 from models.technic_solderpy_loader import TechnicSolderPyLoader
 
 api = Blueprint("api", __name__)
 _api_caches = []
+logger = logging.getLogger(__name__)
 
 
 def _api_cached(key):
@@ -42,6 +45,33 @@ def clear_api_caches():
     """Discard read responses after a successful write in this process."""
     for cache in _api_caches:
         cache.clear()
+
+
+@_api_cached(
+    key=lambda references, minecraft, modloader: (
+        references,
+        minecraft,
+        modloader,
+    )
+)
+def _bootstrap_modrinth_downloads(references, minecraft, modloader):
+    """Resolve exact Modrinth files without depending on their availability."""
+    if not references:
+        return {}
+    provider = ModrinthProvider()
+    try:
+        versions = provider.get_versions(references, minecraft, modloader)
+        resolved = {}
+        for project_id, version_id in references:
+            version = versions[version_id]
+            provider._validate_download_url(version.download_url)
+            resolved[(project_id, version_id)] = version.download_url
+        return resolved
+    except (IntegrationError, KeyError):
+        logger.warning(
+            "Could not resolve Modrinth bootstrap sources; using Solder JARs."
+        )
+        return {}
 
 
 def _cache_key(*path_parts):
@@ -556,6 +586,31 @@ def modpack_bootstrap(slugstring: str, buildstring: str):
             include_optional=True,
             include_excluded=True,
         )
+        modrinth_references = tuple(
+            sorted(
+                {
+                    (
+                        str(package.integration_project_id),
+                        str(package.integration_version_id),
+                    )
+                    for package in packages
+                    if str(
+                        getattr(package, "integration_provider", "") or ""
+                    ).upper()
+                    == "MODRINTH"
+                    and getattr(package, "integration_project_id", None)
+                    and getattr(package, "integration_version_id", None)
+                    and str(getattr(package, "modtype", "") or "").upper()
+                    == "MOD"
+                    and getattr(package, "jarmd5", None)
+                }
+            )
+        )
+        modrinth_downloads = _bootstrap_modrinth_downloads(
+            modrinth_references,
+            str(selected_build.minecraft),
+            getattr(selected_build, "modloader", None),
+        )
         return BootstrapManifest.render(
             current_modpack,
             selected_build,
@@ -564,6 +619,7 @@ def modpack_bootstrap(slugstring: str, buildstring: str):
             public_repo_url,
             ModDependency.get_for_build_api(selected_build.id),
             target=target,
+            modrinth_downloads=modrinth_downloads,
         )
 
     try:

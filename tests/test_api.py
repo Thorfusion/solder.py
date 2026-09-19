@@ -751,11 +751,12 @@ class ApiTests(unittest.TestCase):
             optional_response.get_json(), {"error": "Invalid manifest options"}
         )
 
+    @patch.object(api_module.ModrinthProvider, "get_versions")
     @patch.object(api_module.AdvancedOptional, "get_active_groups")
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
     @patch.object(api_module.Key, "get_key", return_value=None)
     def test_bootstrap_manifest_exposes_complete_advanced_selection_model(
-        self, _get_key, get_modpack, get_groups
+        self, _get_key, get_modpack, get_groups, get_modrinth_versions
     ):
         def package(
             identifier,
@@ -783,6 +784,9 @@ class ApiTests(unittest.TestCase):
                 jarfilesize=identifier * 90,
                 filesize=identifier * 100,
                 optional=state,
+                integration_provider=None,
+                integration_project_id=None,
+                integration_version_id=None,
             )
 
         packages = [
@@ -791,6 +795,16 @@ class ApiTests(unittest.TestCase):
             package(3, 13, "fast-world", 2),
             package(4, 14, "modpack", 0, "LAUNCHER"),
         ]
+        packages[0].integration_provider = "MODRINTH"
+        packages[0].integration_project_id = "project-id"
+        packages[0].integration_version_id = "version-id"
+        modrinth_url = (
+            "https://cdn.modrinth.com/data/project-id/versions/"
+            "version-id/core.jar"
+        )
+        get_modrinth_versions.return_value = {
+            "version-id": SimpleNamespace(download_url=modrinth_url)
+        }
         build = Mock(
             id=7,
             version="42",
@@ -878,6 +892,14 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(by_name["core"]["url"].endswith("core-1.0.jar"))
         self.assertEqual(by_name["core"]["download"]["format"], "jar")
         self.assertEqual(by_name["core"]["download"]["filesize"], 90)
+        self.assertEqual(
+            by_name["core"]["download"]["sources"][0],
+            {"provider": "modrinth", "url": modrinth_url},
+        )
+        self.assertEqual(
+            by_name["core"]["download"]["sources"][1]["provider"],
+            "solder",
+        )
         self.assertFalse(by_name["modpack"]["bootstrap_managed"])
         self.assertEqual(
             payload["selection_policy"]["required_memberships"], [11]

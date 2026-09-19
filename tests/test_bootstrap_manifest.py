@@ -24,6 +24,9 @@ def package(identifier, membership_id, slug, state=0):
         jarfilesize=80,
         filesize=100,
         optional=state,
+        integration_provider=None,
+        integration_project_id=None,
+        integration_version_id=None,
     )
 
 
@@ -118,6 +121,46 @@ class BootstrapManifestTests(unittest.TestCase):
         self.assertEqual(result["filesize"], 100)
         self.assertEqual(result["download"]["format"], "solder_zip")
         self.assertEqual(result["download"]["extract_to"], ".")
+
+    def test_modrinth_mod_prefers_native_jar_and_keeps_solder_fallback(self):
+        selected = package(4, 10, "example-mod")
+        selected.integration_provider = "MODRINTH"
+        selected.integration_project_id = "project-id"
+        selected.integration_version_id = "version-id"
+        modrinth_url = (
+            "https://cdn.modrinth.com/data/project-id/versions/"
+            "version-id/upstream-name.jar"
+        )
+
+        manifest = BootstrapManifest.render(
+            modpack(),
+            build(1, "1.0"),
+            [selected],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+            modrinth_downloads={
+                ("project-id", "version-id"): modrinth_url
+            },
+        )
+
+        download = manifest["packages"][0]["download"]
+        self.assertEqual(
+            download["sources"],
+            [
+                {"provider": "modrinth", "url": modrinth_url},
+                {
+                    "provider": "solder",
+                    "url": (
+                        "https://cdn.example.test/mods/example-mod/"
+                        "example-mod-1.0.jar"
+                    ),
+                },
+            ],
+        )
+        self.assertEqual(download["md5"], "a" * 32)
+        self.assertEqual(download["filesize"], 80)
+        self.assertEqual(download["url"], download["sources"][1]["url"])
 
     def test_config_download_remains_a_solder_zip(self):
         selected = package(4, 10, "config-pack")

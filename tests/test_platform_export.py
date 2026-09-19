@@ -328,6 +328,34 @@ class PlatformPackExportTests(unittest.TestCase):
         self.assertEqual(config["modpack"], "example-pack")
         self.assertEqual(config["build"], "recommended")
 
+    def test_solderpy_loader_export_adds_relauncher_java_policy(self):
+        archive = PlatformPackExport.render_solderpy_loader(
+            replace(build(), min_java="1.8.0_422"), APPLICATION
+        )
+
+        with archive, zipfile.ZipFile(archive) as result:
+            self.assertEqual(
+                set(result.namelist()),
+                {
+                    "config/solderpy-loader.json",
+                    "config/relauncher/config.cfg",
+                },
+            )
+            relauncher = result.read(
+                "config/relauncher/config.cfg"
+            ).decode("utf-8")
+
+        self.assertIn("java.versions = 8\n", relauncher)
+        self.assertIn("enabled = false\n", relauncher)
+
+    def test_solderpy_loader_rejects_invalid_minimum_java(self):
+        with self.assertRaisesRegex(
+            PlatformExportError, "Minimum Java Version"
+        ):
+            PlatformPackExport.render_solderpy_loader(
+                replace(build(), min_java="newest"), APPLICATION
+            )
+
     def test_mrpack_routes_native_modrinth_and_solder_fallback_separately(self):
         with patch(
             "models.platform_export.ModrinthProvider.get_versions",
@@ -384,7 +412,7 @@ class PlatformPackExportTests(unittest.TestCase):
             ],
         ):
             archive = PlatformPackExport.render_mrpack(
-                build(),
+                replace(build(), min_java="1.8.0_422"),
                 [package()],
                 "solderpyloader:loader-version",
                 REPOSITORY,
@@ -399,6 +427,9 @@ class PlatformPackExportTests(unittest.TestCase):
             config = json.loads(
                 result.read("overrides/config/solderpy-loader.json")
             )
+            relauncher = result.read(
+                "overrides/config/relauncher/config.cfg"
+            ).decode("utf-8")
 
         self.assertEqual(
             [entry["path"] for entry in index["files"]],
@@ -417,6 +448,7 @@ class PlatformPackExportTests(unittest.TestCase):
                 "target": "auto",
             },
         )
+        self.assertIn("java.versions = 8\n", relauncher)
 
     def test_solderpy_loader_rejects_hybrid_source(self):
         with patch(

@@ -306,6 +306,7 @@ class Build:
                     """SELECT modversions.id, modversions.mod_id,
                               modversions.version, modversions.mcversion,
                               modversions.modloader,
+                              modversions.integration_version_id,
                               modversions.md5, modversions.jarmd5,
                               modversions.jarfilesize,
                               modversions.created_at,
@@ -313,6 +314,8 @@ class Build:
                               mods.name AS modname, mods.pretty_name,
                               mods.author, mods.link, mods.description,
                               mods.side, mods.modtype,
+                              mods.integration_provider,
+                              mods.integration_project_id,
                               build_modversion.optional,
                               build_modversion.id AS membership_id
                        FROM modversions
@@ -335,6 +338,7 @@ class Build:
                     """SELECT modversions.id, modversions.mod_id,
                               modversions.version, modversions.mcversion,
                               modversions.modloader,
+                              modversions.integration_version_id,
                               modversions.md5, modversions.jarmd5,
                               modversions.jarfilesize,
                               modversions.created_at,
@@ -342,6 +346,8 @@ class Build:
                               mods.name AS modname, mods.pretty_name,
                               mods.author, mods.link, mods.description,
                               mods.side, mods.modtype,
+                              mods.integration_provider,
+                              mods.integration_project_id,
                               build_modversion.optional,
                               build_modversion.id AS membership_id
                        FROM modversions
@@ -362,7 +368,21 @@ class Build:
             modversions = cursor.fetchall()
             versions = []
             for mv in modversions:
-                v = Modversion(mv["id"], mv["mod_id"], mv["version"], mv["mcversion"], mv["md5"], mv["created_at"], mv["updated_at"], mv["filesize"], mv["optional"], mv.get("modloader"), jarmd5=mv.get("jarmd5"), jarfilesize=mv.get("jarfilesize"))
+                v = Modversion(
+                    mv["id"],
+                    mv["mod_id"],
+                    mv["version"],
+                    mv["mcversion"],
+                    mv["md5"],
+                    mv["created_at"],
+                    mv["updated_at"],
+                    mv["filesize"],
+                    mv["optional"],
+                    mv.get("modloader"),
+                    integration_version_id=mv.get("integration_version_id"),
+                    jarmd5=mv.get("jarmd5"),
+                    jarfilesize=mv.get("jarfilesize"),
+                )
                 v.modname = mv["modname"]
                 v.pretty_name = mv["pretty_name"]
                 v.author = mv["author"]
@@ -370,6 +390,8 @@ class Build:
                 v.description = mv["description"]
                 v.side = mv.get("side", "BOTH")
                 v.modtype = mv.get("modtype", "MOD")
+                v.integration_provider = mv.get("integration_provider")
+                v.integration_project_id = mv.get("integration_project_id")
                 v.membership_id = mv.get("membership_id")
                 versions.append(v)
 
