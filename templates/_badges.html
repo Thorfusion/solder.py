@@ -3,5 +3,5 @@
 {%- endmacro %}
 
 {% macro modtype_badge(modtype) -%}
-<span class="badge bg-secondary">{% if modtype|upper == 'LAUNCHER' %}LAUNCHER (MODLOADER){% else %}{{modtype or 'NONE'}}{% endif %}</span>
+<span class="badge bg-secondary">{% if modtype|upper == 'LAUNCHER' %}LAUNCHER (MODLOADER){% elif modtype|upper in ['BOOTSTRAP', 'MCIL'] %}BOOTSTRAP{% else %}{{modtype or 'NONE'}}{% endif %}</span>
 {%- endmacro %}

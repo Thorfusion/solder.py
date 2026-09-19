@@ -8,7 +8,12 @@ from urllib.parse import quote, urlsplit, urlunsplit
 
 import requests
 
-from .compatibility import normalize_modloader, version_is_compatible
+from .compatibility import (
+    normalize_minecraft_versions,
+    normalize_modloaders,
+    primary_modloader,
+    version_is_compatible,
+)
 from .database import Database
 
 
@@ -35,13 +40,13 @@ class Modversion:
         self.id = id
         self.mod_id = mod_id
         self.version = version
-        self.mcversion = mcversion
+        self.mcversion = normalize_minecraft_versions(mcversion)
         self.md5 = md5
         self.created_at = created_at
         self.updated_at = updated_at
         self.filesize = filesize
         self.optional = optional
-        self.modloader = normalize_modloader(modloader)
+        self.modloader = normalize_modloaders(modloader)
         self.integration_version_id = (
             str(integration_version_id) if integration_version_id else None
         )
@@ -69,7 +74,8 @@ class Modversion:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        modloader = normalize_modloader(modloader)
+        mcversion = normalize_minecraft_versions(mcversion)
+        modloader = normalize_modloaders(modloader)
         try:
             cur.execute(
                 """INSERT INTO modversions
@@ -127,7 +133,7 @@ class Modversion:
         cur.execute(
             """UPDATE mods SET modtype = 'MOD'
                WHERE id = %s
-                 AND (modtype IS NULL OR modtype NOT IN ('MOD', 'MCIL', 'LAUNCHER'))""",
+                 AND (modtype IS NULL OR modtype NOT IN ('MOD', 'BOOTSTRAP', 'LAUNCHER'))""",
             (mod_id,),
         )
         return True
@@ -140,7 +146,9 @@ class Modversion:
         if str(modtype or "").strip().upper() != "LAUNCHER":
             return False
 
-        modloader = normalize_modloader(modloader)
+        # Launcher versions describe one build loader, even though ordinary
+        # package versions may target several loaders.
+        modloader = primary_modloader(modloader)
         if modloader:
             cur.execute(
                 """UPDATE builds
@@ -246,7 +254,9 @@ class Modversion:
                 str(selected.get("modtype") or "").upper() == "LAUNCHER"
                 and selected.get("modloader")
             ):
-                dependency_modloader = selected["modloader"]
+                dependency_modloader = primary_modloader(
+                    selected["modloader"]
+                )
 
             added_dependencies = Modversion._add_required_dependencies(
                 cur,
@@ -315,10 +325,13 @@ class Modversion:
                 """SELECT id
                    FROM modversions
                    WHERE mod_id = %s
-                     AND (mcversion = %s OR mcversion IS NULL)
-                     AND (%s IS NULL OR modloader = %s OR modloader IS NULL)
-                   ORDER BY CASE WHEN mcversion = %s THEN 0 ELSE 1 END,
-                            CASE WHEN modloader = %s THEN 0 ELSE 1 END,
+                      AND (FIND_IN_SET(%s, mcversion) > 0 OR mcversion IS NULL)
+                      AND (%s IS NULL OR FIND_IN_SET(%s, modloader) > 0
+                           OR modloader IS NULL)
+                    ORDER BY CASE WHEN FIND_IN_SET(%s, mcversion) > 0
+                                  THEN 0 ELSE 1 END,
+                             CASE WHEN FIND_IN_SET(%s, modloader) > 0
+                                  THEN 0 ELSE 1 END,
                             id DESC
                    LIMIT 1""",
                 (

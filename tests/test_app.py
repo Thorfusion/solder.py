@@ -85,6 +85,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("/help/<document>", routes)
         self.assertIn("/platform-export-overrides", routes)
         self.assertIn("/platform-export-overrides/export", routes)
+        self.assertIn("/modpackbuild/<int:id>/solderpy-loader", routes)
         self.assertIn("/modpackbuild/<int:id>/mcinstance", routes)
         self.assertIn("/modpackbuild/<int:id>/csv", routes)
         self.assertIn("/modpackbuild/<int:id>/packwiz", routes)
@@ -320,7 +321,6 @@ class ApplicationSmokeTests(unittest.TestCase):
             "modlibrary.html",
             "modpack.html",
             "modpackbuild.html",
-            "modversion.html",
         )
         for template_name in loader_templates:
             source = (template_root / template_name).read_text(encoding="utf-8")
@@ -330,6 +330,14 @@ class ApplicationSmokeTests(unittest.TestCase):
             )
             self.assertNotIn('<datalist id="modloaders">', source)
             self.assertNotIn("or 'ANY'", source)
+
+        version_loader_source = (template_root / "modversion.html").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            '<select class="form-select" name="modloader" id="modloader" multiple',
+            version_loader_source,
+        )
 
         for template_name in ("modpack.html", "modpackbuild.html"):
             source = (template_root / template_name).read_text(encoding="utf-8")
@@ -440,6 +448,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("{%if export_requested%}", build_source)
         self.assertIn('document.body.appendChild(exportModalElement)', build_source)
         self.assertIn("downloader_select('modrinth_downloader'", build_source)
+        self.assertIn("downloader_select('solderpy_loader_downloader'", build_source)
         self.assertIn("downloader_select('curseforge_downloader'", build_source)
         self.assertIn("{{export_settings(packbuild)}}", build_source)
         self.assertIn('>Export CSV</button>', build_source)
@@ -535,6 +544,7 @@ class ApplicationSmokeTests(unittest.TestCase):
                 "asite.DistributionSettings.get_all",
                 return_value={
                     "mcil_enabled": True,
+                    "solderpy_loader_enabled": True,
                     "packwiz_enabled": True,
                     "filedirector_enabled": False,
                     "modpack_director_enabled": True,
@@ -551,6 +561,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Distribution formats", response.data)
         self.assertIn(b'id="mcil_enabled"', response.data)
+        self.assertIn(b'id="solderpy_loader_enabled"', response.data)
         self.assertIn(b'id="packwiz_enabled"', response.data)
         self.assertIn(b'id="filedirector_enabled"', response.data)
         self.assertIn(b'id="modpack_director_enabled"', response.data)
@@ -582,6 +593,7 @@ class ApplicationSmokeTests(unittest.TestCase):
                 "/mainsettings",
                 data={
                     "export_settings_submit": "1",
+                    "solderpy_loader_enabled": "on",
                     "filedirector_enabled": "on",
                     "modpack_director_enabled": "on",
                 },
@@ -591,6 +603,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(saved.headers["Location"], "/mainsettings")
         update.assert_called_once_with(
             mcil=False,
+            solderpy_loader=True,
             packwiz=False,
             filedirector=True,
             modpack_director=True,
@@ -780,6 +793,44 @@ class ApplicationSmokeTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
         verify_session.assert_not_called()
+
+    def test_authenticated_user_can_download_solderpy_loader_export(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        build = SimpleNamespace(modpack_slug="example-pack", version="2.0")
+        with (
+            patch("asite.DistributionSettings.is_enabled", return_value=True),
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Build.get_modpackid_by_id", return_value=3),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch("asite.MCInstanceExport.load", return_value=(build, [])),
+            patch(
+                "asite.PlatformPackExport.render_solderpy_loader",
+                return_value=io.BytesIO(b"solderpy loader archive"),
+            ) as render,
+        ):
+            response = self.client.get(
+                "/modpackbuild/7/solderpy-loader?"
+                "solderpy_loader_downloader=solderpyloader:release-id&"
+                "selector=recommended"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, b"solderpy loader archive")
+        self.assertEqual(response.mimetype, "application/zip")
+        self.assertIn(
+            "example-pack-2.0-solderpy-loader.zip",
+            response.headers["Content-Disposition"],
+        )
+        self.assertEqual(
+            render.call_args.args[1], "solderpyloader:release-id"
+        )
+        self.assertEqual(render.call_args.kwargs["selector"], "recommended")
 
     def test_authenticated_user_can_download_prism_instance_export(self):
         with self.client.session_transaction() as flask_session:
@@ -1455,7 +1506,7 @@ class ApplicationSmokeTests(unittest.TestCase):
                 "asite.DistributionSettings.get_all",
                 return_value=dict(DistributionSettings.DEFAULTS),
             ),
-            patch("asite.TechnicFileDirector.get", return_value=None),
+            patch("asite.TechnicSolderPyLoader.get", return_value=None),
             patch("asite.render_template", return_value="optionals") as render,
         ):
             response = self.client.get("/modpackbuild/7/optionals")
@@ -1495,7 +1546,7 @@ class ApplicationSmokeTests(unittest.TestCase):
                 "asite.DistributionSettings.get_all",
                 return_value=dict(DistributionSettings.DEFAULTS),
             ),
-            patch("asite.TechnicFileDirector.get", return_value=None),
+            patch("asite.TechnicSolderPyLoader.get", return_value=None),
             patch("asite.render_template", return_value="optionals") as render,
         ):
             response = self.client.get("/modpackbuild/7/optionals")
@@ -1557,6 +1608,7 @@ class ApplicationSmokeTests(unittest.TestCase):
             self.assertFalse(context["export_requested"])
             self.assertEqual(context["modrinth_downloaders"], ())
             self.assertEqual(context["prism_downloaders"], ())
+            self.assertEqual(context["solderpy_loader_downloaders"], ())
             self.assertEqual(context["curseforge_downloaders"], ())
 
             response = self.client.get("/modpackbuild/7?export=1")
@@ -1606,6 +1658,12 @@ class ApplicationSmokeTests(unittest.TestCase):
             supports_remote_config=False,
             releases=(release,),
         )
+        solderpy_downloader = SimpleNamespace(
+            key="solderpyloader",
+            label="SolderPy Loader",
+            supports_remote_config=True,
+            releases=(release,),
+        )
         settings = {name: True for name in DistributionSettings.DEFAULTS}
         with (
             patch("asite.Session.verify_session", return_value=True),
@@ -1624,7 +1682,10 @@ class ApplicationSmokeTests(unittest.TestCase):
             patch("asite.DistributionSettings.get_all", return_value=settings),
             patch(
                 "asite.PlatformPackExport.available_downloaders",
-                side_effect=[(downloader,), (downloader,)],
+                side_effect=[
+                    (solderpy_downloader, downloader),
+                    (downloader,),
+                ],
             ),
         ):
             response = self.client.get("/modpackbuild/7?export=1")
@@ -1636,10 +1697,12 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.data.count(b'name="delivery"'), 2)
         self.assertEqual(response.data.count(b'name="selector"'), 1)
         self.assertIn(b'name="modrinth_downloader"', response.data)
+        self.assertIn(b'name="solderpy_loader_downloader"', response.data)
         self.assertIn(b'name="prism_downloader"', response.data)
         self.assertIn(b'name="curseforge_downloader"', response.data)
         self.assertIn(b"Self-contained archive", response.data)
         self.assertIn(b'>Export FileDirector</button>', response.data)
+        self.assertIn(b'>Export SolderPy Loader</button>', response.data)
         self.assertIn(b'>Export Modpack Director</button>', response.data)
         self.assertIn(b'>Export Packwiz</button>', response.data)
         self.assertIn(b'>Export Modrinth</button>', response.data)
@@ -2016,8 +2079,8 @@ class ApplicationSmokeTests(unittest.TestCase):
         materialize.assert_called_once_with(
             mod,
             "VERSION",
-            "1.21.1",
-            "FABRIC",
+            ["1.21.1"],
+            ["FABRIC"],
             7,
             "./mods/",
             r2_client=None,

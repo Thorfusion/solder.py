@@ -9,6 +9,19 @@ build manifest unchanged.
 The endpoint is available in API-only deployments and does not require the
 write API.
 
+## Reference client
+
+[SolderPy Loader](https://github.com/Thorfusion/solderpy_loader) implements
+this contract and presents basic and advanced optional choices before mod
+discovery. Its distribution projects are Modrinth `5LpwENAj` and CurseForge
+`1702825`. SolderPy Loader requires Relauncher, published as Modrinth
+`zCFNaupz` and CurseForge `1491728`.
+
+SolderPy Loader defaults its local `target` to `auto`. Relauncher detects the
+active client or dedicated-server side before restarting the JVM, allowing the
+loader to request the matching `target=client` or `target=server` manifest.
+Administrators can set an explicit target as an override.
+
 ## Discover and request the manifest
 
 First request `GET /api/`. A compatible server reports
@@ -69,7 +82,7 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "1": "optional",
       "2": "excluded"
     },
-    "ignored_modtypes": ["LAUNCHER", "MCIL"],
+    "ignored_modtypes": ["BOOTSTRAP", "LAUNCHER"],
     "required_memberships": [91],
     "default_memberships": [91, 92]
   },
@@ -110,7 +123,9 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "link": "https://example.com/project",
       "version": "1.20.1-4.0",
       "minecraft": "1.20.1",
+      "minecraft_versions": ["1.20.1"],
       "modloader": "FORGE",
+      "modloaders": ["FORGE"],
       "side": "BOTH",
       "type": "MOD",
       "modtype": "MOD",
@@ -146,7 +161,9 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "link": "https://example.com/world",
       "version": "1.0",
       "minecraft": "1.20.1",
+      "minecraft_versions": ["1.20.1"],
       "modloader": "FORGE",
+      "modloaders": ["FORGE"],
       "side": "CLIENT",
       "type": "CONFIG",
       "modtype": "CONFIG",
@@ -236,8 +253,8 @@ headless mode.
 at the relative `download.path`. Raw-JAR size is currently `null` because the
 Technic-compatible database stores the Solder ZIP size separately; enforce a
 reasonable client download limit while streaming it. A `MOD` without a
-verified raw JAR makes the endpoint return `422`, allowing an administrator to
-create or re-upload that JAR instead of returning a broken ZIP instruction.
+verified raw JAR falls back to its normal `solder_zip` instruction, preserving
+legacy build compatibility while making the extra extraction cost explicit.
 
 `download.format: solder_zip` is used by `CONFIG`, `RES`, `NONE`, and other
 non-mod content. Download the archive, verify its byte size when supplied,
@@ -260,12 +277,13 @@ that has already completed loader discovery. Run before discovery, or stage
 the update and require one controlled restart.
 
 Packages with `bootstrap_managed: false` are visible for diagnostics but must
-not be extracted by this client. This currently covers `LAUNCHER` (the legacy
-Technic modloader package) and `MCIL` (a downloader/bootstrap package). Store a
-dedicated Solder bootstrap package as type `MCIL` if it is also represented in
-the build; that prevents it from attempting to update itself. The launcher or
-export format remains responsible for installing the modloader and initial
-bootstrap component.
+not be extracted by this client. This covers `LAUNCHER` (the legacy Technic
+modloader package) and `BOOTSTRAP` (an initial downloader/bootstrap package).
+Store a dedicated Solder bootstrap package as type `BOOTSTRAP` if it is also
+represented in the build; that prevents it from attempting to update itself.
+The launcher or export format remains responsible for installing the modloader
+and initial bootstrap component. Existing `MCIL` database values are migrated
+to `BOOTSTRAP`.
 
 ## Incremental checks and channels
 

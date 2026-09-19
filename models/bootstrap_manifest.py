@@ -4,10 +4,11 @@ import hashlib
 import json
 import re
 
+from .compatibility import compatibility_values
 
 BOOTSTRAP_SCHEMA = "solder.py/bootstrap"
 BOOTSTRAP_SCHEMA_VERSION = 1
-IGNORED_MODTYPES = frozenset({"LAUNCHER", "MCIL"})
+IGNORED_MODTYPES = frozenset({"LAUNCHER", "BOOTSTRAP"})
 STATE_NAMES = {0: "required", 1: "optional", 2: "excluded"}
 SELECTION_TYPES = {0: "multiple", 1: "single"}
 _MD5_RE = re.compile(r"^[0-9a-fA-F]{32}$")
@@ -34,22 +35,19 @@ class BootstrapManifest:
         version = package.version
         if modtype == "MOD":
             jar_md5 = str(getattr(package, "jarmd5", "") or "").strip()
-            if _MD5_RE.fullmatch(jar_md5) is None:
-                raise BootstrapManifestError(
-                    f'The MOD package "{slug}" does not have a verified raw JAR.'
-                )
-            filename = f"{slug}-{version}.jar"
-            return {
-                "url": cls._download_url(
-                    repository_url, slug, version, "jar"
-                ),
-                "md5": jar_md5.lower(),
-                # Solder stores the ZIP size but not a separate raw-JAR size.
-                # Clients still verify the JAR using its stored MD5.
-                "filesize": None,
-                "format": "jar",
-                "path": f"mods/{filename}",
-            }
+            if _MD5_RE.fullmatch(jar_md5) is not None:
+                filename = f"{slug}-{version}.jar"
+                return {
+                    "url": cls._download_url(
+                        repository_url, slug, version, "jar"
+                    ),
+                    "md5": jar_md5.lower(),
+                    # Solder stores the ZIP size but not a separate raw-JAR
+                    # size. Clients still verify the JAR using its stored MD5.
+                    "filesize": None,
+                    "format": "jar",
+                    "path": f"mods/{filename}",
+                }
 
         return {
             "url": cls._download_url(
@@ -170,7 +168,7 @@ class BootstrapManifest:
                 else state == 0
             )
             modtype = str(getattr(package, "modtype", "MOD") or "MOD").upper()
-            managed = modtype not in IGNORED_MODTYPES
+            managed = modtype not in IGNORED_MODTYPES and modtype != "MCIL"
             if managed and selected_by_default:
                 selected_defaults.append(membership_id)
             if managed and group is None and state == 0:
@@ -211,8 +209,19 @@ class BootstrapManifest:
                     "minecraft": cls._optional_string(
                         getattr(package, "mcversion", None)
                     ),
+                    "minecraft_versions": list(
+                        compatibility_values(
+                            getattr(package, "mcversion", None)
+                        )
+                    ),
                     "modloader": cls._optional_string(
                         getattr(package, "modloader", None)
+                    ),
+                    "modloaders": list(
+                        compatibility_values(
+                            getattr(package, "modloader", None),
+                            modloaders=True,
+                        )
                     ),
                     "side": str(
                         getattr(package, "side", "BOTH") or "BOTH"

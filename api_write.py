@@ -24,7 +24,13 @@ from models.common import (
     UPLOAD_FOLDER,
     md5_repo_url,
 )
-from models.compatibility import InvalidModloaderError, normalize_modloader
+from models.compatibility import (
+    compatibility_values,
+    InvalidModloaderError,
+    normalize_minecraft_versions,
+    normalize_modloader,
+    normalize_modloaders,
+)
 from models.integration import (
     IntegrationError,
     MAVEN,
@@ -43,7 +49,7 @@ from models.maven import (
     MavenVersion,
 )
 from models.mcinstance import MCInstanceExportError, MCInstanceJar
-from models.mod import Mod
+from models.mod import Mod, normalize_modtype
 from models.mod_dependency import ModDependency
 from models.modversion import Modversion
 from models.write_api import WriteApiProblem, WriteApiStore
@@ -54,7 +60,7 @@ _MISSING = object()
 _SLUG = re.compile(r"^[A-Za-z0-9_-]+$")
 _MD5 = re.compile(r"^[0-9a-fA-F]{32}$")
 _SIDES = {"CLIENT", "SERVER", "BOTH"}
-_MOD_TYPES = {"MOD", "LAUNCHER", "RES", "CONFIG", "MCIL", "NONE"}
+_MOD_TYPES = {"MOD", "LAUNCHER", "RES", "CONFIG", "BOOTSTRAP", "MCIL", "NONE"}
 
 R2 = boto3.client(
     "s3",
@@ -181,11 +187,12 @@ def _md5(data, field, *, required=False, nullable=False):
     return value.lower()
 
 
-def _loader(data, field="modloader", default=_MISSING):
+def _loader(data, field="modloader", default=_MISSING, *, multiple=False):
     if field not in data:
         return default
     try:
-        return normalize_modloader(data[field])
+        normalizer = normalize_modloaders if multiple else normalize_modloader
+        return normalizer(data[field])
     except InvalidModloaderError as error:
         _validation(field, str(error))
 
@@ -311,7 +318,14 @@ def _modversion_json(row):
         "id", "mod_id", "version", "mcversion", "modloader", "md5", "jarmd5",
         "filesize", "integration_version_id", "created_at", "updated_at",
     )
-    return {field: row.get(field) for field in fields}
+    result = {field: row.get(field) for field in fields}
+    result["minecraft_versions"] = list(
+        compatibility_values(result["mcversion"])
+    )
+    result["modloaders"] = list(
+        compatibility_values(result["modloader"], modloaders=True)
+    )
+    return result
 
 
 def _client_json(row):
@@ -581,11 +595,12 @@ def _mod_values(data, *, partial=False):
         "side",
         _enum(data, "side", _SIDES, _MISSING if partial else "BOTH"),
     )
-    _include(
-        values,
-        "modtype",
-        _enum(data, "modtype", _MOD_TYPES, _MISSING if partial else "MOD"),
+    modtype = _enum(
+        data, "modtype", _MOD_TYPES, _MISSING if partial else "MOD"
     )
+    if modtype is not _MISSING:
+        modtype = normalize_modtype(modtype)
+    _include(values, "modtype", modtype)
     return values
 
 
@@ -623,8 +638,13 @@ def _modversion_values(data, *, partial=False):
     _include(values, "md5", _md5(data, "md5", required=not partial))
     _include(values, "jarmd5", _md5(data, "jarmd5", nullable=True))
     _include(values, "filesize", _integer(data, "filesize", minimum=0))
-    _include(values, "mcversion", _string(data, "mcversion", nullable=True))
-    _include(values, "modloader", _loader(data))
+    if "mcversion" in data:
+        try:
+            minecraft = normalize_minecraft_versions(data["mcversion"])
+        except ValueError as error:
+            _validation("mcversion", str(error))
+        _include(values, "mcversion", minecraft)
+    _include(values, "modloader", _loader(data, multiple=True))
     return values
 
 

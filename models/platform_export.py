@@ -28,7 +28,7 @@ _SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
 _SHA512_RE = re.compile(r"^[0-9a-f]{128}$")
 _SPOOL_MEMORY_LIMIT = 8 * 1024 * 1024
 _MAX_DOWNLOADER_SIZE = 64 * 1024 * 1024
-_IGNORED_PACKAGE_TYPES = {"MCIL", "LAUNCHER"}
+_IGNORED_PACKAGE_TYPES = {"BOOTSTRAP", "MCIL", "LAUNCHER"}
 _SOURCE_MODES = {"solder", "hybrid"}
 _DELIVERY_MODES = {"bundled", "hosted"}
 _MRPACK_LOADERS = {
@@ -68,6 +68,8 @@ class DownloaderRelease:
     default: bool
     modrinth: NativeModrinthFile | None = None
     curseforge_file_id: int | None = None
+    modrinth_dependencies: tuple[NativeModrinthFile, ...] = ()
+    curseforge_dependencies: tuple["CurseForgeFile", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -79,6 +81,8 @@ class DownloaderSpec:
     curseforge_project_id: int | None
     supports_remote_config: bool
     supported_loaders: tuple[str, ...] = ("FORGE",)
+    modrinth_required_projects: tuple[str, ...] = ()
+    curseforge_required_projects: tuple[int, ...] = ()
     releases: tuple[DownloaderRelease, ...] = ()
 
     def release(self, version=None):
@@ -125,6 +129,14 @@ class SelectedDownloader:
     @property
     def curseforge_file_id(self):
         return self.release.curseforge_file_id
+
+    @property
+    def modrinth_dependencies(self):
+        return self.release.modrinth_dependencies
+
+    @property
+    def curseforge_dependencies(self):
+        return self.release.curseforge_dependencies
 
 
 @dataclass(frozen=True)
@@ -304,6 +316,17 @@ class CurseForgeDownloaderAPI:
 
 DOWNLOADERS = (
     DownloaderSpec(
+        key="solderpyloader",
+        label="SolderPy Loader",
+        setting_key="solderpy_loader_enabled",
+        modrinth_project_id="5LpwENAj",
+        curseforge_project_id=1702825,
+        supports_remote_config=True,
+        supported_loaders=("FORGE", "NEOFORGE", "FABRIC", "QUILT"),
+        modrinth_required_projects=("zCFNaupz",),
+        curseforge_required_projects=(1491728,),
+    ),
+    DownloaderSpec(
         key="mcil",
         label="MCInstance Loader",
         setting_key="mcil_enabled",
@@ -365,7 +388,9 @@ class PlatformPackExport:
         return next((item for item in DOWNLOADERS if item.key == key), None)
 
     @classmethod
-    def _modrinth_release(cls, version, *, default=False):
+    def _modrinth_release(
+        cls, version, *, default=False, dependencies=()
+    ):
         native_file = NativeModrinthFile(
             project_id=version.project_id,
             version_id=version.version_id,
@@ -381,16 +406,51 @@ class PlatformPackExport:
             version=version.version_number,
             default=default,
             modrinth=native_file,
+            modrinth_dependencies=tuple(dependencies),
         )
 
     @staticmethod
-    def _curseforge_release(file, *, default=False):
+    def _curseforge_release(file, *, default=False, dependencies=()):
         return DownloaderRelease(
             selector=str(file.file_id),
             version=file.display_name,
             default=default,
             curseforge_file_id=file.file_id,
+            curseforge_dependencies=tuple(dependencies),
         )
+
+    @classmethod
+    def _modrinth_downloader_dependencies(cls, spec, build, provider):
+        dependencies = []
+        for project_id in spec.modrinth_required_projects:
+            try:
+                versions = provider.list_versions(
+                    project_id, build.minecraft, build.modloader
+                )
+            except IntegrationError as error:
+                raise PlatformExportError(
+                    f"{spec.label}'s required Modrinth dependency could not be loaded."
+                ) from error
+            if not versions:
+                raise PlatformExportError(
+                    f"{spec.label} has no compatible required Modrinth dependency."
+                )
+            dependencies.append(cls._modrinth_release(versions[0]).modrinth)
+        return tuple(dependencies)
+
+    @classmethod
+    def _curseforge_downloader_dependencies(cls, spec, build, provider):
+        dependencies = []
+        for project_id in spec.curseforge_required_projects:
+            files = provider.list_files(
+                project_id, build.minecraft, build.modloader
+            )
+            if not files:
+                raise PlatformExportError(
+                    f"{spec.label} has no compatible required CurseForge dependency."
+                )
+            dependencies.append(files[0])
+        return tuple(dependencies)
 
     @classmethod
     def available_downloaders(
@@ -409,43 +469,84 @@ class PlatformPackExport:
         build_loader = normalize_modloader(build.modloader)
 
         available = []
+        failures = []
+        provider = None
         selected_specs = DOWNLOADERS if specs is None else tuple(specs)
         for spec in selected_specs:
             if build_loader not in spec.supported_loaders:
                 continue
-            if platform == "modrinth":
-                if not spec.modrinth_project_id:
-                    continue
-                try:
-                    versions = ModrinthProvider(http=http).list_versions(
+            try:
+                if platform == "modrinth":
+                    if not spec.modrinth_project_id:
+                        continue
+                    if provider is None:
+                        provider = ModrinthProvider(http=http)
+                    versions = provider.list_versions(
                         spec.modrinth_project_id,
                         build.minecraft,
                         build.modloader,
                     )
-                except IntegrationError as error:
-                    raise PlatformExportError(
-                        "Modrinth downloader versions could not be loaded."
-                    ) from error
-                releases = tuple(
-                    cls._modrinth_release(version, default=index == 0)
-                    for index, version in enumerate(versions)
-                )
-            else:
-                if not spec.curseforge_project_id:
-                    continue
-                files = CurseForgeDownloaderAPI(
-                    curseforge_api_key, http=http
-                ).list_files(
-                    spec.curseforge_project_id,
-                    build.minecraft,
-                    build.modloader,
-                )
-                releases = tuple(
-                    cls._curseforge_release(file, default=index == 0)
-                    for index, file in enumerate(files)
-                )
+                    dependencies = (
+                        cls._modrinth_downloader_dependencies(
+                            spec, build, provider
+                        )
+                        if versions
+                        else ()
+                    )
+                    releases = tuple(
+                        cls._modrinth_release(
+                            version,
+                            default=index == 0,
+                            dependencies=dependencies,
+                        )
+                        for index, version in enumerate(versions)
+                    )
+                else:
+                    if not spec.curseforge_project_id:
+                        continue
+                    if provider is None:
+                        provider = CurseForgeDownloaderAPI(
+                            curseforge_api_key, http=http
+                        )
+                    files = provider.list_files(
+                        spec.curseforge_project_id,
+                        build.minecraft,
+                        build.modloader,
+                    )
+                    dependencies = (
+                        cls._curseforge_downloader_dependencies(
+                            spec, build, provider
+                        )
+                        if files
+                        else ()
+                    )
+                    releases = tuple(
+                        cls._curseforge_release(
+                            file,
+                            default=index == 0,
+                            dependencies=dependencies,
+                        )
+                        for index, file in enumerate(files)
+                    )
+            except (IntegrationError, PlatformExportError) as error:
+                # One unpublished or temporarily unavailable downloader must
+                # not hide compatible releases from the other families.
+                failures.append((spec, error))
+                continue
             if releases:
                 available.append(replace(spec, releases=releases))
+        if not available and failures:
+            failed_spec, failure = failures[0]
+            if len(failures) == 1:
+                message = (
+                    f"{failed_spec.label} downloader versions could not be "
+                    f"loaded from {platform.title()}."
+                )
+            else:
+                message = (
+                    f"{platform.title()} downloader versions could not be loaded."
+                )
+            raise PlatformExportError(message) from failure
         return tuple(available)
 
     @staticmethod
@@ -494,7 +595,7 @@ class PlatformPackExport:
         return selector
 
     @classmethod
-    def _downloader(
+    def resolve_downloader(
         cls,
         key,
         build,
@@ -526,7 +627,8 @@ class PlatformPackExport:
                         f"{downloader.label} is not distributed on Modrinth."
                     )
                 try:
-                    version = ModrinthProvider(http=http).get_version(
+                    provider = ModrinthProvider(http=http)
+                    version = provider.get_version(
                         downloader.modrinth_project_id,
                         requested_version,
                         build.minecraft,
@@ -536,21 +638,32 @@ class PlatformPackExport:
                     raise PlatformExportError(
                         "The selected Modrinth downloader is unavailable."
                     ) from error
-                release = cls._modrinth_release(version, default=True)
+                dependencies = cls._modrinth_downloader_dependencies(
+                    downloader, build, provider
+                )
+                release = cls._modrinth_release(
+                    version, default=True, dependencies=dependencies
+                )
             elif platform == "curseforge":
                 if not downloader.curseforge_project_id:
                     raise PlatformExportError(
                         f"{downloader.label} is not distributed on CurseForge."
                     )
-                file = CurseForgeDownloaderAPI(
+                provider = CurseForgeDownloaderAPI(
                     curseforge_api_key, http=http
-                ).get_file(
+                )
+                file = provider.get_file(
                     downloader.curseforge_project_id,
                     requested_version,
                     build.minecraft,
                     build.modloader,
                 )
-                release = cls._curseforge_release(file, default=True)
+                dependencies = cls._curseforge_downloader_dependencies(
+                    downloader, build, provider
+                )
+                release = cls._curseforge_release(
+                    file, default=True, dependencies=dependencies
+                )
             else:
                 raise PlatformExportError("Unknown downloader platform.")
         else:
@@ -741,6 +854,89 @@ class PlatformPackExport:
         ).encode("utf-8")
 
     @staticmethod
+    def solderpy_loader_config(
+        build, application_url, selector="build", *, modpack_slug=None
+    ):
+        """Create the launch-time bootstrap API pointer for SolderPy Loader."""
+        if not build.is_published or build.private:
+            raise PlatformExportError(
+                "SolderPy Loader requires a published, non-private build."
+            )
+        base = DistributionExport.application_base(application_url)
+        slug = modpack_slug or getattr(build, "modpack_slug", None)
+        DistributionExport._validate_slug(slug, "modpack slug")
+        selector = PlatformPackExport.hosted_selector(build, selector)
+        DistributionExport._validate_component(selector, "build selector")
+        config = {
+            "enabled": True,
+            "api": f"{base}/api/",
+            "modpack": str(slug),
+            "build": selector,
+            "target": "auto",
+        }
+        return (json.dumps(config, indent=2) + "\n").encode("utf-8")
+
+    @classmethod
+    def render_solderpy_loader_archive(
+        cls, selected, config, *, http=None
+    ):
+        """Bundle one verified SolderPy Loader release and its runtime."""
+        if getattr(selected, "key", None) != "solderpyloader":
+            raise PlatformExportError("Select a SolderPy Loader release.")
+        native_files = (
+            selected.modrinth,
+            *selected.modrinth_dependencies,
+        )
+        if native_files[0] is None:
+            raise PlatformExportError(
+                "The selected SolderPy Loader release has no Modrinth file."
+            )
+
+        with cls._zip_archive() as (archive, target):
+            for index, native_file in enumerate(native_files):
+                destination = (
+                    "mods/!solderpy-loader.jar"
+                    if index == 0
+                    else (
+                        "mods/!relauncher.jar"
+                        if index == 1
+                        else f"mods/!solderpy-loader-dependency-{index}.jar"
+                    )
+                )
+                cls._write_native_file(
+                    target, native_file, destination, http=http
+                )
+            target.writestr("config/solderpy-loader.json", config)
+        return archive
+
+    @classmethod
+    def render_solderpy_loader(
+        cls,
+        build,
+        downloader,
+        application_url,
+        *,
+        selector="build",
+        http=None,
+    ):
+        """Create a directly installable SolderPy Loader bootstrap ZIP."""
+        selected = cls.resolve_downloader(
+            downloader,
+            build,
+            "modrinth",
+            required=True,
+            http=http,
+        )
+        if selected.key != "solderpyloader":
+            raise PlatformExportError("Select a SolderPy Loader release.")
+        config = cls.solderpy_loader_config(
+            build, application_url, selector
+        )
+        return cls.render_solderpy_loader_archive(
+            selected, config, http=http
+        )
+
+    @staticmethod
     def _copy_archive(source, target, destination):
         source.seek(0)
         with target.open(destination, "w") as output:
@@ -849,6 +1045,19 @@ class PlatformPackExport:
                 if archive_root
                 else relative
             )
+
+        if spec.key == "solderpyloader":
+            if source_mode != "solder":
+                raise PlatformExportError(
+                    "SolderPy Loader requires the Solder-only download source."
+                )
+            target.writestr(
+                archive_path("config/solderpy-loader.json"),
+                cls.solderpy_loader_config(
+                    build, application_url, selector
+                ),
+            )
+            return
 
         if spec.key == "mcil":
             try:
@@ -1210,7 +1419,7 @@ class PlatformPackExport:
                 source_mode,
                 http=http,
             )
-            spec = cls._downloader(
+            spec = cls.resolve_downloader(
                 downloader,
                 build,
                 "modrinth",
@@ -1246,15 +1455,27 @@ class PlatformPackExport:
                             },
                         )
                 else:
-                    downloader_filename, _sha1, _sha512 = (
-                        cls._validate_native_file(spec.modrinth)
-                    )
-                    cls._write_native_file(
-                        target,
+                    for downloader_file in (
                         spec.modrinth,
-                        f".minecraft/mods/{downloader_filename}",
-                        http=http,
-                    )
+                        *spec.modrinth_dependencies,
+                    ):
+                        downloader_filename, _sha1, _sha512 = (
+                            cls._validate_native_file(downloader_file)
+                        )
+                        destination = (
+                            f".minecraft/mods/{downloader_filename}"
+                        )
+                        if destination in written_paths:
+                            raise PlatformExportError(
+                                "A downloader dependency has a conflicting filename."
+                            )
+                        written_paths.add(destination)
+                        cls._write_native_file(
+                            target,
+                            downloader_file,
+                            destination,
+                            http=http,
+                        )
                     cls._write_downloader_config(
                         target,
                         spec,
@@ -1460,7 +1681,7 @@ class PlatformPackExport:
                 )
             existing_paths.add(entry["path"])
             files.append(entry)
-        spec = cls._downloader(
+        spec = cls.resolve_downloader(
             downloader,
             build,
             "modrinth",
@@ -1474,7 +1695,16 @@ class PlatformPackExport:
                 raise PlatformExportError(
                     "The downloader conflicts with another Modrinth file."
                 )
+            existing_paths.add(downloader_entry["path"])
             files.append(downloader_entry)
+            for dependency in spec.modrinth_dependencies:
+                dependency_entry = cls._mrpack_file_entry(dependency)
+                if dependency_entry["path"] in existing_paths:
+                    raise PlatformExportError(
+                        "A downloader dependency conflicts with another Modrinth file."
+                    )
+                existing_paths.add(dependency_entry["path"])
+                files.append(dependency_entry)
 
         index = {
             "formatVersion": 1,
@@ -1536,7 +1766,7 @@ class PlatformPackExport:
             http=http,
             curseforge_api_key=curseforge_api_key,
         )
-        spec = cls._downloader(
+        spec = cls.resolve_downloader(
             downloader,
             build,
             "curseforge",
@@ -1577,6 +1807,23 @@ class PlatformPackExport:
             }
         ]
         selected_projects = {spec.curseforge_project_id: spec.curseforge_file_id}
+        for dependency in spec.curseforge_dependencies:
+            previous_file = selected_projects.get(dependency.project_id)
+            if previous_file is not None:
+                if previous_file == dependency.file_id:
+                    continue
+                raise PlatformExportError(
+                    "A required downloader dependency conflicts with the "
+                    "selected downloader."
+                )
+            selected_projects[dependency.project_id] = dependency.file_id
+            manifest_files.append(
+                {
+                    "projectID": dependency.project_id,
+                    "fileID": dependency.file_id,
+                    "required": True,
+                }
+            )
         for override, file in override_files:
             previous_file = selected_projects.get(file.project_id)
             if previous_file is not None:

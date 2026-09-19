@@ -384,7 +384,7 @@ def verify_technic_migration(database_container: str) -> None:
         "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies', "
         "'solder_settings', 'platform_export_overrides', "
         "'build_optional_groups', 'build_optional_group_items', "
-        "'technic_filedirector_builds', "
+        "'technic_solderpy_loader_builds', "
         "'personal_access_tokens', 'password_reset_tokens', "
         "'maven_repositories', 'maven_artifacts', 'maven_versions');",
     )
@@ -552,15 +552,15 @@ def verify_fresh_schema(database_container: str) -> None:
             "Advanced optional work-list entries still require a group"
         )
 
-    technic_filedirector_table_count = mysql(
+    technic_solderpy_loader_table_count = mysql(
         database_container,
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
-        "AND TABLE_NAME = 'technic_filedirector_builds';",
+        "AND TABLE_NAME = 'technic_solderpy_loader_builds';",
     )
-    if technic_filedirector_table_count != "1":
+    if technic_solderpy_loader_table_count != "1":
         raise AssertionError(
-            "Fresh schema did not create Technic FileDirector settings"
+            "Fresh schema did not create Technic SolderPy Loader settings"
         )
 
     advanced_optional_column_count = mysql(
@@ -818,14 +818,23 @@ def seed_api_access_scenario(database_container: str) -> None:
 
 
 def seed_mcinstance_scenario(database_container: str) -> None:
+    modtype_definition = mysql(
+        database_container,
+        "SELECT COLUMN_TYPE FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME = 'mods' "
+        "AND COLUMN_NAME = 'modtype';",
+    ).upper()
+    bootstrap_modtype = (
+        "BOOTSTRAP" if "'BOOTSTRAP'" in modtype_definition else "MCIL"
+    )
     mysql(
         database_container,
-        """INSERT INTO mods
+        f"""INSERT INTO mods
                (id, name, description, author, link, pretty_name, side, modtype)
            VALUES
                (26, 'ci-mcil-loader', 'Synthetic MCInstanceLoader package',
-                'CI', 'https://example.invalid/mcil', 'CI MCIL Loader',
-                'BOTH', 'MCIL'),
+                'CI', 'https://example.invalid/bootstrap', 'CI Bootstrap Loader',
+                'BOTH', '{bootstrap_modtype}'),
                (27, 'ci-mcil-optional', 'Synthetic optional MCIL export mod',
                 'CI', 'https://example.invalid/mcil-optional',
                 'CI MCIL Optional', 'CLIENT', 'MOD'),
@@ -1981,6 +1990,15 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         ).strip()
         base_url = f"http://127.0.0.1:{port_mapping.rsplit(':', 1)[1]}"
         wait_for_application(application_container, f"{base_url}/api/")
+        migrated_bootstrap_type = mysql(
+            database_container,
+            "SELECT modtype FROM mods WHERE id = 26;",
+        )
+        if migrated_bootstrap_type != "BOOTSTRAP":
+            raise AssertionError(
+                "Application startup did not migrate the MCIL package type "
+                "to BOOTSTRAP"
+            )
         write_token = seed_write_api_token(database_container)
         exercise_write_api(base_url, database_container, write_token)
         if fixture is not None and fixture.name == "solderpy.sql":
@@ -2040,15 +2058,15 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             raise AssertionError(
                 "Application startup did not create advanced optionals"
             )
-        technic_filedirector_table_count = mysql(
+        technic_solderpy_loader_table_count = mysql(
             database_container,
             "SELECT COUNT(*) FROM information_schema.TABLES "
             f"WHERE TABLE_SCHEMA = '{DATABASE}' "
-            "AND TABLE_NAME = 'technic_filedirector_builds';",
+            "AND TABLE_NAME = 'technic_solderpy_loader_builds';",
         )
-        if technic_filedirector_table_count != "1":
+        if technic_solderpy_loader_table_count != "1":
             raise AssertionError(
-                "Application startup did not create Technic FileDirector settings"
+                "Application startup did not create Technic SolderPy Loader settings"
             )
         override_default = mysql(
             database_container,

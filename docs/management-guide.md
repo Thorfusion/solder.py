@@ -61,7 +61,7 @@ formats.
 | `LAUNCHER (MODLOADER)` | A legacy Technic launcher/bootstrap package, commonly the package containing `bin/modpack.jar`. It remains in Technic builds but is excluded from formats whose launcher installs the loader. |
 | `RESOURCE PACK` / `RES` | A package primarily containing resource files. |
 | `CONFIG` | A package primarily containing configuration or other instance overrides. |
-| `MCIL` | A legacy marker for an MCInstance Loader package. Current MRPack and CurseForge exporters obtain the selected downloader directly and exclude this package type. |
+| `BOOTSTRAP` | An initial downloader/bootstrap package installed by the launcher and excluded from downloader-managed content. This replaces the old product-specific `MCIL` type. |
 | `NONE` | A general Solder package with no more specific type. |
 
 For normal Solder ZIPs, the paths inside the archive still decide where files
@@ -70,7 +70,7 @@ structured ZIP. Mod type supplies API and export semantics.
 
 When a manual JAR is uploaded, solder.py packages it as `MOD` because it has
 been detected as a runtime mod. Existing versions with a verified raw JAR hash
-are normalized to `MOD`, except deliberate `MCIL` and `LAUNCHER` packages.
+are normalized to `MOD`, except deliberate `BOOTSTRAP` and `LAUNCHER` packages.
 
 ## Add versions manually
 
@@ -82,10 +82,11 @@ without extracting a Solder ZIP.
 
 Set compatibility deliberately:
 
-- **Minecraft version** limits the version to that Minecraft release. Blank is
-  universal.
-- **Modloader** limits the version to Forge, NeoForge, Fabric, Quilt,
-  LiteLoader, or Vanilla. Blank is loader-agnostic.
+- **Minecraft versions** accepts one value or a comma-separated set such as
+  `1.20.1,1.20.2`. Blank is universal.
+- **Modloaders** lets you select one or more loader families. No selection is
+  loader-agnostic; the database and API store multiple values canonically as
+  `FORGE,NEOFORGE`.
 
 A build offers versions whose Minecraft and modloader values match the build,
 plus universal values. Required dependencies use the same rules.
@@ -248,15 +249,14 @@ Modrinth index retain their basic optional model; an MRPack using FileDirector
 or MCIL can still carry grouped fallback packages through that downloader.
 Switching a modpack back to Basic is blocked while any membership is Excluded.
 
-For a Forge build used by Technic Launcher, enable **FileDirector files** in
+For a build used by Technic Launcher, enable **SolderPy Loader** in
 Settings, open **Advanced optionals**, and configure **Technic launcher
-delivery**. solder.py downloads and verifies the selected compatible
-FileDirector release, creates normal Solder bootstrap/config ZIPs, and adds
-those two internal packages to that build's Technic manifest. Mods assigned to
-advanced groups are supplied by the versioned FileDirector bundle instead;
-unlisted and ungrouped mods continue through normal Solder delivery. If the
-setting, advanced mode, public build, or configured groups become unavailable,
-solder.py safely falls back to the normal manifest.
+delivery**. solder.py downloads and verifies SolderPy Loader and Relauncher,
+then adds one internal `BOOTSTRAP` package to that build's Technic manifest.
+Technic still installs its `LAUNCHER` package; SolderPy Loader supplies all
+other files and applies either the basic or advanced optional rules through the
+bootstrap API. If the setting or public build becomes unavailable, solder.py
+safely falls back to the normal manifest.
 
 ## Publish, test, and promote
 

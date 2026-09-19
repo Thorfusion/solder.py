@@ -309,6 +309,7 @@ class DistributionSettingsTests(unittest.TestCase):
 
         self.assertTrue(values[DistributionSettings.PACKWIZ])
         self.assertFalse(values[DistributionSettings.MCIL])
+        self.assertFalse(values[DistributionSettings.SOLDERPY_LOADER])
         self.assertFalse(values[DistributionSettings.FILEDIRECTOR])
         self.assertFalse(values[DistributionSettings.MODPACK_DIRECTOR])
         self.assertFalse(values[DistributionSettings.PRISM])
@@ -329,10 +330,11 @@ class DistributionSettingsTests(unittest.TestCase):
                 mrpack=True,
                 curseforge=False,
                 mcil=True,
+                solderpy_loader=True,
                 prism=True,
             )
 
-        self.assertEqual(cursor.execute.call_count, 7)
+        self.assertEqual(cursor.execute.call_count, 8)
         first_parameters = cursor.execute.call_args_list[0].args[1]
         second_parameters = cursor.execute.call_args_list[1].args[1]
         third_parameters = cursor.execute.call_args_list[2].args[1]
@@ -340,20 +342,24 @@ class DistributionSettingsTests(unittest.TestCase):
         fifth_parameters = cursor.execute.call_args_list[4].args[1]
         sixth_parameters = cursor.execute.call_args_list[5].args[1]
         seventh_parameters = cursor.execute.call_args_list[6].args[1]
+        eighth_parameters = cursor.execute.call_args_list[7].args[1]
         self.assertEqual(first_parameters, ("mcil_enabled", "1", "1"))
-        self.assertEqual(second_parameters, ("packwiz_enabled", "1", "1"))
         self.assertEqual(
-            third_parameters, ("filedirector_enabled", "0", "0")
+            second_parameters, ("solderpy_loader_enabled", "1", "1")
+        )
+        self.assertEqual(third_parameters, ("packwiz_enabled", "1", "1"))
+        self.assertEqual(
+            fourth_parameters, ("filedirector_enabled", "0", "0")
         )
         self.assertEqual(
-            fourth_parameters, ("modpack_director_enabled", "1", "1")
+            fifth_parameters, ("modpack_director_enabled", "1", "1")
         )
-        self.assertEqual(fifth_parameters, ("mrpack_enabled", "1", "1"))
+        self.assertEqual(sixth_parameters, ("mrpack_enabled", "1", "1"))
         self.assertEqual(
-            sixth_parameters, ("curseforge_export_enabled", "0", "0")
+            seventh_parameters, ("curseforge_export_enabled", "0", "0")
         )
         self.assertEqual(
-            seventh_parameters, ("prism_export_enabled", "1", "1")
+            eighth_parameters, ("prism_export_enabled", "1", "1")
         )
         connection.commit.assert_called_once_with()
         connection.rollback.assert_not_called()
@@ -673,62 +679,6 @@ class DistributionRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.get_json()["url"]), 1)
         enabled.assert_called_once_with(DistributionSettings.MODPACK_DIRECTOR)
-
-    def test_filedirector_technic_bundle_contains_only_grouped_choices(self):
-        from models.advanced_optional import (
-            AdvancedOptionalGroup,
-            AdvancedOptionalItem,
-        )
-
-        grouped = package("grouped", membership_id=41)
-        ordinary = package("ordinary", membership_id=42)
-        group = AdvancedOptionalGroup(
-            id=3,
-            build_id=7,
-            name="Graphics",
-            description="",
-            selection_type=0,
-            sort_order=0,
-            items=[
-                AdvancedOptionalItem(
-                    id=5,
-                    group_id=3,
-                    build_modversion_id=41,
-                    selected_by_default=True,
-                    sort_order=0,
-                    optional_state=0,
-                )
-            ],
-        )
-        with (
-            patch.object(
-                routes.DistributionSettings, "is_enabled", return_value=True
-            ),
-            patch.object(
-                routes.DistributionExport, "load_build", return_value=build()
-            ),
-            patch.object(
-                routes.DistributionExport,
-                "load_packages",
-                return_value=[grouped, ordinary],
-            ) as load,
-            patch.object(
-                routes.AdvancedOptional,
-                "get_active_groups",
-                return_value=[group],
-            ),
-        ):
-            response = self.client.get(
-                "/filedirector/example-pack/1.0/technic.bundle.json"
-            )
-
-        self.assertEqual(response.status_code, 200)
-        entries = response.get_json()["url"]
-        self.assertEqual(len(entries), 1)
-        self.assertIn("grouped-2.0.jar", entries[0]["url"])
-        load.assert_called_once_with(
-            7, optional=None, include_excluded=True
-        )
 
     def test_filedirector_modrinth_fallback_excludes_native_files(self):
         native = package(

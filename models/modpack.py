@@ -74,11 +74,11 @@ class Modpack:
         modversions = cur.fetchall()
         if modversions:
             from .advanced_optional import AdvancedOptional
-            from .technic_filedirector import TechnicFileDirector
+            from .technic_solderpy_loader import TechnicSolderPyLoader
 
             for mv in modversions:
                 AdvancedOptional.delete_build(cur, mv["id"])
-                TechnicFileDirector.delete_build(cur, mv["id"])
+                TechnicSolderPyLoader.delete_build(cur, mv["id"])
                 cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (mv["id"],))
         cur.execute("DELETE FROM builds WHERE modpack_id = %s", (id,))
         cur.execute("DELETE FROM modpacks WHERE id=%s", (id,))

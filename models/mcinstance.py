@@ -437,7 +437,7 @@ class MCInstanceExport:
                     ):
                         continue
                     modtype = package.modtype.upper()
-                    if modtype in {"MCIL", "LAUNCHER"}:
+                    if modtype in {"BOOTSTRAP", "MCIL", "LAUNCHER"}:
                         continue
 
                     if not version_is_compatible(

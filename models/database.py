@@ -87,16 +87,13 @@ class Database:
         )""",
     )
 
-    TECHNIC_FILEDIRECTOR_TABLE_SQL = """CREATE TABLE IF NOT EXISTS technic_filedirector_builds (
+    TECHNIC_SOLDERPY_LOADER_TABLE_SQL = """CREATE TABLE IF NOT EXISTS technic_solderpy_loader_builds (
         build_id INT NOT NULL PRIMARY KEY,
         version_id VARCHAR(64) NOT NULL,
         version VARCHAR(255) NOT NULL,
         bootstrap_path VARCHAR(512) NOT NULL,
         bootstrap_md5 CHAR(32) NOT NULL,
         bootstrap_filesize BIGINT UNSIGNED NOT NULL,
-        config_path VARCHAR(512) NOT NULL,
-        config_md5 CHAR(32) NOT NULL,
-        config_filesize BIGINT UNSIGNED NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )"""
@@ -209,7 +206,7 @@ class Database:
         (
             "modversions",
             "modloader",
-            "ALTER TABLE modversions ADD COLUMN modloader VARCHAR(32) NULL AFTER mcversion",
+            "ALTER TABLE modversions ADD COLUMN modloader VARCHAR(255) NULL AFTER mcversion",
         ),
     )
 
@@ -404,9 +401,60 @@ class Database:
                  AND TRIM(modversions.jarmd5) NOT REGEXP '[^0-9A-Fa-f]'
                  AND (
                      mods.modtype IS NULL
-                     OR mods.modtype NOT IN ('MOD', 'MCIL', 'LAUNCHER')
+                     OR mods.modtype NOT IN ('MOD', 'BOOTSTRAP', 'LAUNCHER')
                  )"""
         )
+
+    @staticmethod
+    def migrate_bootstrap_modtype(cur) -> None:
+        """Rename the former MCIL-specific package role without losing rows."""
+        if not Database.column_exists(cur, "mods", "modtype"):
+            return
+        cur.execute(
+            """SELECT COLUMN_TYPE
+               FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = %s
+                 AND TABLE_NAME = 'mods'
+                 AND COLUMN_NAME = 'modtype'""",
+            (db_name,),
+        )
+        row = cur.fetchone()
+        column_type = str(row[0] if row else "").upper()
+        had_mcil = "'MCIL'" in column_type
+        had_bootstrap = "'BOOTSTRAP'" in column_type
+        if not had_bootstrap:
+            cur.execute(
+                "ALTER TABLE mods MODIFY modtype "
+                "ENUM('MOD','LAUNCHER','RES','CONFIG','MCIL','BOOTSTRAP','NONE') "
+                "DEFAULT 'MOD'"
+            )
+        if had_mcil:
+            cur.execute(
+                "UPDATE mods SET modtype = 'BOOTSTRAP' WHERE modtype = 'MCIL'"
+            )
+        if had_mcil or not had_bootstrap:
+            cur.execute(
+                "ALTER TABLE mods MODIFY modtype "
+                "ENUM('MOD','LAUNCHER','RES','CONFIG','BOOTSTRAP','NONE') "
+                "DEFAULT 'MOD'"
+            )
+
+    @staticmethod
+    def expand_modversion_compatibility(cur) -> None:
+        """Allow canonical CSV sets in modversion compatibility columns."""
+        cur.execute(
+            """SELECT CHARACTER_MAXIMUM_LENGTH
+               FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = %s
+                 AND TABLE_NAME = 'modversions'
+                 AND COLUMN_NAME = 'modloader'""",
+            (db_name,),
+        )
+        row = cur.fetchone()
+        if row and int(row[0] or 0) < 255:
+            cur.execute(
+                "ALTER TABLE modversions MODIFY modloader VARCHAR(255) NULL"
+            )
 
     @staticmethod
     def migrate_technic_modpack_permissions(cur) -> None:
@@ -578,7 +626,7 @@ class Database:
                         integration_provider VARCHAR(16),
                         integration_project_id VARCHAR(64),
                         side enum('CLIENT', 'SERVER', 'BOTH') DEFAULT 'BOTH',
-                        modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'MOD',
+                        modtype enum('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'BOOTSTRAP', 'NONE') DEFAULT 'MOD',
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         UNIQUE INDEX uq_mods_integration_project
@@ -591,7 +639,7 @@ class Database:
                         mod_id INT NOT NULL,
                         version VARCHAR(255) NOT NULL,
                         mcversion VARCHAR(255),
-                        modloader VARCHAR(32),
+                        modloader VARCHAR(255),
                         integration_version_id VARCHAR(64),
                         md5 VARCHAR(255) NOT NULL,
                         jarmd5 VARCHAR(255),
@@ -625,7 +673,7 @@ class Database:
             for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
                 cur.execute(query)
             Database.allow_ungrouped_advanced_optionals(cur)
-            cur.execute(Database.TECHNIC_FILEDIRECTOR_TABLE_SQL)
+            cur.execute(Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL)
             for query in Database.MAVEN_TABLES_SQL:
                 cur.execute(query)
             cur.execute(
@@ -751,7 +799,7 @@ class Database:
             (
                 "mods",
                 "modtype",
-                "ALTER TABLE mods ADD COLUMN modtype ENUM('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'MCIL', 'NONE') DEFAULT 'MOD'",
+                "ALTER TABLE mods ADD COLUMN modtype ENUM('MOD', 'LAUNCHER', 'RES', 'CONFIG', 'BOOTSTRAP', 'NONE') DEFAULT 'MOD'",
             ),
             (
                 "builds",
@@ -822,6 +870,8 @@ class Database:
                     cur.execute(query)
 
             Database.migrate_legacy_mod_notes(cur)
+            Database.migrate_bootstrap_modtype(cur)
+            Database.expand_modversion_compatibility(cur)
             Database.migrate_jar_hash_mod_types(cur)
 
             # Technic has no user_modpack table. Create it before migrating
@@ -846,7 +896,7 @@ class Database:
             for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
                 cur.execute(query)
             Database.allow_ungrouped_advanced_optionals(cur)
-            cur.execute(Database.TECHNIC_FILEDIRECTOR_TABLE_SQL)
+            cur.execute(Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL)
             for query in Database.MAVEN_TABLES_SQL:
                 cur.execute(query)
 
@@ -893,7 +943,7 @@ class Database:
             for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
                 cur.execute(query)
             Database.allow_ungrouped_advanced_optionals(cur)
-            cur.execute(Database.TECHNIC_FILEDIRECTOR_TABLE_SQL)
+            cur.execute(Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL)
             for query in Database.MAVEN_TABLES_SQL:
                 cur.execute(query)
 
@@ -930,6 +980,8 @@ class Database:
             cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL)
 
             Database.migrate_legacy_mod_notes(cur)
+            Database.migrate_bootstrap_modtype(cur)
+            Database.expand_modversion_compatibility(cur)
             Database.migrate_jar_hash_mod_types(cur)
 
             cur.execute(

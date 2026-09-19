@@ -9,6 +9,7 @@ class DistributionSettings:
     """Database-backed switches shared by management and API-only processes."""
 
     MCIL = "mcil_enabled"
+    SOLDERPY_LOADER = "solderpy_loader_enabled"
     PACKWIZ = "packwiz_enabled"
     FILEDIRECTOR = "filedirector_enabled"
     MODPACK_DIRECTOR = "modpack_director_enabled"
@@ -17,6 +18,7 @@ class DistributionSettings:
     PRISM = "prism_export_enabled"
     DEFAULTS = {
         MCIL: False,
+        SOLDERPY_LOADER: False,
         PACKWIZ: False,
         FILEDIRECTOR: False,
         MODPACK_DIRECTOR: False,
@@ -45,6 +47,7 @@ class DistributionSettings:
         try:
             names = (
                 cls.MCIL,
+                cls.SOLDERPY_LOADER,
                 cls.PACKWIZ,
                 cls.FILEDIRECTOR,
                 cls.MODPACK_DIRECTOR,
@@ -54,7 +57,7 @@ class DistributionSettings:
             )
             cursor.execute(
                 "SELECT name, value FROM solder_settings "
-                "WHERE name IN (%s, %s, %s, %s, %s, %s, %s)",
+                "WHERE name IN (%s, %s, %s, %s, %s, %s, %s, %s)",
                 names,
             )
             for row in cursor.fetchall():
@@ -80,6 +83,7 @@ class DistributionSettings:
         mrpack: bool = False,
         curseforge: bool = False,
         mcil: bool = False,
+        solderpy_loader: bool = False,
         prism: bool = False,
     ) -> None:
         conn = Database.get_connection()
@@ -92,6 +96,7 @@ class DistributionSettings:
         try:
             for name, enabled in (
                 (cls.MCIL, mcil),
+                (cls.SOLDERPY_LOADER, solderpy_loader),
                 (cls.PACKWIZ, packwiz),
                 (cls.FILEDIRECTOR, filedirector),
                 (cls.MODPACK_DIRECTOR, modpack_director),

@@ -30,8 +30,8 @@ optional groups, dependency resolution, updates, and safe archive ownership.
 Management-side Modrinth, GitHub config, and Maven imports are documented in the
 [integration guide](docs/integrations.md).
 
-MCInstance Loader, Packwiz, FileDirector, Modpack Director, Modrinth,
-CurseForge, and Prism setup,
+SolderPy Loader, MCInstance Loader, Packwiz, FileDirector, Modpack Director,
+Modrinth, CurseForge, and Prism setup,
 export usage, and file layouts are documented in the
 [distribution usage and format guide](docs/distribution-formats.md).
 
@@ -106,11 +106,11 @@ export usage, and file layouts are documented in the
 
   + **Advanced optional groups**
 
-    Give MCIL, FileDirector, and Modpack Director choices names, independent or exact-one
-    selection rules, defaults, and a Technic/basic state of Required, Optional,
-    or Excluded. Public Forge builds can optionally bootstrap FileDirector
-    through normal Technic Solder packages so those richer choices are also
-    available when the pack is launched through Technic.
+    Give SolderPy Loader, MCIL, FileDirector, and Modpack Director choices
+    names, independent or exact-one selection rules, defaults, and a
+    Technic/basic state of Required, Optional, or Excluded. Public builds can
+    optionally bootstrap SolderPy Loader through a normal Technic Solder
+    package so the same choices are available before mod discovery.
 
   + **Server shadow build**
 
@@ -126,9 +126,12 @@ export usage, and file layouts are documented in the
   Export a build from its management page as an MCInstanceLoader
   `.mcinstance` archive.
 
-+ **Packwiz, FileDirector, and Modpack Director support**
++ **SolderPy Loader, Packwiz, FileDirector, and Modpack Director support**
 
-  Serve published builds as Packwiz metadata or Director-compatible bundles.
+  Export a ready-to-install SolderPy Loader ZIP containing the verified Loader,
+  Relauncher, and build API configuration, or bootstrap Technic and launcher
+  exports from the same dedicated API. Packwiz metadata and
+  Director-compatible bundles remain available as separate formats.
   Modpack Director exports include its `modpack.json` pack identity and update
   metadata. Each format is independently enabled in the settings GUI, and the
   hosted routes are available in API-only mode.
@@ -137,7 +140,8 @@ export usage, and file layouts are documented in the
 
   Export a build as an MRPack or CurseForge archive. Modrinth-mapped versions
   remain native in MRPack; other packages are installed from Solder through
-  MCInstance Loader, FileDirector, or Modpack Director where available.
+  SolderPy Loader, MCInstance Loader, FileDirector, or Modpack Director where
+  available.
   CurseForge packs contain only the selected
   downloader and any enabled Modrinth-CurseForge sync mappings as native projects.
   Solder-only and hybrid modes either use the Solder repository for build
@@ -150,9 +154,9 @@ export usage, and file layouts are documented in the
 + **Prism Launcher instance exports**
 
   Export a directly importable Prism/MultiMC instance containing
-  `mmc-pack.json` and `instance.cfg`. Use a verified MCIL or FileDirector
-  bootstrap for a small archive, or use the self-contained fallback when the
-  build cannot use either downloader. Minecraft and the modloader remain
+  `mmc-pack.json` and `instance.cfg`. Use a verified SolderPy Loader, MCIL, or
+  FileDirector bootstrap for a small archive, or use the self-contained
+  fallback when the build cannot use a downloader. Minecraft and the modloader remain
   launcher-managed.
 
 + **Database compatibility with Technic Solder**
@@ -228,9 +232,10 @@ See the [integration guide](docs/integrations.md) for the complete workflow.
 Enable the required formats under **Settings > Env Settings**, then open a
 build's **Export** window. The complete
 [distribution usage and format guide](docs/distribution-formats.md) explains
-the shared Solder-only and hybrid options, MCInstance Loader archive mapping,
-Packwiz, FileDirector, and Modpack Director hosting, Modrinth or CurseForge fallback exports, and
-Prism Launcher bootstrap or self-contained instance exports.
+the shared Solder-only and hybrid options, SolderPy Loader and MCInstance
+Loader archive mapping, Packwiz, FileDirector, and Modpack Director hosting,
+Modrinth or CurseForge fallback exports, and Prism Launcher bootstrap or
+self-contained instance exports.
 
 ## Server and optional API manifests
 

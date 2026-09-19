@@ -21,6 +21,17 @@ class UploadVerificationError(ValueError):
 
 
 _MAX_UPLOAD_JAR_SIZE = 512 * 1024 * 1024
+MOD_TYPES = frozenset({"MOD", "LAUNCHER", "RES", "CONFIG", "BOOTSTRAP", "NONE"})
+
+
+def normalize_modtype(value):
+    """Normalize the former product-specific MCIL role to BOOTSTRAP."""
+    value = str(value or "MOD").strip().upper()
+    if value == "MCIL":
+        value = "BOOTSTRAP"
+    if value not in MOD_TYPES:
+        raise ValueError("Unknown mod type.")
+    return value
 
 
 class Mod:
@@ -50,7 +61,7 @@ class Mod:
         self.updated_at = updated_at
         self.pretty_name = pretty_name
         self.side = side
-        self.modtype = modtype
+        self.modtype = normalize_modtype(modtype)
         self.notes = notes
         self.integration_provider = (
             str(integration_provider).upper() if integration_provider else None
@@ -77,6 +88,7 @@ class Mod:
         integration_provider=None,
         integration_project_id=None,
     ):
+        modtype = normalize_modtype(modtype)
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -129,6 +141,7 @@ class Mod:
 
     @staticmethod
     def update(id, name, description, author, link, pretty_name, side, modtype, notes):
+        modtype = normalize_modtype(modtype)
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()

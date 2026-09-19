@@ -43,10 +43,9 @@ from models.mcinstance import (
     MCInstanceJar,
 )
 from models.platform_export import PlatformExportError, PlatformPackExport
-from models.technic_filedirector import (
-    FILEDIRECTOR_MODRINTH_PROJECT,
-    TechnicFileDirector,
-    TechnicFileDirectorError,
+from models.technic_solderpy_loader import (
+    TechnicSolderPyLoader,
+    TechnicSolderPyLoaderError,
 )
 from models.platform_export_override import (
     PlatformExportOverride,
@@ -329,8 +328,8 @@ def newmodversion(id):
             result = ModIntegration.materialize_for_management(
                 mod,
                 external_id(request.form.get("integration_version_id")),
-                request.form.get("integration_minecraft"),
-                request.form.get("integration_modloader"),
+                request.form.getlist("integration_minecraft"),
+                request.form.getlist("integration_modloader"),
                 Session.get_user_id(session["token"]),
                 UPLOAD_FOLDER,
                 r2_client=R2 if R2_BUCKET else None,
@@ -528,7 +527,7 @@ def newmodversion(id):
         if request.form["newmodvermanual_md5"] != "":
             try:
                 Modversion.new(id, request.form["newmodvermanual_version"], request.form["newmodvermanual_mcversion"], request.form["newmodvermanual_md5"], filesie2, "0", modloader=request.form.get("newmodvermanual_modloader"))
-            except InvalidModloaderError as error:
+            except ValueError as error:
                 flash(str(error), "error")
         else:
             # Todo Add filesize rehash and md5 hash, if fails do not add
@@ -544,7 +543,7 @@ def newmodversion(id):
                     modloader=request.form.get("newmodvermanual_modloader"),
                     repository_mod_slug=mod.name,
                 )
-            except InvalidModloaderError as error:
+            except ValueError as error:
                 flash(str(error), "error")
     return redirect(url_for("asite.modversion", id=id))
 
@@ -1056,6 +1055,7 @@ def mainsettings():
         try:
             DistributionSettings.update_exports(
                 mcil="mcil_enabled" in request.form,
+                solderpy_loader="solderpy_loader_enabled" in request.form,
                 packwiz="packwiz_enabled" in request.form,
                 filedirector="filedirector_enabled" in request.form,
                 modpack_director="modpack_director_enabled" in request.form,
@@ -1524,7 +1524,7 @@ def modpackbuild(id):
                 list_in_advanced
                 and selected_mod is not None
                 and str(selected_mod.modtype or "").upper()
-                in {"LAUNCHER", "MCIL"}
+                in {"LAUNCHER", "BOOTSTRAP", "MCIL"}
             ):
                 flash(
                     "Modloader and downloader packages cannot be listed as "
@@ -1583,10 +1583,12 @@ def modpackbuild(id):
     )
     modrinth_downloaders, modrinth_downloader_error = (), None
     prism_downloaders, prism_downloader_error = (), None
+    solderpy_loader_downloaders, solderpy_loader_downloader_error = (), None
     curseforge_downloaders, curseforge_downloader_error = (), None
     if export_requested and (
         distribution_settings[DistributionSettings.MRPACK]
         or distribution_settings[DistributionSettings.PRISM]
+        or distribution_settings[DistributionSettings.SOLDERPY_LOADER]
     ):
         resolved_downloaders, resolved_error = _available_downloaders(
             editor.packbuild, distribution_settings, "modrinth"
@@ -1597,6 +1599,21 @@ def modpackbuild(id):
         if distribution_settings[DistributionSettings.PRISM]:
             prism_downloaders = resolved_downloaders
             prism_downloader_error = resolved_error
+        if distribution_settings[DistributionSettings.SOLDERPY_LOADER]:
+            solderpy_loader_downloaders = tuple(
+                downloader
+                for downloader in resolved_downloaders
+                if downloader.key == "solderpyloader"
+            )
+            solderpy_loader_downloader_error = resolved_error
+            if (
+                not solderpy_loader_downloaders
+                and solderpy_loader_downloader_error is None
+            ):
+                solderpy_loader_downloader_error = (
+                    "No compatible public SolderPy Loader release was found "
+                    "for this Minecraft and modloader version."
+                )
     if (
         export_requested
         and distribution_settings[DistributionSettings.CURSEFORGE]
@@ -1622,6 +1639,8 @@ def modpackbuild(id):
         modrinth_downloader_error=modrinth_downloader_error,
         prism_downloaders=prism_downloaders,
         prism_downloader_error=prism_downloader_error,
+        solderpy_loader_downloaders=solderpy_loader_downloaders,
+        solderpy_loader_downloader_error=solderpy_loader_downloader_error,
         curseforge_downloaders=curseforge_downloaders,
         curseforge_downloader_error=curseforge_downloader_error,
     )
@@ -1647,38 +1666,44 @@ def advanced_optionals(build_id):
 
     if request.method == "POST":
         try:
-            if "enable_technic_filedirector" in request.form:
+            if "enable_technic_solderpy_loader" in request.form:
                 if not DistributionSettings.is_enabled(
-                    DistributionSettings.FILEDIRECTOR
+                    DistributionSettings.SOLDERPY_LOADER
                 ):
-                    raise TechnicFileDirectorError(
-                        "Enable FileDirector files in Settings first."
+                    raise TechnicSolderPyLoaderError(
+                        "Enable SolderPy Loader in Settings first."
                     )
                 build = Build.get_by_id(build_id)
                 if build is None:
-                    raise TechnicFileDirectorError(
+                    raise TechnicSolderPyLoaderError(
                         "The build no longer exists."
                     )
-                version = ModrinthProvider().get_version(
-                    FILEDIRECTOR_MODRINTH_PROJECT,
-                    request.form.get("filedirector_version"),
-                    build.minecraft,
-                    build.modloader,
+                selected = PlatformPackExport.resolve_downloader(
+                    "solderpyloader:"
+                    + str(request.form.get("solderpy_loader_version") or ""),
+                    build,
+                    "modrinth",
                 )
-                TechnicFileDirector.configure(
+                TechnicSolderPyLoader.configure(
                     build,
                     modpack,
-                    version,
+                    selected,
                     UPLOAD_FOLDER,
                     public_repo_url,
                     app_url,
                     r2_client=R2 if R2_BUCKET else None,
                     r2_bucket=R2_BUCKET,
                 )
-                flash("FileDirector enabled for this Technic build.", "success")
-            elif "disable_technic_filedirector" in request.form:
-                TechnicFileDirector.disable(build_id)
-                flash("FileDirector disabled for this Technic build.", "success")
+                flash(
+                    "SolderPy Loader enabled for this Technic build.",
+                    "success",
+                )
+            elif "disable_technic_solderpy_loader" in request.form:
+                TechnicSolderPyLoader.disable(build_id)
+                flash(
+                    "SolderPy Loader disabled for this Technic build.",
+                    "success",
+                )
             elif "set_optional_mode" in request.form:
                 AdvancedOptional.set_modpack_mode(
                     modpack_id, request.form.get("optional_mode", BASIC_MODE)
@@ -1719,15 +1744,15 @@ def advanced_optionals(build_id):
             DistributionExportError,
             IntegrationError,
             PlatformExportError,
-            TechnicFileDirectorError,
+            TechnicSolderPyLoaderError,
         ) as error:
             flash(str(error), "error")
         except Exception as error:
             ErrorPrinter.message(
-                "failed to update Technic FileDirector delivery", error
+                "failed to update Technic SolderPy Loader delivery", error
             )
             flash(
-                "The Technic FileDirector configuration could not be updated. "
+                "The Technic SolderPy Loader configuration could not be updated. "
                 "Check the server log.",
                 "error",
             )
@@ -1764,18 +1789,20 @@ def advanced_optionals(build_id):
             if int(combo.get("optional") or 0) == 1
         ]
     distribution_settings = DistributionSettings.get_all()
-    technic_filedirector = TechnicFileDirector.get(build_id)
-    technic_filedirector_active = bool(
-        technic_filedirector
-        and TechnicFileDirector.get_active(build_id)
+    technic_solderpy_loader = TechnicSolderPyLoader.get(build_id)
+    technic_solderpy_loader_active = bool(
+        technic_solderpy_loader
+        and TechnicSolderPyLoader.get_active(build_id)
     )
-    filedirector_releases = ()
-    filedirector_error = None
-    if request.args.get("filedirector") == "configure":
-        if not distribution_settings[DistributionSettings.FILEDIRECTOR]:
-            filedirector_error = "Enable FileDirector files in Settings first."
+    solderpy_loader_releases = ()
+    solderpy_loader_error = None
+    if request.args.get("solderpy_loader") == "configure":
+        if not distribution_settings[DistributionSettings.SOLDERPY_LOADER]:
+            solderpy_loader_error = (
+                "Enable SolderPy Loader in Settings first."
+            )
         else:
-            spec = PlatformPackExport.downloader_spec("filedirector")
+            spec = PlatformPackExport.downloader_spec("solderpyloader")
             try:
                 available = PlatformPackExport.available_downloaders(
                     editor.packbuild,
@@ -1783,14 +1810,14 @@ def advanced_optionals(build_id):
                     specs=(spec,),
                 )
                 if available:
-                    filedirector_releases = available[0].releases
+                    solderpy_loader_releases = available[0].releases
                 else:
-                    filedirector_error = (
-                        "No compatible FileDirector release was found for "
+                    solderpy_loader_error = (
+                        "No compatible SolderPy Loader release was found for "
                         "this Minecraft and modloader version."
                     )
             except PlatformExportError as error:
-                filedirector_error = str(error)
+                solderpy_loader_error = str(error)
     return render_template(
         "advanced_optionals.html",
         packbuild=editor.packbuild,
@@ -1800,12 +1827,12 @@ def advanced_optionals(build_id):
         groups=groups,
         optional_items=optional_items,
         distribution_settings=distribution_settings,
-        technic_filedirector=technic_filedirector,
-        technic_filedirector_active=technic_filedirector_active,
-        filedirector_releases=filedirector_releases,
-        filedirector_error=filedirector_error,
-        configure_filedirector=(
-            request.args.get("filedirector") == "configure"
+        technic_solderpy_loader=technic_solderpy_loader,
+        technic_solderpy_loader_active=technic_solderpy_loader_active,
+        solderpy_loader_releases=solderpy_loader_releases,
+        solderpy_loader_error=solderpy_loader_error,
+        configure_solderpy_loader=(
+            request.args.get("solderpy_loader") == "configure"
         ),
     )
 
@@ -1941,6 +1968,42 @@ def _hosted_export_allowed(build):
         return True
     flash("Hosted configs require a published, non-private build.", "error")
     return False
+
+
+@asite.route("/modpackbuild/<int:id>/solderpy-loader", methods=["GET"])
+def export_solderpy_loader(id):
+    if not DistributionSettings.is_enabled(
+        DistributionSettings.SOLDERPY_LOADER
+    ):
+        return render_template("404.html", error="Not Found"), 404
+
+    loaded, failure = _platform_export_build(id)
+    if failure is not None:
+        return failure
+    build, _packages = loaded
+    downloader = request.args.get("solderpy_loader_downloader")
+    if not _downloader_export_enabled(downloader):
+        return redirect(url_for("asite.modpackbuild", id=id))
+    try:
+        archive = PlatformPackExport.render_solderpy_loader(
+            build,
+            downloader,
+            app_url,
+            selector=request.args.get("selector"),
+        )
+    except PlatformExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpackbuild", id=id))
+
+    filename = secure_filename(
+        f"{build.modpack_slug}-{build.version}-solderpy-loader.zip"
+    )
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
 
 
 @asite.route("/modpackbuild/<int:id>/prism", methods=["GET"])

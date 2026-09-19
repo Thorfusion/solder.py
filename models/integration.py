@@ -20,7 +20,12 @@ import zipfile
 import requests
 from werkzeug.utils import secure_filename
 
-from .compatibility import normalize_modloader
+from .compatibility import (
+    compatibility_values,
+    normalize_minecraft_versions,
+    normalize_modloader,
+    normalize_modloaders,
+)
 from .github_config import (
     GitHubClient,
     GitHubConfigError,
@@ -1105,24 +1110,33 @@ class ModIntegration:
         r2_bucket=None,
         http=None,
     ):
-        minecraft = str(minecraft or "").strip()
-        if not minecraft or len(minecraft) > 255:
-            raise IntegrationError(
-                "Select the Minecraft version for the upstream version."
-            )
         try:
-            modloader = normalize_modloader(modloader)
+            minecraft = normalize_minecraft_versions(minecraft)
+            modloader = normalize_modloaders(modloader)
         except ValueError as error:
             raise IntegrationError(str(error)) from error
+        if not minecraft:
+            raise IntegrationError(
+                "Select at least one Minecraft version for the upstream version."
+            )
+        primary_minecraft = minecraft.split(",", 1)[0]
+        primary_modloader = (
+            modloader.split(",", 1)[0] if modloader else None
+        )
         return cls.materialize(
             mod,
-            SimpleNamespace(minecraft=minecraft, modloader=modloader),
+            SimpleNamespace(
+                minecraft=primary_minecraft,
+                modloader=primary_modloader,
+            ),
             integration_version_id,
             user_id,
             upload_folder,
             r2_client=r2_client,
             r2_bucket=r2_bucket,
             http=http,
+            _stored_minecraft=minecraft,
+            _stored_modloader=modloader,
         )
 
     @staticmethod
@@ -1490,6 +1504,8 @@ class ModIntegration:
         _external=None,
         _dependency_path=(),
         _dependency_context=None,
+        _stored_minecraft=None,
+        _stored_modloader=None,
     ):
         if not mod.integration_provider or not mod.integration_project_id:
             raise IntegrationError("This mod is not managed by an integration.")
@@ -1541,6 +1557,30 @@ class ModIntegration:
         selected_loader = external.loader_for_build(build.modloader)
         if build.modloader and external.loaders and selected_loader is None:
             raise IntegrationError("The selected version does not support this modloader.")
+        stored_minecraft = _stored_minecraft or build.minecraft
+        stored_modloader = _stored_modloader or selected_loader
+        if external.game_versions:
+            unsupported_minecraft = set(
+                compatibility_values(stored_minecraft)
+            ).difference(external.game_versions)
+            if unsupported_minecraft:
+                raise IntegrationError(
+                    "The selected upstream version does not support every "
+                    "selected Minecraft version."
+                )
+        if external.loaders:
+            unsupported_loaders = {
+                loader
+                for loader in compatibility_values(
+                    stored_modloader, modloaders=True
+                )
+                if external.loader_for_build(loader) is None
+            }
+            if unsupported_loaders:
+                raise IntegrationError(
+                    "The selected upstream version does not support every "
+                    "selected modloader."
+                )
 
         if mod.integration_provider == MODRINTH:
             project_id = external_id(mod.integration_project_id)
@@ -1628,13 +1668,13 @@ class ModIntegration:
             version = Modversion.new(
                 mod.id,
                 version_name,
-                build.minecraft,
+                stored_minecraft,
                 package_md5,
                 package_size,
                 "0",
                 "0",
                 jar_md5,
-                modloader=selected_loader,
+                modloader=stored_modloader,
                 integration_version_id=external.version_id,
             )
             return MaterializedVersion(version, True)

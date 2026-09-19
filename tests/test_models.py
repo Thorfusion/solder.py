@@ -646,7 +646,39 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertIn("SET mods.modtype = 'MOD'", query)
         self.assertIn("CHAR_LENGTH(TRIM(modversions.jarmd5)) = 32", query)
         self.assertIn("NOT REGEXP '[^0-9A-Fa-f]'", query)
-        self.assertIn("NOT IN ('MOD', 'MCIL', 'LAUNCHER')", query)
+        self.assertIn("NOT IN ('MOD', 'BOOTSTRAP', 'LAUNCHER')", query)
+
+    @patch("models.database.db_name", "solder_test")
+    def test_mcil_package_type_is_migrated_to_bootstrap(self):
+        cursor = Mock()
+        cursor.fetchone.side_effect = [
+            (1,),
+            ("enum('MOD','LAUNCHER','RES','CONFIG','MCIL','NONE')",),
+        ]
+
+        Database.migrate_bootstrap_modtype(cursor)
+
+        queries = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertTrue(any("'MCIL','BOOTSTRAP'" in query for query in queries))
+        self.assertTrue(
+            any("SET modtype = 'BOOTSTRAP'" in query for query in queries)
+        )
+        self.assertIn(
+            "ENUM('MOD','LAUNCHER','RES','CONFIG','BOOTSTRAP','NONE')",
+            queries[-1],
+        )
+
+    @patch("models.database.db_name", "solder_test")
+    def test_modversion_modloader_column_expands_for_compatibility_sets(self):
+        cursor = Mock()
+        cursor.fetchone.return_value = (32,)
+
+        Database.expand_modversion_compatibility(cursor)
+
+        self.assertIn(
+            "MODIFY modloader VARCHAR(255)",
+            cursor.execute.call_args_list[-1].args[0],
+        )
 
     def test_technic_modpack_permissions_are_migrated_without_duplicates(self):
         cursor = Mock()
@@ -771,7 +803,7 @@ class ModelBehaviorTests(unittest.TestCase):
             (3,),
         )
         self.assertIn("SET modtype = 'MOD'", calls[1].args[0])
-        self.assertIn("NOT IN ('MOD', 'MCIL', 'LAUNCHER')", calls[1].args[0])
+        self.assertIn("NOT IN ('MOD', 'BOOTSTRAP', 'LAUNCHER')", calls[1].args[0])
         self.assertEqual(version.id, 42)
         self.assertEqual(version.modloader, "FABRIC")
         connection.cursor.return_value.close.assert_called_once_with()

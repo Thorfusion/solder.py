@@ -24,6 +24,11 @@ class ApiTests(unittest.TestCase):
         self.get_mod_dependencies = patch.object(
             api_module.ModDependency, "get_by_mod_api", return_value=[]
         ).start()
+        self.get_technic_loader = patch.object(
+            api_module.TechnicSolderPyLoader,
+            "get_active",
+            return_value=None,
+        ).start()
         self.addCleanup(patch.stopall)
 
         # cachetools caches route responses at module scope. Clearing between
@@ -376,12 +381,11 @@ class ApiTests(unittest.TestCase):
             "https://cdn.example.test/mods/modpack/modpack-1.0.zip",
         )
 
-    @patch.object(api_module.AdvancedOptional, "get_active_groups")
-    @patch.object(api_module.TechnicFileDirector, "get_active")
+    @patch.object(api_module.TechnicSolderPyLoader, "get_active")
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
     @patch.object(api_module.Key, "get_key", return_value=None)
-    def test_technic_filedirector_delegates_only_grouped_mods(
-        self, _get_key, get_modpack, get_filedirector, get_groups
+    def test_technic_solderpy_loader_delegates_all_managed_packages(
+        self, _get_key, get_modpack, get_loader
     ):
         grouped = SimpleNamespace(
             id=9,
@@ -391,6 +395,7 @@ class ApiTests(unittest.TestCase):
             md5="a" * 32,
             filesize=100,
             membership_id=41,
+            modtype="MOD",
         )
         ordinary = SimpleNamespace(
             id=10,
@@ -400,6 +405,17 @@ class ApiTests(unittest.TestCase):
             md5="b" * 32,
             filesize=200,
             membership_id=42,
+            modtype="MOD",
+        )
+        modloader = SimpleNamespace(
+            id=11,
+            mod_id=5,
+            modname="modpack",
+            version="forge",
+            md5="d" * 32,
+            filesize=400,
+            membership_id=43,
+            modtype="LAUNCHER",
         )
         build = Mock(
             id=7,
@@ -410,34 +426,29 @@ class ApiTests(unittest.TestCase):
             forge="10.13.4.1614",
             modloader="FORGE",
         )
-        build.get_modversions_api.return_value = [grouped, ordinary]
+        build.get_modversions_api.return_value = [grouped, ordinary, modloader]
         modpack = Mock(optional_mode=1)
         modpack.get_build_api.return_value = build
         get_modpack.return_value = modpack
-        get_groups.return_value = [
-            SimpleNamespace(
-                items=[SimpleNamespace(build_modversion_id=41)]
-            )
-        ]
         configuration = Mock()
         configuration.manifest_entries.return_value = [
             {
                 "id": -14,
-                "name": "solderpy-filedirector",
-                "version": "1.9.1",
+                "name": "solderpy-loader-bootstrap",
+                "version": "0.1.0",
                 "md5": "c" * 32,
                 "filesize": 300,
                 "url": "https://cdn.example.test/mods/_solderpy/bootstrap.zip",
             }
         ]
-        get_filedirector.return_value = configuration
+        get_loader.return_value = configuration
 
         response = self.client.get("/api/modpack/legacy-pack/1.0")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             [entry["name"] for entry in response.get_json()["mods"]],
-            ["ordinary", "solderpy-filedirector"],
+            ["modpack", "solderpy-loader-bootstrap"],
         )
         configuration.manifest_entries.assert_called_once_with(
             "https://cdn.example.test/mods/",

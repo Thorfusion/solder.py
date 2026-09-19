@@ -90,10 +90,10 @@ class Build:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         from .advanced_optional import AdvancedOptional
-        from .technic_filedirector import TechnicFileDirector
+        from .technic_solderpy_loader import TechnicSolderPyLoader
 
         AdvancedOptional.delete_build(cur, id)
-        TechnicFileDirector.delete_build(cur, id)
+        TechnicSolderPyLoader.delete_build(cur, id)
         cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (id,))
         cur.execute("DELETE FROM builds WHERE id=%s", (id,))
         conn.commit()

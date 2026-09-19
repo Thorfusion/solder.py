@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from flask import flash
 
 from .build import Build
+from .compatibility import primary_modloader
 from .database import Database
 
 
@@ -168,10 +169,10 @@ class Build_modversion:
                        ON maven_artifacts.mod_id = mods.id
                    LEFT JOIN maven_repositories
                        ON maven_artifacts.repository_id = maven_repositories.id
-                   WHERE (modversions.mcversion = %s
+                   WHERE (FIND_IN_SET(%s, modversions.mcversion) > 0
                           OR modversions.mcversion IS NULL)
                      AND (%s IS NULL
-                          OR modversions.modloader = %s
+                          OR FIND_IN_SET(%s, modversions.modloader) > 0
                           OR modversions.modloader IS NULL)
                    ORDER BY modversions.mod_id, modversions.id DESC""",
                 (
@@ -259,10 +260,12 @@ class Build_modversion:
                    INNER JOIN builds ON build_modversion.build_id = builds.id
                    INNER JOIN modversions AS candidate
                        ON candidate.mod_id = current.mod_id
-                      AND (candidate.mcversion = builds.minecraft
+                      AND (FIND_IN_SET(builds.minecraft,
+                                      candidate.mcversion) > 0
                            OR candidate.mcversion IS NULL)
                       AND (builds.modloader IS NULL
-                           OR candidate.modloader = builds.modloader
+                           OR FIND_IN_SET(builds.modloader,
+                                          candidate.modloader) > 0
                            OR candidate.modloader IS NULL)
                    WHERE build_modversion.build_id = %s
                    ORDER BY build_modversion.id, candidate.id DESC
@@ -324,7 +327,9 @@ class Build_modversion:
                         == "LAUNCHER"
                         and metadata.get("replacement_modloader")
                     ):
-                        dependency_modloader = metadata["replacement_modloader"]
+                        dependency_modloader = primary_modloader(
+                            metadata["replacement_modloader"]
+                        )
                     Modversion._add_required_dependencies(
                         cur,
                         build_id,

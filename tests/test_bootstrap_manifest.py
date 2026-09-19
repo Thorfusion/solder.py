@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from models.bootstrap_manifest import BootstrapManifest, BootstrapManifestError
+from models.bootstrap_manifest import BootstrapManifest
 
 
 def package(identifier, membership_id, slug, state=0):
@@ -95,21 +95,28 @@ class BootstrapManifestTests(unittest.TestCase):
         )
         self.assertNotIn("extract_to", result["download"])
 
-    def test_mod_without_a_verified_raw_jar_is_rejected(self):
+    def test_mod_without_a_verified_raw_jar_uses_solder_zip(self):
         selected = package(4, 10, "example-mod")
         selected.jarmd5 = "0"
 
-        with self.assertRaisesRegex(
-            BootstrapManifestError, "does not have a verified raw JAR"
-        ):
-            BootstrapManifest.render(
-                modpack(),
-                build(1, "1.0"),
-                [selected],
-                [],
-                "https://cdn.example.test/mods/",
-                {},
-            )
+        manifest = BootstrapManifest.render(
+            modpack(),
+            build(1, "1.0"),
+            [selected],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+        )
+
+        result = manifest["packages"][0]
+        self.assertEqual(
+            result["url"],
+            "https://cdn.example.test/mods/example-mod/example-mod-1.0.zip",
+        )
+        self.assertEqual(result["md5"], "4" * 32)
+        self.assertEqual(result["filesize"], 100)
+        self.assertEqual(result["download"]["format"], "solder_zip")
+        self.assertEqual(result["download"]["extract_to"], ".")
 
     def test_config_download_remains_a_solder_zip(self):
         selected = package(4, 10, "config-pack")

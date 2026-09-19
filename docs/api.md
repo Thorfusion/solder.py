@@ -231,13 +231,12 @@ The default target is the client and optional packages are excluded. The mods
 are returned in deterministic natural-name order. `java` is a free-form string,
 so complete Java versions such as `1.8.0_51` are preserved unchanged.
 
-When a public Forge build explicitly enables FileDirector for Technic,
-solder.py adds two internal entries named `solderpy-filedirector` and
-`solderpy-filedirector-config`. They use the same standard Technic package
-shape shown above. Build packages assigned to advanced optional groups are
-then delivered by the build's versioned FileDirector bundle instead of being
-duplicated in `mods`. If that integration becomes inactive, the ordinary
-manifest filtering applies again.
+When a public build explicitly enables SolderPy Loader for Technic, solder.py
+adds one internal `solderpy-loader-bootstrap` entry containing SolderPy Loader,
+Relauncher, and the build configuration. `LAUNCHER` and `BOOTSTRAP` entries
+remain in the Technic response; every other package is supplied by the
+dedicated bootstrap API before mod discovery. If that integration becomes
+inactive, ordinary Technic manifest delivery applies again.
 
 `java_runtime` is the nullable per-build Mojang runtime override supported by
 current Technic Launcher releases. Accepted component names are `jre-legacy`
@@ -400,14 +399,15 @@ This additive solder.py endpoint is intended for a dedicated Solder-aware
 bootstrap mod. Unlike the Technic manifest, it returns every target-compatible
 package state (`0` required, `1` optional, and `2` excluded), named advanced
 optional groups, defaults, dependencies, stable download instructions, and
-whether the bootstrap should manage each package. It never substitutes the
-Technic FileDirector compatibility packages for the source group data.
+whether the bootstrap should manage each package. It always returns the source
+build data, even when the normal Technic response delegates delivery to
+SolderPy Loader.
 
-`MOD` packages use their canonical raw `.jar` repository URL and verified JAR
-MD5. Their download instruction uses `format: "jar"` and supplies the target
-path under `mods/`. Non-mod content continues to use its Solder ZIP. A `MOD`
-that has not yet had its raw JAR created returns `422`; use **Create MCIL JAR**
-or upload the version again before exposing that build to a bootstrap client.
+`MOD` packages prefer their canonical raw `.jar` repository URL and verified
+JAR MD5. Their download instruction uses `format: "jar"` and supplies the
+target path under `mods/`. If a legacy mod has no verified raw JAR, its normal
+Solder ZIP is returned instead so the build remains usable, at the cost of ZIP
+extraction during bootstrap. Non-mod content continues to use its Solder ZIP.
 
 The route supports `cid`, `k`, `target`, and `from`, as documented in the
 [dedicated bootstrap API guide](bootstrap-api.md). It returns an `ETag` and
@@ -515,6 +515,13 @@ is unchanged.
 
 ## Metadata values
 
+A mod version may target more than one Minecraft version or modloader. The
+legacy-compatible `minecraft`/`mcversion` and `modloader` fields store those
+sets as comma-separated strings. Extended read manifests, bootstrap manifests,
+and write-API version responses also expose `minecraft_versions` and
+`modloaders` arrays so new clients do not need to parse the storage form. A
+null/empty set remains universal.
+
 `side` is one of:
 
 - `CLIENT`
@@ -527,7 +534,7 @@ is unchanged.
 - `LAUNCHER`
 - `RES`
 - `CONFIG`
-- `MCIL`
+- `BOOTSTRAP`
 - `NONE`
 
 `LAUNCHER` is the legacy Technic modloader/bootstrap package type. Its stored
@@ -539,6 +546,11 @@ entry's repository URL. The build-level `forge` value declares the loader
 version alongside it. MRPack and CurseForge archive exports intentionally
 exclude this Technic-specific package because those launchers install their
 declared loader.
+
+`BOOTSTRAP` identifies an initial downloader/bootstrap package that must be
+installed by the launcher and must not replace itself through the bootstrap
+API. Existing database values named `MCIL` are migrated to `BOOTSTRAP`; MCIL
+remains the name of the MCInstance Loader export format, not a package type.
 
 ## Errors
 

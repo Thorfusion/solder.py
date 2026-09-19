@@ -14,7 +14,7 @@
     </div>
 
     {%if not modpack.optional_mode%}
-    <div class="alert alert-info">This modpack currently uses the basic Required/Optional workflow. Enable advanced mode to create FileDirector and MCIL choices.</div>
+    <div class="alert alert-info">This modpack currently uses the basic Required/Optional workflow. Enable advanced mode to create named downloader choices.</div>
     {%endif%}
 
     <div class="table-responsive">
@@ -82,30 +82,29 @@
 
     <div class="border rounded p-3 mt-4">
         <h3 class="h5">Technic launcher delivery</h3>
-        <p class="text-muted">FileDirector can present the configured groups inside a Technic-launched Forge pack. Only mods assigned to a group are handed to FileDirector; all other packages stay in the normal Solder manifest.</p>
-        {%if technic_filedirector%}
-        <p><span class="badge {%if technic_filedirector_active%}bg-success{%else%}bg-warning text-dark{%endif%}">{%if technic_filedirector_active%}Enabled{%else%}Inactive{%endif%}</span> FileDirector {{technic_filedirector.version}}</p>
-        {%if not distribution_settings.filedirector_enabled%}<div class="alert alert-warning">FileDirector files are disabled in Settings, so Technic manifests currently use normal Solder delivery.</div>{%endif%}
-        {%if not modpack.optional_mode%}<div class="alert alert-warning">This modpack is in Basic optional mode, so Technic manifests currently use normal Solder delivery.</div>{%endif%}
-        {%if not technic_filedirector_active and distribution_settings.filedirector_enabled and modpack.optional_mode%}<div class="alert alert-warning">Activation also requires at least one configured group and a published, public build and modpack.</div>{%endif%}
+        <p class="text-muted">SolderPy Loader can install the build from the bootstrap API before mod discovery. Technic installs only the modloader and the SolderPy Loader bootstrap; SolderPy Loader then handles required files and either basic or advanced optionals.</p>
+        {%if technic_solderpy_loader%}
+        <p><span class="badge {%if technic_solderpy_loader_active%}bg-success{%else%}bg-warning text-dark{%endif%}">{%if technic_solderpy_loader_active%}Enabled{%else%}Inactive{%endif%}</span> SolderPy Loader {{technic_solderpy_loader.version}}</p>
+        {%if not distribution_settings.solderpy_loader_enabled%}<div class="alert alert-warning">SolderPy Loader is disabled in Settings, so Technic manifests currently use normal Solder delivery.</div>{%endif%}
+        {%if not technic_solderpy_loader_active and distribution_settings.solderpy_loader_enabled%}<div class="alert alert-warning">Activation requires a published, public build and modpack.</div>{%endif%}
         <form method="post" action="{{url_for('asite.advanced_optionals', build_id=packbuild.id)}}">
-            <button class="btn btn-danger" type="submit" name="disable_technic_filedirector" value="1">Disable for Technic</button>
+            <button class="btn btn-danger" type="submit" name="disable_technic_solderpy_loader" value="1">Disable for Technic</button>
         </form>
-        {%elif configure_filedirector%}
-            {%if filedirector_error%}<div class="alert alert-warning">{{filedirector_error}}</div>{%endif%}
-            {%if filedirector_releases%}
+        {%elif configure_solderpy_loader%}
+            {%if solderpy_loader_error%}<div class="alert alert-warning">{{solderpy_loader_error}}</div>{%endif%}
+            {%if solderpy_loader_releases%}
             <form method="post" action="{{url_for('asite.advanced_optionals', build_id=packbuild.id)}}">
-                <label class="form-label" for="filedirector_version">FileDirector version</label>
-                <select class="form-select mb-2" id="filedirector_version" name="filedirector_version" required>
-                    {%for release in filedirector_releases%}<option value="{{release.selector}}">{{release.version}}</option>{%endfor%}
+                <label class="form-label" for="solderpy_loader_version">SolderPy Loader version</label>
+                <select class="form-select mb-2" id="solderpy_loader_version" name="solderpy_loader_version" required>
+                    {%for release in solderpy_loader_releases%}<option value="{{release.selector}}">{{release.version}}</option>{%endfor%}
                 </select>
-                <button class="btn btn-success" type="submit" name="enable_technic_filedirector" value="1">Enable for Technic</button>
+                <button class="btn btn-success" type="submit" name="enable_technic_solderpy_loader" value="1">Enable for Technic</button>
             </form>
             {%endif%}
-        {%elif not distribution_settings.filedirector_enabled%}
-        <div class="alert alert-info mb-0">Enable FileDirector files in Settings before configuring Technic delivery.</div>
+        {%elif not distribution_settings.solderpy_loader_enabled%}
+        <div class="alert alert-info mb-0">Enable SolderPy Loader in Settings before configuring Technic delivery.</div>
         {%else%}
-        <a class="btn btn-outline-primary" href="{{url_for('asite.advanced_optionals', build_id=packbuild.id, filedirector='configure')}}">Configure FileDirector for Technic</a>
+        <a class="btn btn-outline-primary" href="{{url_for('asite.advanced_optionals', build_id=packbuild.id, solderpy_loader='configure')}}">Configure SolderPy Loader for Technic</a>
         {%endif%}
     </div>
 </div>
@@ -125,7 +124,7 @@
     <div class="mb-3">
         <label class="form-label" for="optional_group_name">Group name</label>
         <input class="form-control" type="text" name="name" id="optional_group_name" maxlength="255" required>
-        <div class="form-text">Used as the MCIL menu title and, for exactly-one choices, the FileDirector group.</div>
+        <div class="form-text">Used as the downloader menu title; exactly-one choices render as radio groups where supported.</div>
     </div>
     <div class="mb-3">
         <label class="form-label" for="optional_group_description">Description</label>

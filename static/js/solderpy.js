@@ -101,7 +101,10 @@ function buttonpress(id, val) {
 }
 
 function copyformtext(out, input) {
-    document.getElementById(out).value = document.getElementById(input).value;
+    const source = document.getElementById(input);
+    document.getElementById(out).value = source.multiple
+        ? Array.from(source.selectedOptions).map((option) => option.value).filter(Boolean).join(',')
+        : source.value;
 }
 
 

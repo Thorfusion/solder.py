@@ -52,7 +52,7 @@ class AdvancedOptionalGroup:
 
 
 class AdvancedOptional:
-    """Manage named FileDirector/MCIL choices for a build."""
+    """Manage named downloader choices for a build."""
 
     @staticmethod
     def _integer(value, label):
@@ -291,6 +291,7 @@ class AdvancedOptional:
                 )
             if str(membership.get("modtype") or "").upper() in {
                 "LAUNCHER",
+                "BOOTSTRAP",
                 "MCIL",
             }:
                 raise AdvancedOptionalError(
@@ -429,6 +430,7 @@ class AdvancedOptional:
                 raise AdvancedOptionalError("The build mod no longer exists.")
             if listed and str(membership.get("modtype") or "").upper() in {
                 "LAUNCHER",
+                "BOOTSTRAP",
                 "MCIL",
             }:
                 raise AdvancedOptionalError(

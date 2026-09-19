@@ -140,8 +140,8 @@
                                     <input type="hidden" form="upstream_import_{{loop.index}}" name="integration_minecraft" value="{{upstream.game_versions[0]}}">
                                     <span>{{upstream.game_versions[0]}}</span>
                                     {%elif upstream.game_versions%}
-                                    <select class="form-select form-select-sm" form="upstream_import_{{loop.index}}" name="integration_minecraft" aria-label="Minecraft version for {{upstream.name}}" required>
-                                        {%for minecraft in upstream.game_versions%}<option value="{{minecraft}}">{{minecraft}}</option>{%endfor%}
+                                    <select class="form-select form-select-sm" form="upstream_import_{{loop.index}}" name="integration_minecraft" aria-label="Minecraft versions for {{upstream.name}}" multiple required>
+                                        {%for minecraft in upstream.game_versions%}<option value="{{minecraft}}" selected>{{minecraft}}</option>{%endfor%}
                                     </select>
                                     {%else%}
                                     <input class="form-control form-control-sm" form="upstream_import_{{loop.index}}" type="text" name="integration_minecraft" placeholder="Minecraft version" maxlength="255" required>
@@ -152,8 +152,8 @@
                                     <input type="hidden" form="upstream_import_{{loop.index}}" name="integration_modloader" value="{{upstream.loaders[0]}}">
                                     <span>{{upstream.loaders[0]}}</span>
                                     {%elif upstream.loaders%}
-                                    <select class="form-select form-select-sm" form="upstream_import_{{loop.index}}" name="integration_modloader" aria-label="Modloader for {{upstream.name}}" required>
-                                        {%for loader in upstream.loaders%}<option value="{{loader}}">{{loader}}</option>{%endfor%}
+                                    <select class="form-select form-select-sm" form="upstream_import_{{loop.index}}" name="integration_modloader" aria-label="Modloaders for {{upstream.name}}" multiple required>
+                                        {%for loader in upstream.loaders%}<option value="{{loader}}" selected>{{loader}}</option>{%endfor%}
                                     </select>
                                     {%else%}
                                     <select class="form-select form-select-sm" form="upstream_import_{{loop.index}}" name="integration_modloader" aria-label="Modloader for {{upstream.name}}">
@@ -202,12 +202,12 @@
                     <input type="text" class="form-control" name="version" id="version" required>
                 </th>
                 <th scope="col">
-                    <label for="version" class="form-label">MC Version in Database</label>
-                    <input type="text" class="form-control" name="mcversion" id="mcversion" required>
+                    <label for="mcversion" class="form-label">Minecraft versions</label>
+                    <input type="text" class="form-control" name="mcversion" id="mcversion" placeholder="1.20.1,1.20.2" required>
                 </th>
                 <th scope="col">
-                    <label for="modloader" class="form-label">Modloader</label>
-                    <select class="form-select" name="modloader" id="modloader">
+                    <label for="modloader" class="form-label">Modloaders</label>
+                    <select class="form-select" name="modloader" id="modloader" multiple size="6">
                         <option value="">No loader restriction</option>
                         <option value="FORGE">Forge</option>
                         <option value="NEOFORGE">NeoForge</option>
@@ -216,6 +216,7 @@
                         <option value="LITELOADER">LiteLoader</option>
                         <option value="VANILLA">Vanilla</option>
                     </select>
+                    <div class="form-text">Select every compatible loader; no selection supports all.</div>
                 </th>
                 <th scope="col">
                     <label for="md5" class="form-label">md5</label>
@@ -404,9 +405,9 @@
                     </label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="type" id="type_MCIL" value="MCIL" required {% if mod.modtype=="MCIL" %}checked{% endif %}>
-                    <label class="form-check-label" for="type_MCIL">
-                        MCIL
+                    <input class="form-check-input" type="radio" name="type" id="type_BOOTSTRAP" value="BOOTSTRAP" required {% if mod.modtype in ["BOOTSTRAP", "MCIL"] %}checked{% endif %}>
+                    <label class="form-check-label" for="type_BOOTSTRAP">
+                        BOOTSTRAP
                     </label>
                 </div>
                 <div class="form-check">

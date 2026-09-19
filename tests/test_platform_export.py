@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 import zipfile
 
 from tests.environment import configure_test_environment
@@ -14,14 +14,16 @@ from tests.environment import configure_test_environment
 
 configure_test_environment()
 
-from models.integration import ExternalVersion  # noqa: E402
+from models.integration import ExternalVersion, IntegrationError  # noqa: E402
 from models.mcinstance import MCInstanceBuild, MCInstancePackage  # noqa: E402
 from models.platform_export import (  # noqa: E402
     CurseForgeDownloaderAPI,
     CurseForgeFile,
+    DownloaderRelease,
     NativeModrinthFile,
     PlatformExportError,
     PlatformPackExport,
+    SelectedDownloader,
 )
 
 
@@ -181,6 +183,14 @@ def overridden_package():
 
 def downloader_version(project_id, version_id):
     versions = {
+        ("5LpwENAj", "loader-version"): (
+            "0.1.0",
+            "solderpy-loader-0.1.0.jar",
+        ),
+        ("zCFNaupz", "relauncher-version"): (
+            "1.1.1",
+            "relauncher-universal-1.1.1.jar",
+        ),
         ("cUtsYbG5", "6Qimuf4A"): ("2.7", "mcinstanceloader-2.7.jar"),
         ("cUtsYbG5", "ett5hobb"): ("2.6", "mcinstanceloader-2.6.jar"),
         ("4dRu1OUz", "V3i1l5tv"): (
@@ -211,6 +221,8 @@ def downloader_version(project_id, version_id):
 
 def curseforge_file(project_id, file_id):
     names = {
+        (1702825, 7000000): "SolderPy Loader 0.1.0",
+        (1491728, 7100000): "Relauncher 1.1.1",
         (576287, 4920730): "1.7.10 - 2.7",
         (576287, 4428492): "1.7.10-2.6",
         (650242, 6436962): "1.9.1",
@@ -303,6 +315,89 @@ class PlatformPackExportTests(unittest.TestCase):
         with self.assertRaisesRegex(PlatformExportError, "CURSEFORGE_API_KEY"):
             CurseForgeDownloaderAPI(None)
 
+    def test_solderpy_loader_export_contains_runtime_and_api_config(self):
+        loader_body = b"solderpy loader"
+        runtime_body = b"relauncher"
+
+        def native_file(project_id, version_id, filename, body):
+            return NativeModrinthFile(
+                project_id=project_id,
+                version_id=version_id,
+                filename=filename,
+                download_url=(
+                    f"https://cdn.modrinth.com/data/{project_id}/versions/"
+                    f"{version_id}/{filename}"
+                ),
+                sha1=hashlib.sha1(body, usedforsecurity=False).hexdigest(),
+                sha512=hashlib.sha512(body).hexdigest(),
+                size=len(body),
+            )
+
+        selected = SelectedDownloader(
+            PlatformPackExport.downloader_spec("solderpyloader"),
+            DownloaderRelease(
+                selector="loader-version",
+                version="0.1.0",
+                default=True,
+                modrinth=native_file(
+                    "5LpwENAj", "loader-version", "loader.jar", loader_body
+                ),
+                modrinth_dependencies=(
+                    native_file(
+                        "zCFNaupz",
+                        "runtime-version",
+                        "relauncher.jar",
+                        runtime_body,
+                    ),
+                ),
+            ),
+        )
+        with patch.object(
+            PlatformPackExport,
+            "resolve_downloader",
+            return_value=selected,
+        ) as resolve:
+            archive = PlatformPackExport.render_solderpy_loader(
+                build(),
+                "solderpyloader:loader-version",
+                APPLICATION,
+                selector="recommended",
+                http=FakeHTTP(
+                    [
+                        FakeResponse(None, body=loader_body),
+                        FakeResponse(None, body=runtime_body),
+                    ]
+                ),
+            )
+
+        with archive, zipfile.ZipFile(archive) as result:
+            self.assertEqual(
+                set(result.namelist()),
+                {
+                    "mods/!solderpy-loader.jar",
+                    "mods/!relauncher.jar",
+                    "config/solderpy-loader.json",
+                },
+            )
+            self.assertEqual(
+                result.read("mods/!solderpy-loader.jar"), loader_body
+            )
+            self.assertEqual(
+                result.read("mods/!relauncher.jar"),
+                runtime_body,
+            )
+            config = json.loads(result.read("config/solderpy-loader.json"))
+        self.assertEqual(config["api"], "https://solder.example.test/api/")
+        self.assertEqual(config["modpack"], "example-pack")
+        self.assertEqual(config["build"], "recommended")
+        resolve.assert_called_once_with(
+            "solderpyloader:loader-version",
+            ANY,
+            "modrinth",
+            required=True,
+            http=ANY,
+        )
+
     def test_mrpack_routes_native_modrinth_and_solder_fallback_separately(self):
         with patch(
             "models.platform_export.ModrinthProvider.get_versions",
@@ -351,6 +446,66 @@ class PlatformPackExportTests(unittest.TestCase):
             "4dRu1OUz", "V3i1l5tv", "1.7.10", "FORGE"
         )
 
+    def test_mrpack_can_bootstrap_solderpy_loader_from_api(self):
+        with patch(
+            "models.platform_export.ModrinthProvider.list_versions",
+            return_value=[
+                downloader_version("zCFNaupz", "relauncher-version")
+            ],
+        ):
+            archive = PlatformPackExport.render_mrpack(
+                build(),
+                [package()],
+                "solderpyloader:loader-version",
+                REPOSITORY,
+                "./mods/",
+                APPLICATION,
+                source_mode="solder",
+                selector="recommended",
+            )
+
+        with archive, zipfile.ZipFile(archive) as result:
+            index = json.loads(result.read("modrinth.index.json"))
+            config = json.loads(
+                result.read("overrides/config/solderpy-loader.json")
+            )
+
+        self.assertEqual(
+            [entry["path"] for entry in index["files"]],
+            [
+                "mods/solderpy-loader-0.1.0.jar",
+                "mods/relauncher-universal-1.1.1.jar",
+            ],
+        )
+        self.assertEqual(
+            config,
+            {
+                "enabled": True,
+                "api": "https://solder.example.test/api/",
+                "modpack": "example-pack",
+                "build": "recommended",
+                "target": "auto",
+            },
+        )
+
+    def test_solderpy_loader_rejects_hybrid_source(self):
+        with patch(
+            "models.platform_export.ModrinthProvider.list_versions",
+            return_value=[
+                downloader_version("zCFNaupz", "relauncher-version")
+            ],
+        ):
+            with self.assertRaisesRegex(PlatformExportError, "Solder-only"):
+                PlatformPackExport.render_mrpack(
+                    build(),
+                    [package()],
+                    "solderpyloader:loader-version",
+                    REPOSITORY,
+                    "./mods/",
+                    APPLICATION,
+                    source_mode="hybrid",
+                )
+
     def test_curseforge_manifest_contains_only_the_downloader(self):
         archive = PlatformPackExport.render_curseforge(
             build(),
@@ -384,6 +539,38 @@ class PlatformPackExportTests(unittest.TestCase):
             "https://solder.example.test/filedirector/example-pack/2.0/"
             "mods.bundle.json",
         )
+
+    def test_curseforge_solderpy_loader_includes_relauncher(self):
+        with patch(
+            "models.platform_export.CurseForgeDownloaderAPI.list_files",
+            return_value=(curseforge_file(1491728, 7100000),),
+        ):
+            archive = PlatformPackExport.render_curseforge(
+                build(),
+                [package()],
+                "solderpyloader:7000000",
+                REPOSITORY,
+                "./mods/",
+                APPLICATION,
+                curseforge_api_key="test-key",
+                source_mode="solder",
+                selector="latest",
+            )
+
+        with archive, zipfile.ZipFile(archive) as result:
+            manifest = json.loads(result.read("manifest.json"))
+            config = json.loads(
+                result.read("overrides/config/solderpy-loader.json")
+            )
+
+        self.assertEqual(
+            manifest["files"],
+            [
+                {"projectID": 1702825, "fileID": 7000000, "required": True},
+                {"projectID": 1491728, "fileID": 7100000, "required": True},
+            ],
+        )
+        self.assertEqual(config["build"], "latest")
 
     def test_curseforge_can_bootstrap_official_modpack_director(self):
         archive = PlatformPackExport.render_curseforge(
@@ -735,10 +922,10 @@ class PlatformPackExportTests(unittest.TestCase):
             )
 
     def test_config_delivery_uses_downloader_capabilities(self):
-        mcil = PlatformPackExport._downloader(
+        mcil = PlatformPackExport.resolve_downloader(
             "mcil:4920730", build(), "curseforge", curseforge_api_key="test-key"
         )
-        filedirector = PlatformPackExport._downloader(
+        filedirector = PlatformPackExport.resolve_downloader(
             "filedirector:6436962",
             build(),
             "curseforge",
@@ -964,6 +1151,46 @@ class PlatformPackExportTests(unittest.TestCase):
         self.assertNotIn(".minecraft/config/manual-mod.cfg", names)
         self.assertTrue(bundle["url"][0]["url"].startswith(REPOSITORY))
 
+    def test_prism_solderpy_loader_bundles_relauncher(self):
+        def write_downloader(target, _file, destination, **_kwargs):
+            target.writestr(destination, b"bootstrap jar")
+
+        with (
+            patch(
+                "models.platform_export.ModrinthProvider.list_versions",
+                return_value=[
+                    downloader_version("zCFNaupz", "relauncher-version")
+                ],
+            ),
+            patch.object(
+                PlatformPackExport,
+                "_write_native_file",
+                side_effect=write_downloader,
+            ),
+        ):
+            archive = PlatformPackExport.render_prism(
+                build(),
+                [package()],
+                REPOSITORY,
+                "./mods/",
+                downloader="solderpyloader:loader-version",
+                application_url=APPLICATION,
+                source_mode="solder",
+            )
+
+        with archive, zipfile.ZipFile(archive) as result:
+            names = set(result.namelist())
+
+        self.assertIn(
+            ".minecraft/mods/solderpy-loader-0.1.0.jar", names
+        )
+        self.assertIn(
+            ".minecraft/mods/relauncher-universal-1.1.1.jar", names
+        )
+        self.assertIn(
+            ".minecraft/config/solderpy-loader.json", names
+        )
+
     def test_prism_mcil_export_contains_bootstrap_and_nested_config(self):
         def write_downloader(target, _file, destination, **_kwargs):
             target.writestr(destination, b"mcil jar")
@@ -1078,6 +1305,12 @@ class PlatformPackExportTests(unittest.TestCase):
 
     def test_modrinth_downloader_versions_are_loaded_from_the_api(self):
         def versions(project_id, _minecraft, _loader):
+            if project_id == "5LpwENAj":
+                return [downloader_version(project_id, "loader-version")]
+            if project_id == "zCFNaupz":
+                return [
+                    downloader_version(project_id, "relauncher-version")
+                ]
             if project_id == "cUtsYbG5":
                 return [
                     downloader_version(project_id, "6Qimuf4A"),
@@ -1100,15 +1333,58 @@ class PlatformPackExportTests(unittest.TestCase):
                 for release in downloader.releases
             ],
             [
+                ("solderpyloader", "loader-version", "0.1.0"),
                 ("mcil", "6Qimuf4A", "2.7"),
                 ("mcil", "ett5hobb", "2.6"),
                 ("filedirector", "V3i1l5tv", "1.9.1"),
             ],
         )
-        self.assertEqual(list_versions.call_count, 2)
+        self.assertEqual(list_versions.call_count, 4)
+
+    def test_unavailable_modrinth_downloader_does_not_hide_other_families(self):
+        solderpy_loader = PlatformPackExport.downloader_spec("solderpyloader")
+        mcil = PlatformPackExport.downloader_spec("mcil")
+
+        def versions(project_id, _minecraft, _loader):
+            if project_id == "5LpwENAj":
+                raise IntegrationError("project is not public")
+            return [downloader_version(project_id, "6Qimuf4A")]
+
+        with patch(
+            "models.platform_export.ModrinthProvider.list_versions",
+            side_effect=versions,
+        ):
+            available = PlatformPackExport.available_downloaders(
+                build(),
+                "modrinth",
+                specs=(solderpy_loader, mcil),
+            )
+
+        self.assertEqual([downloader.key for downloader in available], ["mcil"])
+
+    def test_single_unavailable_modrinth_downloader_still_reports_error(self):
+        solderpy_loader = PlatformPackExport.downloader_spec("solderpyloader")
+
+        with (
+            patch(
+                "models.platform_export.ModrinthProvider.list_versions",
+                side_effect=IntegrationError("project is not public"),
+            ),
+            self.assertRaisesRegex(
+                PlatformExportError,
+                "SolderPy Loader downloader versions could not be loaded",
+            ),
+        ):
+            PlatformPackExport.available_downloaders(
+                build(), "modrinth", specs=(solderpy_loader,)
+            )
 
     def test_curseforge_downloader_versions_are_loaded_from_the_api(self):
         def files(project_id, _minecraft, _loader):
+            if project_id == 1702825:
+                return (curseforge_file(project_id, 7000000),)
+            if project_id == 1491728:
+                return (curseforge_file(project_id, 7100000),)
             if project_id == 576287:
                 return (
                     curseforge_file(project_id, 4920730),
@@ -1133,13 +1409,14 @@ class PlatformPackExportTests(unittest.TestCase):
                 for release in downloader.releases
             ],
             [
+                ("solderpyloader", "7000000"),
                 ("mcil", "4920730"),
                 ("mcil", "4428492"),
                 ("filedirector", "6436962"),
                 ("modpackdirector", "5071845"),
             ],
         )
-        self.assertEqual(list_files.call_count, 3)
+        self.assertEqual(list_files.call_count, 5)
 
     def test_selected_downloader_version_controls_curseforge_file(self):
         with patch(

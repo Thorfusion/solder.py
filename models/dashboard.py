@@ -222,10 +222,12 @@ class Dashboard:
                               SELECT 1 FROM modversions candidate
                               WHERE candidate.mod_id = current_version.mod_id
                                 AND candidate.id > current_version.id
-                                AND (candidate.mcversion = builds.minecraft
+                                AND (FIND_IN_SET(builds.minecraft,
+                                                 candidate.mcversion) > 0
                                      OR candidate.mcversion IS NULL)
                                 AND (builds.modloader IS NULL
-                                     OR candidate.modloader = builds.modloader
+                                     OR FIND_IN_SET(builds.modloader,
+                                                    candidate.modloader) > 0
                                      OR candidate.modloader IS NULL)
                           )""",
                     params,
@@ -401,18 +403,18 @@ class Dashboard:
                     """SELECT COUNT(*) AS item_count
                        FROM modversions
                        INNER JOIN mods ON modversions.mod_id = mods.id
-                       WHERE mods.modtype = 'MCIL'
+                       WHERE mods.modtype = 'BOOTSTRAP'
                          AND (modversions.jarmd5 IS NULL
                               OR modversions.jarmd5 NOT REGEXP
                                   '^[0-9A-Fa-f]{32}$')"""
                 )
-                mcil = cur.fetchone() or {}
-                if mcil.get("item_count"):
+                bootstrap = cur.fetchone() or {}
+                if bootstrap.get("item_count"):
                     data["attention"].append(
                         {
-                            "title": "MCIL packages need JAR data",
+                            "title": "Bootstrap packages need JAR data",
                             "detail": (
-                                f"{mcil['item_count']} MCIL mod version(s) are "
+                                f"{bootstrap['item_count']} bootstrap version(s) are "
                                 "not ready for direct JAR installation"
                             ),
                         }

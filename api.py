@@ -12,6 +12,7 @@ from models.common import (
     solderpy_version,
     write_api,
 )
+from models.compatibility import compatibility_values
 from models.api_token import ApiToken
 from models.bootstrap_manifest import (
     BOOTSTRAP_SCHEMA_VERSION,
@@ -22,8 +23,8 @@ from models.key import Key
 from models.mod import Mod
 from models.mod_dependency import ModDependency
 from models.modpack import Modpack
-from models.advanced_optional import ADVANCED_MODE, AdvancedOptional
-from models.technic_filedirector import TechnicFileDirector
+from models.advanced_optional import AdvancedOptional
+from models.technic_solderpy_loader import TechnicSolderPyLoader
 
 api = Blueprint("api", __name__)
 _api_caches = []
@@ -201,8 +202,22 @@ def _mod_manifest_entry(
                 "side": getattr(modversion, "side", "BOTH"),
                 "type": getattr(modversion, "modtype", "MOD"),
                 "modtype": getattr(modversion, "modtype", "MOD"),
+                "minecraft": _optional_string_attribute(
+                    getattr(modversion, "mcversion", None)
+                ),
                 "modloader": _optional_string_attribute(
                     getattr(modversion, "modloader", None)
+                ),
+                "minecraft_versions": list(
+                    compatibility_values(
+                        getattr(modversion, "mcversion", None)
+                    )
+                ),
+                "modloaders": list(
+                    compatibility_values(
+                        getattr(modversion, "modloader", None),
+                        modloaders=True,
+                    )
                 ),
                 "optional": int(getattr(modversion, "optional", 0) or 0) == 1,
                 "dependencies": dependencies or [],
@@ -226,33 +241,23 @@ def _mod_manifest_entries(modversions, build_id, expanded=False, extended=False)
     ]
 
 
-def _technic_filedirector_manifest(
+def _technic_solderpy_loader_manifest(
     modversions, build, modpack, *, target, expanded=False, extended=False
 ):
-    """Delegate configured advanced choices without changing other builds."""
-    if (
-        target != "client"
-        or getattr(modpack, "optional_mode", 0) != ADVANCED_MODE
-    ):
+    """Let SolderPy Loader own packages for one configured Technic build."""
+    if target != "client":
         return modversions, []
-    configuration = TechnicFileDirector.get_active(build.id)
+    configuration = TechnicSolderPyLoader.get_active(build.id)
     if configuration is None:
         return modversions, []
-    groups = AdvancedOptional.get_active_groups(build.id)
-    managed_memberships = {
-        item.build_modversion_id
-        for group in groups
-        for item in group.items
-    }
+    # Technic must still install its modloader and the initial bootstrap. The
+    # loader fetches every other package from the dedicated bootstrap API, so
+    # leaving normal entries here would install and update them twice.
     retained = [
         modversion
         for modversion in modversions
-        if (
-            getattr(modversion, "membership_id", None)
-            not in managed_memberships
-            or str(getattr(modversion, "modtype", "") or "").upper()
-            in {"LAUNCHER", "MCIL"}
-        )
+        if str(getattr(modversion, "modtype", "") or "").upper()
+        in {"LAUNCHER", "BOOTSTRAP", "MCIL"}
     ]
     return retained, configuration.manifest_entries(
         public_repo_url, expanded=expanded, extended=extended
@@ -439,7 +444,7 @@ def modpack_slug_build(slugstring: str, buildstring: str):
     modversions = build.get_modversions_api(
         target=target, include_optional=include_optional
     )
-    modversions, filedirector_entries = _technic_filedirector_manifest(
+    modversions, bootstrap_entries = _technic_solderpy_loader_manifest(
         modversions,
         build,
         current_modpack,
@@ -450,7 +455,7 @@ def modpack_slug_build(slugstring: str, buildstring: str):
     moddata = _mod_manifest_entries(
         modversions, build.id, expanded=expanded, extended=extended
     )
-    moddata.extend(filedirector_entries)
+    moddata.extend(bootstrap_entries)
     manifest = {
         "id": build.id,
         "minecraft": build.minecraft,
@@ -488,8 +493,8 @@ def modpack_slug_build(slugstring: str, buildstring: str):
         previous_versions = previous_build.get_modversions_api(
             target=target, include_optional=include_optional
         )
-        previous_versions, previous_filedirector_entries = (
-            _technic_filedirector_manifest(
+        previous_versions, previous_bootstrap_entries = (
+            _technic_solderpy_loader_manifest(
                 previous_versions,
                 previous_build,
                 current_modpack,
@@ -504,7 +509,7 @@ def modpack_slug_build(slugstring: str, buildstring: str):
             expanded=expanded,
             extended=True,
         )
-        previous_data.extend(previous_filedirector_entries)
+        previous_data.extend(previous_bootstrap_entries)
         manifest["changes"] = _manifest_changes(
             previous_data, moddata, previous_build.version, build.version
         )
@@ -519,7 +524,7 @@ def modpack_slug_build(slugstring: str, buildstring: str):
 def modpack_bootstrap(slugstring: str, buildstring: str):
     """Return the complete build model for a dedicated bootstrap client.
 
-    This deliberately does not use the Technic/FileDirector transformation:
+    This deliberately does not use the Technic/SolderPy Loader transformation:
     a Solder-aware client needs every stored package and the source advanced
     selection rules so that it can make the choice itself.
     """

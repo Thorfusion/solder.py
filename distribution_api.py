@@ -223,7 +223,6 @@ def _director_bundle(pack_slug, selector, bundle_name, setting):
         "required",
         "optional",
         "modrinth-fallback",
-        "technic",
     }:
         abort(404)
     build = _load_build(pack_slug, selector)
@@ -236,9 +235,8 @@ def _director_bundle(pack_slug, selector, bundle_name, setting):
             "required": False,
             "optional": True,
             "modrinth-fallback": None,
-            "technic": None,
         }[bundle_name]
-        if bundle_name in {"mods", "modrinth-fallback", "technic"}:
+        if bundle_name in {"mods", "modrinth-fallback"}:
             packages = DistributionExport.load_packages(
                 build.id, optional=optional, include_excluded=True
             )
@@ -256,17 +254,6 @@ def _director_bundle(pack_slug, selector, bundle_name, setting):
         optional_groups = AdvancedOptional.get_active_groups_for_packages(
             build.id, packages
         )
-        if bundle_name == "technic":
-            membership_ids = {
-                item.build_modversion_id
-                for group in optional_groups
-                for item in group.items
-            }
-            packages = [
-                package
-                for package in packages
-                if package.membership_id in membership_ids
-            ]
         native_files = (
             PlatformPackExport.native_modrinth_files(build, packages)
             if source == "hybrid"
@@ -316,7 +303,6 @@ def _director_remote(pack_slug, selector, bundle_name, setting, bundle_endpoint)
         "required",
         "optional",
         "modrinth-fallback",
-        "technic",
     }:
         abort(404)
     build = _load_build(pack_slug, selector)

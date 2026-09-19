@@ -39,8 +39,8 @@ replace the core Technic records with a new proprietary pack model.
 
 ### Minecraft and modloader-aware versions
 
-A mod version can target a Minecraft version and a modloader. A blank value is
-universal. Build selectors, required dependencies, provider imports, and
+A mod version can target one or more comma-separated Minecraft versions and
+modloaders. A blank value is universal. Build selectors, required dependencies, provider imports, and
 **Update all mods** use this compatibility metadata instead of offering every
 version of a mod to every build.
 

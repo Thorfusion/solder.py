@@ -280,7 +280,7 @@ class DistributionExport:
         except DistributionExportError as error:
             raise DistributionExportError(
                 "APP_URL must be configured as the public solder.py HTTP or "
-                "HTTPS URL before exporting a remote FileDirector config."
+                "HTTPS URL before exporting remote configuration."
             ) from error
 
     @classmethod
@@ -421,7 +421,7 @@ class PackwizExport:
 class FileDirectorExport:
     """Render FileDirector URL bundles and remote config pointers."""
 
-    EXCLUDED_TYPES = {"MCIL", "LAUNCHER"}
+    EXCLUDED_TYPES = {"BOOTSTRAP", "MCIL", "LAUNCHER"}
 
     @classmethod
     def bundle(

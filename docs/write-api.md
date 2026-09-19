@@ -76,7 +76,9 @@ when supplied and may contain mod IDs or slugs.
 
 Create-version requests require `version` and a 32-character `md5`. They may
 include `filesize`, `mcversion`, `modloader`, and the raw-JAR `jarmd5`. solder.py
-does not use mod-version notes.
+does not use mod-version notes. `mcversion` and `modloader` accept either one
+value, a comma-separated string, or a JSON array. Version responses retain the
+string fields and add `minecraft_versions` and `modloaders` arrays.
 
 Adding a build mod uses the Technic fields `mod_slug` and `mod_version` and may
 also include `optional`. Compatibility is enforced against the build's exact

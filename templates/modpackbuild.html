@@ -29,7 +29,7 @@
                 </td>
                 <td>
                     {%if optional_mode == 1%}
-                    {%if combo.modtype in ['LAUNCHER', 'MCIL']%}<span class="text-muted" title="Modloader and downloader packages are not advanced choices">&mdash;</span>{%else%}
+                    {%if combo.modtype in ['LAUNCHER', 'BOOTSTRAP', 'MCIL']%}<span class="text-muted" title="Modloader and bootstrap packages are not advanced choices">&mdash;</span>{%else%}
                     <input class="form-check-input" type="checkbox" value="" id="advanced_optional_{{combo.id}}" aria-label="List {{combo.pretty_name}} in advanced optional page" onclick="submitecheckedpress('optional_modid', '{{combo.id}}', 'optional_check', 'advanced_optional_{{combo.id}}', 'optional_submit')" {%if combo.advanced_listed%}checked{%endif%}>
                     {%endif%}
                     {%else%}
@@ -125,6 +125,15 @@
                     <form method="get" id="export_modpack_form">
                         {{export_settings(packbuild)}}
 
+                        {%if distribution_settings.solderpy_loader_enabled%}
+                        <div class="border-top pt-3">
+                        <h6>SolderPy Loader</h6>
+                        {%if solderpy_loader_downloader_error%}<div class="alert alert-warning" role="alert">{{solderpy_loader_downloader_error}}</div>{%endif%}
+                        {{downloader_select('solderpy_loader_downloader', 'solderpy_loader_downloader', 'SolderPy Loader version', solderpy_loader_downloaders)}}
+                        <div class="form-text mb-2">Exports the verified Loader and Relauncher JARs with this build's Solder API configuration.</div>
+                        </div>
+                        {%endif%}
+
                         {%if distribution_settings.mrpack_enabled%}
                         <div class="border-top pt-3">
                         <h6>Modrinth fallback</h6>
@@ -152,6 +161,7 @@
 
                         <div class="border-top pt-3 d-flex flex-wrap gap-2">
                             <button class="btn btn-secondary" type="submit" formaction="{{url_for('asite.export_build_csv', id=packbuild.id)}}">Export CSV</button>
+                            {%if distribution_settings.solderpy_loader_enabled%}<button class="btn btn-secondary" type="submit" formaction="{{url_for('asite.export_solderpy_loader', id=packbuild.id)}}">Export SolderPy Loader</button>{%endif%}
                             {%if distribution_settings.mcil_enabled%}<button class="btn btn-secondary" type="submit" formaction="{{url_for('asite.export_mcinstance', id=packbuild.id)}}">Export MCIL</button>{%endif%}
                             {%if distribution_settings.filedirector_enabled%}<button class="btn btn-secondary" type="submit" formaction="{{url_for('asite.export_filedirector', id=packbuild.id)}}">Export FileDirector</button>{%endif%}
                             {%if distribution_settings.modpack_director_enabled%}<button class="btn btn-secondary" type="submit" formaction="{{url_for('asite.export_modpack_director', id=packbuild.id)}}">Export Modpack Director</button>{%endif%}

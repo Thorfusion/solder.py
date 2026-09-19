@@ -127,6 +127,18 @@
         </div>
         <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" role="switch"
+                id="solderpy_loader_enabled" name="solderpy_loader_enabled"
+                {% if distribution_settings.solderpy_loader_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="solderpy_loader_enabled">
+                Enable SolderPy Loader
+            </label>
+            <div class="form-text">
+                Makes SolderPy Loader available for Technic delivery and as a
+                Modrinth, CurseForge, or Prism bootstrap using the dedicated API.
+            </div>
+        </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
                 id="packwiz_enabled" name="packwiz_enabled"
                 {% if distribution_settings.packwiz_enabled %}checked{% endif %}>
             <label class="form-check-label" for="packwiz_enabled">
