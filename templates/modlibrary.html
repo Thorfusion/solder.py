@@ -1,4 +1,4 @@
-{%extends "layout.html"%}
+{%extends "layout.html"%} {%from "_badges.html" import integration_badge, modtype_badge%}
 {% set active_page = "modlibrary" %}
 {%block head%}
 <title>solder.py</title>
@@ -25,9 +25,8 @@
         <td class="tablewidthid">{{mod.id}}</td>
         <td class="tablemaxwidth tablewidth70">
           {{mod.pretty_name}} ({{mod.name}})
-          {%if mod.integration_provider%}
-          <span class="badge bg-info text-dark">{{mod.integration_label}}</span>
-          {%endif%}
+          {{modtype_badge(mod.modtype)}}
+          {{integration_badge(mod.integration_provider, mod.integration_label)}}
         </td>
         <td class="tablemaxwidth tablewidth30">{{mod.author}}</td>
         <td>
@@ -75,7 +74,7 @@
     <div class="form-check">
       <input class="form-check-input" type="radio" name="filetype" id="filetypelauncher" readonly onclick="return false">
       <label class="form-check-label" for="filetypelauncher">
-        Launcher
+        Launcher (modloader)
       </label>
     </div>
     <div class="form-check">

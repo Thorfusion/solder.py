@@ -1,0 +1,7 @@
+{% macro integration_badge(provider, label) -%}
+{% if provider %}<span class="badge {% if provider|upper == 'MODRINTH' %}bg-success{% else %}bg-info text-dark{% endif %}">{{label or provider|title}}</span>{% endif %}
+{%- endmacro %}
+
+{% macro modtype_badge(modtype) -%}
+<span class="badge bg-secondary">{% if modtype|upper == 'LAUNCHER' %}LAUNCHER (MODLOADER){% else %}{{modtype or 'NONE'}}{% endif %}</span>
+{%- endmacro %}

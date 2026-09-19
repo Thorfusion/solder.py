@@ -48,6 +48,20 @@ class MCInstanceBuild:
     modpack_name: str
     modpack_slug: str
     modloader: str | None = None
+    is_published: bool = False
+    private: bool = False
+
+    @property
+    def pack_name(self):
+        return self.modpack_name
+
+    @property
+    def pack_slug(self):
+        return self.modpack_slug
+
+    @property
+    def modloader_version(self):
+        return self.forge
 
 
 @dataclass(frozen=True)
@@ -62,8 +76,49 @@ class MCInstancePackage:
     side: str
     modtype: str
     optional: bool
+    optional_state: int = 0
+    membership_id: int | None = None
     modloader: str | None = None
     minecraft: str | None = None
+    integration_provider: str | None = None
+    integration_project_id: str | None = None
+    integration_version_id: str | None = None
+
+    @property
+    def mod_slug(self):
+        return self.name
+
+    @property
+    def zip_md5(self):
+        return self.md5
+
+    @property
+    def jar_md5(self):
+        return self.jarmd5
+
+    @property
+    def jar_ready(self):
+        return bool(
+            str(self.modtype or "").upper() == "MOD"
+            and _MD5_RE.fullmatch(str(self.jarmd5 or "").strip())
+        )
+
+    @property
+    def jar_filename(self):
+        return f"{self.name}-{self.version}.jar"
+
+    @property
+    def zip_filename(self):
+        return f"{self.name}-{self.version}.zip"
+
+    @property
+    def is_native_modrinth(self) -> bool:
+        return bool(
+            str(self.modtype or "").upper() == "MOD"
+            and str(self.integration_provider or "").upper() == "MODRINTH"
+            and self.integration_project_id
+            and self.integration_version_id
+        )
 
 
 class MCInstanceJar:
@@ -225,6 +280,8 @@ class MCInstanceExport:
                           builds.minecraft,
                           builds.forge,
                           builds.modloader AS build_modloader,
+                          builds.is_published,
+                          builds.private,
                           modpacks.id AS modpack_id,
                           modpacks.name AS modpack_name,
                           modpacks.slug AS modpack_slug,
@@ -234,12 +291,16 @@ class MCInstanceExport:
                           mods.description,
                           mods.side,
                           mods.modtype,
+                          mods.integration_provider,
+                          mods.integration_project_id,
+                          build_modversion.id AS membership_id,
                           modversions.version AS mod_version,
                           modversions.mcversion AS mod_minecraft,
                           modversions.md5,
                           modversions.jarmd5,
-                          modversions.modloader,
-                          build_modversion.optional
+                           modversions.modloader,
+                           modversions.integration_version_id,
+                           build_modversion.optional
                    FROM builds
                    INNER JOIN modpacks ON builds.modpack_id = modpacks.id
                    LEFT JOIN build_modversion
@@ -271,6 +332,8 @@ class MCInstanceExport:
             modloader=first.get("build_modloader") or (
                 "FORGE" if first["forge"] else None
             ),
+            is_published=bool(first.get("is_published")),
+            private=bool(first.get("private")),
         )
         packages = [
             MCInstancePackage(
@@ -283,9 +346,14 @@ class MCInstanceExport:
                 jarmd5=row["jarmd5"],
                 side=row["side"] or "BOTH",
                 modtype=row["modtype"] or "MOD",
-                optional=bool(row["optional"]),
+                optional=int(row["optional"] or 0) == 1,
+                optional_state=int(row["optional"] or 0),
+                membership_id=row.get("membership_id"),
                 modloader=row.get("modloader"),
                 minecraft=row.get("mod_minecraft"),
+                integration_provider=row.get("integration_provider"),
+                integration_project_id=row.get("integration_project_id"),
+                integration_version_id=row.get("integration_version_id"),
             )
             for row in rows
             if row["mod_id"] is not None
@@ -295,15 +363,38 @@ class MCInstanceExport:
     @classmethod
     def create(cls, build_id, public_repo_url, local_repo_root="./mods/"):
         build, packages = cls.load(build_id)
-        return cls.render(build, packages, public_repo_url, local_repo_root)
+        from .advanced_optional import AdvancedOptional
+
+        return cls.render(
+            build,
+            packages,
+            public_repo_url,
+            local_repo_root,
+            optional_groups=AdvancedOptional.get_active_groups(build_id),
+        )
 
     @classmethod
-    def render(cls, build, packages, public_repo_url, local_repo_root="./mods/"):
+    def render(
+        cls,
+        build,
+        packages,
+        public_repo_url,
+        local_repo_root="./mods/",
+        *,
+        include_modloader=True,
+        native_files=None,
+        optional_groups=(),
+    ):
         if not public_repo_url:
             raise MCInstanceExportError(
                 "PUBLIC_REPO_LOCATION must be configured before exporting MCInstance files."
             )
 
+        native_files = native_files or {}
+        grouped_items = {}
+        for group in optional_groups or ():
+            for item in group.items:
+                grouped_items[item.build_modversion_id] = (group, item)
         archive_buffer = tempfile.SpooledTemporaryFile(
             max_size=_SPOOL_MEMORY_LIMIT,
             mode="w+b",
@@ -323,7 +414,10 @@ class MCInstanceExport:
             with zipfile.ZipFile(
                 archive_buffer, "w", compression=zipfile.ZIP_DEFLATED
             ) as target:
-                target.writestr("metadata.packconfig", cls._metadata(build))
+                target.writestr(
+                    "metadata.packconfig",
+                    cls._metadata(build, include_modloader=include_modloader),
+                )
                 for directory in (
                     "overrides/",
                     "client-overrides/",
@@ -332,6 +426,16 @@ class MCInstanceExport:
                     target.writestr(directory, b"")
 
                 for package in packages:
+                    grouped = grouped_items.get(
+                        getattr(package, "membership_id", None)
+                    )
+                    optional_choice = package.optional or grouped is not None
+                    if (
+                        int(getattr(package, "optional_state", int(package.optional)))
+                        == 2
+                        and grouped is None
+                    ):
+                        continue
                     modtype = package.modtype.upper()
                     if modtype in {"MCIL", "LAUNCHER"}:
                         continue
@@ -347,7 +451,7 @@ class MCInstanceExport:
                             "with the build's modloader."
                         )
 
-                    if package.optional and cls._side(package.side) == "SERVER":
+                    if optional_choice and cls._side(package.side) == "SERVER":
                         raise MCInstanceExportError(
                             f'Optional package "{package.pretty_name}" is server-only. '
                             "MCInstanceLoader 2.7 only presents optional choices on clients."
@@ -362,13 +466,15 @@ class MCInstanceExport:
                                 resource_name,
                                 raw_hash,
                                 public_repo_url,
+                                native_files.get(package.integration_version_id),
+                                optional=optional_choice,
                             )
                         )
-                        if package.optional:
-                            optionals.append((package, resource_name))
+                        if optional_choice:
+                            optionals.append((package, resource_name, grouped))
                         continue
 
-                    if package.optional:
+                    if optional_choice:
                         raise MCInstanceExportError(
                             f'Optional package "{package.pretty_name}" needs a verified raw JAR. '
                             "MCInstanceLoader cannot toggle the contents of a bundled Solder ZIP."
@@ -383,7 +489,10 @@ class MCInstanceExport:
                     )
 
                 target.writestr("resources.packconfig", "\n".join(resources))
-                target.writestr("optionals.packconfig", cls._optionals(optionals))
+                target.writestr(
+                    "optionals.packconfig",
+                    cls._optionals(optionals, optional_groups),
+                )
         except Exception:
             archive_buffer.close()
             raise
@@ -397,20 +506,23 @@ class MCInstanceExport:
         return " ".join(str(value or "").replace("#", "-").splitlines()).strip()
 
     @classmethod
-    def _metadata(cls, build):
+    def _metadata(cls, build, include_modloader=True):
         modloader = normalize_modloader(build.modloader)
         if modloader is None:
             modloader = "FORGE"
-        return "\n".join(
+        lines = ["[file]", "formatVersion = 1", ""]
+        if include_modloader:
+            lines.extend(
+                (
+                    "[modloader]",
+                    f"type = {modloader.lower()}",
+                    f"version = {cls._clean(build.forge)}",
+                    f"minecraftVersion = {cls._clean(build.minecraft)}",
+                    "",
+                )
+            )
+        lines.extend(
             (
-                "[file]",
-                "formatVersion = 1",
-                "",
-                "[modloader]",
-                f"type = {modloader.lower()}",
-                f"version = {cls._clean(build.forge)}",
-                f"minecraftVersion = {cls._clean(build.minecraft)}",
-                "",
                 "[pack]",
                 f"name = {cls._clean(build.modpack_name)}",
                 "author = solder.py",
@@ -419,13 +531,26 @@ class MCInstanceExport:
                 "",
             )
         )
+        return "\n".join(lines)
 
     @classmethod
-    def _resource(cls, package, resource_name, raw_hash, public_repo_url):
+    def _resource(
+        cls,
+        package,
+        resource_name,
+        raw_hash,
+        public_repo_url,
+        native_file=None,
+        optional=None,
+    ):
         cls._validate_artifact_component(package.name, "mod slug")
         cls._validate_artifact_component(package.version, "mod version")
         jar_name = f"{package.name}-{package.version}.jar"
-        url = cls._artifact_url(public_repo_url, package.name, jar_name)
+        url = (
+            native_file.download_url
+            if native_file is not None
+            else cls._artifact_url(public_repo_url, package.name, jar_name)
+        )
         side = cls._side(package.side).lower()
         lines = [
             f"[{resource_name}]",
@@ -433,33 +558,96 @@ class MCInstanceExport:
             f"destination = mods/{jar_name}",
             f"url = {url}",
             f"side = {side}",
-            f"optional = {'true' if package.optional else 'false'}",
+            "optional = "
+            + (
+                "true"
+                if (package.optional if optional is None else optional)
+                else "false"
+            ),
             f"MD5 = {raw_hash}",
             "",
         ]
         return "\n".join(lines)
 
     @classmethod
-    def _optionals(cls, optionals):
+    def _optionals(cls, optionals, optional_groups=()):
         if not optionals:
             return ""
 
-        lines = [
-            "[solder-optionals]",
-            "title = Optional mods",
-            "minchoices = 0",
-            f"maxchoices = {len(optionals)}",
-        ]
-        for index, (package, resource_name) in enumerate(optionals, 1):
+        from .advanced_optional import SINGLE
+
+        rendered_by_group = {}
+        ungrouped = []
+        for package, resource_name, grouped in optionals:
+            if grouped is None:
+                ungrouped.append((package, resource_name, False))
+            else:
+                group, item = grouped
+                rendered_by_group.setdefault(group.id, []).append(
+                    (
+                        package,
+                        resource_name,
+                        item.selected_by_default,
+                        item.sort_order,
+                        item.id,
+                    )
+                )
+
+        lines = []
+        for group in optional_groups or ():
+            choices = rendered_by_group.get(group.id, [])
+            if not choices:
+                continue
+            choices.sort(key=lambda choice: (choice[3], choice[4]))
+            if group.selection_type == SINGLE:
+                if sum(1 for choice in choices if choice[2]) != 1:
+                    raise MCInstanceExportError(
+                        f'Optional group "{group.name}" must have exactly one default.'
+                    )
+                minimum = maximum = 1
+            else:
+                minimum, maximum = 0, len(choices)
             lines.extend(
                 (
-                    f"option{index}.name = {cls._clean(package.pretty_name)}",
-                    f"option{index}.description = {cls._clean(package.description)}",
-                    "option%d.default = false" % index,
-                    f"option{index}.resources = {resource_name}",
+                    f"[solder-optionals-{group.id}]",
+                    f"title = {cls._clean(group.name)}",
+                    f"minchoices = {minimum}",
+                    f"maxchoices = {maximum}",
                 )
             )
-        lines.append("")
+            for index, choice in enumerate(choices, 1):
+                package, resource_name, default = choice[:3]
+                lines.extend(
+                    (
+                        f"option{index}.name = {cls._clean(package.pretty_name)}",
+                        f"option{index}.description = {cls._clean(package.description)}",
+                        f"option{index}.default = {'true' if default else 'false'}",
+                        f"option{index}.resources = {resource_name}",
+                    )
+                )
+            lines.append("")
+
+        if ungrouped:
+            lines.extend(
+                (
+                    "[solder-optionals]",
+                    "title = Optional mods",
+                    "minchoices = 0",
+                    f"maxchoices = {len(ungrouped)}",
+                )
+            )
+            for index, (package, resource_name, default) in enumerate(
+                ungrouped, 1
+            ):
+                lines.extend(
+                    (
+                        f"option{index}.name = {cls._clean(package.pretty_name)}",
+                        f"option{index}.description = {cls._clean(package.description)}",
+                        f"option{index}.default = {'true' if default else 'false'}",
+                        f"option{index}.resources = {resource_name}",
+                    )
+                )
+            lines.append("")
         return "\n".join(lines)
 
     @classmethod
@@ -470,6 +658,7 @@ class MCInstanceExport:
         local_repo_root,
         public_repo_url,
         written_paths,
+        destination_prefixes=None,
     ):
         cls._validate_artifact_component(package.name, "mod slug")
         cls._validate_artifact_component(package.version, "mod version")
@@ -485,11 +674,14 @@ class MCInstanceExport:
                         f'The stored ZIP for "{package.pretty_name}" does not match its MD5.'
                     )
 
-            prefix = {
+            prefixes = destination_prefixes or {
                 "BOTH": "overrides",
                 "CLIENT": "client-overrides",
                 "SERVER": "server-overrides",
-            }[cls._side(package.side)]
+            }
+            prefix = prefixes.get(cls._side(package.side))
+            if prefix is None:
+                return
 
             try:
                 source = zipfile.ZipFile(package_file, "r")
@@ -518,7 +710,11 @@ class MCInstanceExport:
                             raise MCInstanceExportError(
                                 f'The stored package for "{package.pretty_name}" contains a symbolic link.'
                             )
-                        destination = f"{prefix}/{relative.as_posix()}"
+                        destination = (
+                            f"{prefix}/{relative.as_posix()}"
+                            if prefix
+                            else relative.as_posix()
+                        )
                         if destination in written_paths:
                             raise MCInstanceExportError(
                                 f'Multiple packages export the same path: "{destination}".'
@@ -613,7 +809,16 @@ class MCInstanceExport:
             mode="w+b",
         )
         try:
-            with requests.get(url, stream=True, timeout=(5, 60)) as response:
+            with requests.get(
+                url,
+                stream=True,
+                allow_redirects=False,
+                timeout=(5, 60),
+            ) as response:
+                if 300 <= response.status_code < 400:
+                    raise MCInstanceExportError(
+                        "The package repository returned an unexpected redirect."
+                    )
                 response.raise_for_status()
                 content_length = int(response.headers.get("content-length", 0))
                 if content_length > _MAX_PACKAGE_SIZE:

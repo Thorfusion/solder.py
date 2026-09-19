@@ -21,6 +21,11 @@ from models.mcinstance import (  # noqa: E402
     MCInstanceJarError,
     MCInstancePackage,
 )
+from models.advanced_optional import (  # noqa: E402
+    AdvancedOptionalGroup,
+    AdvancedOptionalItem,
+    SINGLE,
+)
 
 
 def md5(data):
@@ -39,6 +44,28 @@ class MCInstanceExportTests(unittest.TestCase):
             modpack_slug="example-pack",
         )
 
+    def test_remote_repository_redirect_is_rejected(self):
+        response = MagicMock()
+        response.status_code = 302
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "models.mcinstance.requests.get", return_value=response
+        ) as get:
+            with self.assertRaisesRegex(
+                MCInstanceExportError, "unexpected redirect"
+            ):
+                with MCInstanceExport._package_file(
+                    directory,
+                    "https://cdn.example.test/mods/",
+                    "example-mod",
+                    "example-mod-1.0.zip",
+                ):
+                    pass
+
+        self.assertFalse(get.call_args.kwargs["allow_redirects"])
+
     @staticmethod
     def package(**changes):
         values = {
@@ -55,6 +82,48 @@ class MCInstanceExportTests(unittest.TestCase):
         }
         values.update(changes)
         return MCInstancePackage(**values)
+
+    def test_named_group_uses_mcil_menu_title_and_exact_one_limits(self):
+        selected = self.package(
+            optional_state=2,
+            membership_id=44,
+            side="CLIENT",
+        )
+        group = AdvancedOptionalGroup(
+            id=3,
+            build_id=7,
+            name="Choose a map",
+            description="",
+            selection_type=SINGLE,
+            sort_order=0,
+            items=[
+                AdvancedOptionalItem(
+                    id=9,
+                    group_id=3,
+                    build_modversion_id=44,
+                    selected_by_default=True,
+                    sort_order=0,
+                    optional_state=2,
+                )
+            ],
+        )
+
+        result = MCInstanceExport.render(
+            self.build,
+            [selected],
+            "https://cdn.example.test/mods/",
+            optional_groups=[group],
+        )
+        self.addCleanup(result.close)
+        with zipfile.ZipFile(result) as archive:
+            optionals = archive.read("optionals.packconfig").decode()
+            resources = archive.read("resources.packconfig").decode()
+
+        self.assertIn("title = Choose a map", optionals)
+        self.assertIn("minchoices = 1", optionals)
+        self.assertIn("maxchoices = 1", optionals)
+        self.assertIn("option1.default = true", optionals)
+        self.assertIn("optional = true", resources)
 
     def test_export_maps_resources_optionals_sides_and_skipped_loader_packages(self):
         config_zip = io.BytesIO()
@@ -121,6 +190,29 @@ class MCInstanceExportTests(unittest.TestCase):
         self.assertIn("option1.description = Optional client mod", optionals)
         self.assertIn("option1.resources = optional-mod", optionals)
 
+    def test_hybrid_export_uses_modrinth_url_and_stored_md5(self):
+        selected = self.package(
+            integration_provider="MODRINTH",
+            integration_project_id="project",
+            integration_version_id="version",
+        )
+        native = SimpleNamespace(
+            download_url="https://cdn.modrinth.com/data/project/versions/version/mod.jar"
+        )
+        result = MCInstanceExport.render(
+            self.build,
+            [selected],
+            "https://cdn.example.test/mods/",
+            "unused",
+            native_files={"version": native},
+        )
+        self.addCleanup(result.close)
+
+        with zipfile.ZipFile(result) as archive:
+            resources = archive.read("resources.packconfig").decode()
+        self.assertIn(f"url = {native.download_url}", resources)
+        self.assertIn(f"MD5 = {selected.jarmd5}", resources)
+
     def test_empty_build_still_produces_a_valid_archive(self):
         result = MCInstanceExport.render(
             self.build, [], "https://cdn.example.test/mods", "unused"
@@ -158,6 +250,15 @@ class MCInstanceExportTests(unittest.TestCase):
             metadata = archive.read("metadata.packconfig").decode()
         self.assertIn("type = fabric", metadata)
         self.assertIn("version = 0.16.14", metadata)
+
+    def test_bootstrap_metadata_can_leave_loader_installation_to_launcher(self):
+        metadata = MCInstanceExport._metadata(
+            self.build, include_modloader=False
+        )
+
+        self.assertNotIn("[modloader]", metadata)
+        self.assertNotIn("minecraftVersion", metadata)
+        self.assertIn("[pack]", metadata)
 
     def test_incompatible_package_modloader_is_rejected(self):
         build = replace(self.build, modloader="FABRIC")

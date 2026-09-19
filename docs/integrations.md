@@ -1,4 +1,4 @@
-# Modrinth and Maven integrations
+# Modrinth, GitHub config, and Maven integrations
 
 These integrations belong to the solder.py management interface. They do not
 change the public Technic-compatible read API or expose provider IDs and API
@@ -11,7 +11,8 @@ Upstream references: [Modrinth API](https://docs.modrinth.com/api/) and the
 
 1. Open **Browse mods** and search Modrinth for a Minecraft mod.
 2. Add the project. solder.py creates a linked mod-library entry but downloads
-   no version files.
+   no version files. If a manual mod already has the same slug, that existing
+   mod is linked instead; its local versions and build selections are kept.
 3. Open a modpack build and select that mod. The version dropdown requests only
    releases matching the build's exact Minecraft version and, when set, its
    modloader.
@@ -26,6 +27,83 @@ Upstream references: [Modrinth API](https://docs.modrinth.com/api/) and the
 Provider-managed mods cannot receive versions through the manual upload forms.
 Their already imported versions can still be rehashed, added to builds, or
 deleted like other Solder versions.
+
+A matching manual slug is converted only when it has no existing integration.
+solder.py changes the integration provider and project ID on the existing mod
+row; it does not replace the mod, its reviewed metadata, versions, repository
+files, dependencies, or build memberships. A slug already linked to Maven or a
+different Modrinth project produces an error instead of being reassigned.
+
+When the local slug differs, open the existing `MOD` entry and use **Link
+Modrinth**. Enter a Modrinth project URL, slug, or project ID. The local slug,
+metadata, versions, dependencies, repository files, and build memberships stay
+unchanged; only the existing provider fields are attached. **Disconnect
+Modrinth** removes that association without deleting materialized versions.
+
+## GitHub config repositories
+
+The dedicated [GitHub config repository guide](github-config.md) documents the
+complete management workflow, archive rules, `.solderpyignore`, submodules,
+storage, and troubleshooting.
+
+An existing mod whose type is `CONFIG` can be linked to a public GitHub
+repository from its management page. GitHub cannot be attached to `MOD`,
+`LAUNCHER`, or other package types. The stable numeric GitHub repository ID is
+stored in the existing `mods.integration_project_id` field, with `GITHUB` in
+`mods.integration_provider`; no GitHub-specific database table is used.
+
+There are two versioned workflows:
+
+- **Manual ref:** enter a branch, tag, or full commit SHA together with an
+  explicit config version, Minecraft version, and optional modloader. A branch
+  is therefore never allowed to overwrite an existing Solder version silently.
+- **Repository tags:** select **Sync latest tag**, or choose a compatible tag
+  from the config entry's version dropdown in a build. Tags are sorted by their
+  numeric components, materialized lazily, and recorded as immutable normal
+  Solder versions. **Update all mods** follows the newest available tag.
+
+solder.py downloads the exact resolved commit, strips GitHub's generated
+top-level archive directory, removes repository-only files such as `.github`,
+`.git*`, README, license, changelog, and documentation files, and writes the
+remaining instance-root files to a deterministic Solder ZIP. Pinned GitHub
+submodules are downloaded at their recorded commits and placed at their
+configured paths. Symbolic links, unsafe paths, oversized archives, duplicate
+paths, and excessive expanded content are rejected.
+
+Add a UTF-8 `.solderpyignore` file to the repository root when files that
+belong in source control should not be shipped to clients. Its rules are
+evaluated in order and use familiar gitignore-style syntax:
+
+```gitignore
+# Development and server-only files
+*.bak
+/servers.json
+generated/**
+!generated/client-defaults.cfg
+```
+
+`*`, `?`, `**`, root-relative `/patterns`, directory patterns, comments, and
+`!` re-inclusion are supported. A name without `/` matches at any depth. The
+file is not included in the generated ZIP. The root repository's rules also
+apply to files supplied by pinned submodules; a submodule may additionally
+provide its own `.solderpyignore`. Ignore rules cannot restore solder.py's
+built-in security and repository-metadata exclusions.
+
+A `.gitmodules` entry alone is not versioned content. The parent repository must
+also contain a pinned Git submodule entry at that path. Stale declarations with
+no pinned commit are not fetched from a moving default branch.
+
+The generated package is stored in the same local repository and optional
+S3/R2 bucket used by solder.py's upload extension. Its ZIP MD5 and file size are
+recorded in the ordinary `modversions` table. Technic-compatible API responses
+therefore continue to expose an ordinary Solder config package; this does not
+change Technic Solder's metadata-only/manual-MD5 model.
+
+Packwiz, FileDirector, and Modpack Director remain dynamic public solder.py
+routes. In the Docker setup, clients connect to Caddy and Caddy reverse-proxies
+`/packwiz/*`, `/filedirector/*`, and `/modpackdirector/*` to the API container;
+Caddy does not look for those generated responses in the static `/mods`
+directory.
 
 ## Maven repositories
 
@@ -81,7 +159,10 @@ the version-level `maven-metadata.xml`.
 ## Credentials
 
 Modrinth's public read endpoints do not need a key. solder.py does not store a
-provider credential for this integration.
+provider credential for this integration. Public GitHub repositories also work
+without credentials. Set the optional `GITHUB_TOKEN` environment variable to
+raise GitHub's API rate limit; private repositories are intentionally rejected
+because the generated Solder package is publicly distributable.
 
 The initial Maven implementation supports repositories readable without
 credentials. Do not put a username or token in the repository URL; URLs with
@@ -95,6 +176,12 @@ embedded credentials are rejected.
   `mods_create` is required to add an artifact from a configured repository.
 - `mods_manage` and `modpacks_manage` are required to list or materialize a
   provider version for a build.
+- `mods_manage` is required to link an existing mod to Modrinth or GitHub and
+  to manually synchronize a GitHub config ref or tag.
+- A managed mod's version page lists provider versions that have not yet been
+  stored locally. Importing one there uses its selected Minecraft version and
+  modloader, verifies and packages it through the same path used by the build
+  editor, and leaves already imported provider IDs out of the upstream table.
 - `mods_manage` is required to edit and refresh Maven version mappings.
 - The normal per-modpack permission check still applies.
 
@@ -141,7 +228,8 @@ requires `provider: "maven"`, a `repository` object containing `name` and
 Use `FIXED` with `version`, or `MANUAL` when releases will be mapped later.
 Both provider types accept reviewed `name`, `description`, `author`, `link`,
 and `side` (`BOTH`, `CLIENT`, or `SERVER`). Metadata is applied only when a new
-local mod is created; existing mods are never overwritten.
+local mod is created. A matching manual Modrinth slug is linked without
+overwriting its existing metadata.
 
 The complete file is validated before provider calls begin. Files are limited
 to 512 KiB. Maven entries require `mods_create`, `solder_env`, and the form's
@@ -161,6 +249,8 @@ Existing Technic Solder and solder.py 1.7.4 rows remain valid because all
 provider fields are nullable. The provider metadata stays private to the
 management side; normal manifest data continues to use local Solder names,
 versions, URLs and hashes.
+
+GitHub config sources reuse these nullable provider fields and add no tables.
 
 Maven configuration is stored in three additive management-side tables:
 

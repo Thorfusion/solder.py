@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from mysql.connector import IntegrityError, errorcode
 
 from .compatibility import version_is_compatible
+from .advanced_optional import AdvancedOptional
 from .database import Database
 from .modversion import Modversion
 
@@ -13,6 +14,7 @@ _WRITABLE_FIELDS = {
     "modpacks": {
         "name", "slug", "user_id", "recommended", "latest", "order",
         "hidden", "private", "pinned", "enable_optionals", "enable_server",
+        "optional_mode",
     },
     "builds": {
         "modpack_id", "version", "minecraft", "forge", "modloader",
@@ -204,6 +206,7 @@ class WriteApiStore:
                     "enable_server": values.get(
                         "enable_server", source.get("enable_server", 0)
                     ),
+                    "optional_mode": source.get("optional_mode", 0),
                 }
                 modpack_id = cls._insert(cur, "modpacks", new_values)
                 cls._grant_modpack_access(cur, user_id, modpack_id)
@@ -218,23 +221,29 @@ class WriteApiStore:
                     build["modpack_id"] = modpack_id
                     new_build_id = cls._insert(cur, "builds", build)
                     cur.execute(
-                        """SELECT modversion_id, optional
+                        """SELECT id, modversion_id, optional
                            FROM build_modversion WHERE build_id = %s
                            ORDER BY id""",
                         (old_build_id,),
                     )
                     memberships = cur.fetchall() or []
+                    membership_ids = {}
                     if memberships:
-                        cur.executemany(
-                            """INSERT INTO build_modversion
-                                      (modversion_id, build_id, optional)
-                               VALUES (%s, %s, %s)""",
-                            [
-                                (membership["modversion_id"], new_build_id,
-                                 membership.get("optional", 0))
-                                for membership in memberships
-                            ],
-                        )
+                        for membership in memberships:
+                            cur.execute(
+                                """INSERT INTO build_modversion
+                                          (modversion_id, build_id, optional)
+                                   VALUES (%s, %s, %s)""",
+                                (
+                                    membership["modversion_id"],
+                                    new_build_id,
+                                    membership.get("optional", 0),
+                                ),
+                            )
+                            membership_ids[membership["id"]] = cur.lastrowid
+                    AdvancedOptional.clone_build(
+                        cur, old_build_id, new_build_id, membership_ids
+                    )
                 cur.execute("SELECT * FROM modpacks WHERE id = %s", (modpack_id,))
                 return cur.fetchone()
         except IntegrityError as error:
@@ -246,6 +255,8 @@ class WriteApiStore:
             cur.execute("SELECT id FROM builds WHERE modpack_id = %s", (modpack_id,))
             build_ids = [row["id"] for row in (cur.fetchall() or [])]
             if build_ids:
+                for build_id in build_ids:
+                    AdvancedOptional.delete_build(cur, build_id)
                 placeholders = ", ".join(["%s"] * len(build_ids))
                 # Only the number of bound placeholders is dynamic.
                 cur.execute(
@@ -271,11 +282,26 @@ class WriteApiStore:
             build_id = cls._insert(cur, "builds", {"modpack_id": modpack_id, **values})
             if clone_source:
                 cur.execute(
-                    """INSERT INTO build_modversion
-                              (modversion_id, build_id, optional)
-                       SELECT modversion_id, %s, optional
-                       FROM build_modversion WHERE build_id = %s""",
-                    (build_id, clone_source["id"]),
+                    """SELECT id, modversion_id, optional
+                       FROM build_modversion
+                       WHERE build_id = %s ORDER BY id""",
+                    (clone_source["id"],),
+                )
+                membership_ids = {}
+                for membership in cur.fetchall() or []:
+                    cur.execute(
+                        """INSERT INTO build_modversion
+                                  (modversion_id, build_id, optional)
+                           VALUES (%s, %s, %s)""",
+                        (
+                            membership["modversion_id"],
+                            build_id,
+                            membership.get("optional", 0),
+                        ),
+                    )
+                    membership_ids[membership["id"]] = cur.lastrowid
+                AdvancedOptional.clone_build(
+                    cur, clone_source["id"], build_id, membership_ids
                 )
             cur.execute("SELECT * FROM builds WHERE id = %s", (build_id,))
             return cur.fetchone()
@@ -300,6 +326,7 @@ class WriteApiStore:
     @staticmethod
     def delete_build(build_id):
         with _transaction() as cur:
+            AdvancedOptional.delete_build(cur, build_id)
             cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (build_id,))
             cur.execute("DELETE FROM builds WHERE id = %s", (build_id,))
 
@@ -391,15 +418,32 @@ class WriteApiStore:
     def remove_build_mod(build_id, mod_id):
         with _transaction() as cur:
             cur.execute(
-                """DELETE build_modversion FROM build_modversion
+                """SELECT build_modversion.id,
+                          build_optional_group_items.group_id
+                   FROM build_modversion
                    INNER JOIN modversions
                        ON build_modversion.modversion_id = modversions.id
+                   LEFT JOIN build_optional_group_items
+                       ON build_optional_group_items.build_modversion_id =
+                          build_modversion.id
                    WHERE build_modversion.build_id = %s
-                     AND modversions.mod_id = %s""",
+                     AND modversions.mod_id = %s
+                   LIMIT 1 FOR UPDATE""",
                 (build_id, mod_id),
             )
-            if cur.rowcount == 0:
+            membership = cur.fetchone()
+            if membership is None:
                 raise WriteApiProblem("Mod not in this build.", 404)
+            cur.execute(
+                "DELETE FROM build_optional_group_items "
+                "WHERE build_modversion_id = %s",
+                (membership["id"],),
+            )
+            AdvancedOptional.normalize_group(cur, membership.get("group_id"))
+            cur.execute(
+                "DELETE FROM build_modversion WHERE id = %s",
+                (membership["id"],),
+            )
 
     @classmethod
     def create_mod(cls, values, dependency_identifiers=None):
@@ -440,6 +484,7 @@ class WriteApiStore:
             cur.execute("SELECT id FROM modversions WHERE mod_id = %s", (mod_id,))
             version_ids = [row["id"] for row in (cur.fetchall() or [])]
             if version_ids:
+                AdvancedOptional.delete_modversion_memberships(cur, version_ids)
                 placeholders = ", ".join(["%s"] * len(version_ids))
                 # Only the number of bound placeholders is dynamic.
                 cur.execute(

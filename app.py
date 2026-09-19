@@ -1,4 +1,5 @@
 import secrets
+import os
 
 from api import api, solderpy_version
 from alogin import alogin
@@ -34,7 +35,13 @@ if not api_only:
         app.register_blueprint(alogin)
         app.register_blueprint(asite)
 
-    app.secret_key = secrets.token_hex()
+    # A configured key keeps management sessions valid across restarts and
+    # multiple workers. The random fallback preserves zero-config development.
+    app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
+    app.config.update(
+        SESSION_COOKIE_HTTPONLY=True,
+        SESSION_COOKIE_SAMESITE="Lax",
+    )
 
 @app.errorhandler(404)
 def page_not_found(e):

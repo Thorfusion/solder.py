@@ -12,6 +12,7 @@ boto3 = "*"
 cachetools = "*"
 gunicorn = "*"
 defusedxml = "*"
+markdown = "*"
 
 [dev-packages]
 bandit = "*"

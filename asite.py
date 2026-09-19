@@ -20,21 +20,45 @@ from models.client_modpack import Client_modpack
 from models.compatibility import InvalidModloaderError
 from models.database import Database
 from models.dashboard import Dashboard
+from models.advanced_optional import (
+    ADVANCED_MODE,
+    BASIC_MODE,
+    AdvancedOptional,
+    AdvancedOptionalError,
+)
+from models.help_docs import (
+    HELP_DOCUMENTS,
+    get_help_document,
+    render_help_document,
+)
 from models.distribution_settings import (
     DistributionSettings,
     DistributionSettingsError,
 )
+from models.distribution import DistributionExportError
 from models.key import Key
 from models.mcinstance import (
     MCInstanceExport,
     MCInstanceExportError,
     MCInstanceJar,
 )
+from models.platform_export import PlatformExportError, PlatformPackExport
+from models.technic_filedirector import (
+    FILEDIRECTOR_MODRINTH_PROJECT,
+    TechnicFileDirector,
+    TechnicFileDirectorError,
+)
+from models.platform_export_override import (
+    PlatformExportOverride,
+    PlatformExportOverrideError,
+)
 from models.integration import (
+    GITHUB,
     MAVEN,
     MODRINTH,
     IntegrationError,
     ModIntegration,
+    ModrinthProvider,
     external_id,
     normalize_provider,
     provider_for_user,
@@ -60,7 +84,7 @@ from models.session import Session
 from models.user import User
 from mysql import connector
 from werkzeug.utils import secure_filename
-from models.common import api_only, app_url, public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl, write_api
+from models.common import api_only, app_url, public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl, write_api, curseforge_api_key
 from models.user_modpack import User_modpack
 from models.errorPrinter import ErrorPrinter
 
@@ -70,6 +94,43 @@ asite = Blueprint("asite", __name__)
 
 if DB_IS_UP == 1 and not api_only:
     Session.start_session_loop()
+
+
+def _enabled_downloader_specs(settings):
+    """Return downloader families enabled for this installation."""
+    return tuple(
+        downloader
+        for downloader in PlatformPackExport.downloader_specs()
+        if settings.get(downloader.setting_key, False)
+    )
+
+
+def _available_downloaders(build, settings, platform):
+    specs = _enabled_downloader_specs(settings)
+    if not specs:
+        return (), None
+    try:
+        return (
+            PlatformPackExport.available_downloaders(
+                build,
+                platform,
+                specs=specs,
+                curseforge_api_key=curseforge_api_key,
+            ),
+            None,
+        )
+    except PlatformExportError as error:
+        return (), str(error)
+
+
+def _downloader_export_enabled(selection):
+    downloader = PlatformPackExport.downloader_spec(selection)
+    if downloader is None:
+        return True
+    if DistributionSettings.is_enabled(downloader.setting_key):
+        return True
+    flash(f"Enable {downloader.label} exports before using that downloader.", "error")
+    return False
 
 ## Allowed extensions to be uploaded
 ALLOWED_EXTENSIONS = {'zip', 'jar'}
@@ -171,6 +232,8 @@ def modversion(id):
         return redirect(request.referrer)
 
     mod = Mod.get_by_id(id)
+    upstream_versions = []
+    upstream_error = None
 
     try:
         modversions = mod.get_versions()
@@ -184,6 +247,19 @@ def modversion(id):
         available_dependencies = []
         flash("unable to get modversions", "error")
 
+    if getattr(mod, "integration_provider", None):
+        try:
+            upstream_versions = ModIntegration.list_unimported_versions(
+                mod, Session.get_user_id(session["token"])
+            )
+        except IntegrationError as error:
+            upstream_error = str(error)
+        except Exception as error:
+            ErrorPrinter.message("failed to list provider mod versions", error)
+            upstream_error = (
+                "Upstream versions could not be loaded. Check the server log."
+            )
+
     return render_template(
         "modversion.html",
         modSlug=mod.name,
@@ -192,6 +268,8 @@ def modversion(id):
         mirror_url=public_repo_url,
         dependencies=dependencies,
         available_dependencies=available_dependencies,
+        upstream_versions=upstream_versions,
+        upstream_error=upstream_error,
     )
 
 
@@ -203,6 +281,117 @@ def newmodversion(id):
     
     if User.get_permission_token(session["token"], "mods_manage") == 0:
                 return redirect(request.referrer)
+
+    if "link_modrinth_submit" in request.form or "link_github_submit" in request.form:
+        mod = Mod.get_by_id(id)
+        provider = (
+            GITHUB if "link_github_submit" in request.form else MODRINTH
+        )
+        reference = request.form.get(
+            "github_reference" if provider == GITHUB else "modrinth_reference",
+            "",
+        )
+        try:
+            linked, project = ModIntegration.link_existing(
+                mod,
+                provider,
+                reference,
+                Session.get_user_id(session["token"]),
+            )
+        except IntegrationError as error:
+            flash(str(error), "error")
+        else:
+            flash(
+                f"Linked {linked.pretty_name} to {project.provider.title()} "
+                f"project {project.title}.",
+                "success",
+            )
+        return redirect(url_for("asite.modversion", id=id))
+
+    if "unlink_integration_submit" in request.form:
+        mod = Mod.get_by_id(id)
+        if mod is None or mod.integration_provider not in {MODRINTH, GITHUB}:
+            flash("This mod has no detachable integration.", "error")
+        elif Mod.unlink_integration(id, mod.integration_provider) is None:
+            flash("The integration could not be disconnected.", "error")
+        else:
+            flash(
+                f"Disconnected {mod.integration_provider.title()} without deleting local versions.",
+                "success",
+            )
+        return redirect(url_for("asite.modversion", id=id))
+
+    if "import_integration_version_submit" in request.form:
+        mod = Mod.get_by_id(id)
+        try:
+            if mod is None:
+                raise IntegrationError("The managed mod no longer exists.")
+            result = ModIntegration.materialize_for_management(
+                mod,
+                external_id(request.form.get("integration_version_id")),
+                request.form.get("integration_minecraft"),
+                request.form.get("integration_modloader"),
+                Session.get_user_id(session["token"]),
+                UPLOAD_FOLDER,
+                r2_client=R2 if R2_BUCKET else None,
+                r2_bucket=R2_BUCKET,
+            )
+        except IntegrationError as error:
+            flash(str(error), "error")
+        except Exception as error:
+            ErrorPrinter.message("failed to import provider mod version", error)
+            flash(
+                "The provider version could not be imported. Check the server log.",
+                "error",
+            )
+        else:
+            action = "Imported" if result.created else "Already imported"
+            flash(f"{action} version {result.version.version}.", "success")
+        return redirect(url_for("asite.modversion", id=id))
+
+    if (
+        "sync_github_ref_submit" in request.form
+        or "sync_github_tag_submit" in request.form
+    ):
+        mod = Mod.get_by_id(id)
+        try:
+            common_arguments = (
+                mod,
+                request.form.get("github_minecraft"),
+                request.form.get("github_modloader"),
+            )
+            common_keywords = {
+                "r2_client": R2 if R2_BUCKET else None,
+                "r2_bucket": R2_BUCKET,
+            }
+            if "sync_github_tag_submit" in request.form:
+                result = ModIntegration.materialize_latest_github_tag(
+                    *common_arguments,
+                    Session.get_user_id(session["token"]),
+                    UPLOAD_FOLDER,
+                    **common_keywords,
+                )
+            else:
+                result = ModIntegration.materialize_github_ref(
+                    *common_arguments,
+                    request.form.get("github_ref"),
+                    request.form.get("github_version"),
+                    Session.get_user_id(session["token"]),
+                    UPLOAD_FOLDER,
+                    **common_keywords,
+                )
+        except (IntegrationError, InvalidModloaderError) as error:
+            flash(str(error), "error")
+        except Exception as error:
+            ErrorPrinter.message("failed to synchronize GitHub config package", error)
+            flash(
+                "The GitHub config package could not be synchronized. Check the server log.",
+                "error",
+            )
+        else:
+            action = "Imported" if result.created else "Already imported"
+            flash(f"{action} config version {result.version.version}.", "success")
+        return redirect(url_for("asite.modversion", id=id))
 
     if "adddependency_submit" in request.form:
         dependency_mod_id = request.form.get("dependency_mod_id", "").strip()
@@ -407,7 +596,7 @@ def integrations():
                 if created:
                     flash(f"added {mod.pretty_name} to the mod library", "success")
                 else:
-                    flash(f"{mod.pretty_name} is already in the mod library", "success")
+                    flash(f"{mod.pretty_name} is linked to Modrinth", "success")
                 return redirect(url_for("asite.modversion", id=mod.id))
         except IntegrationError as error:
             flash(str(error), "error")
@@ -424,6 +613,11 @@ def integrations():
         )
     except IntegrationError:
         selected_provider = MODRINTH
+    # The integration browser creates ordinary mod entries and is therefore
+    # intentionally Modrinth-only. GitHub repositories are attached from an
+    # existing CONFIG entry so they can never become downloadable mod jars.
+    if selected_provider != MODRINTH:
+        selected_provider = MODRINTH
     query = request.args.get("q", "").strip()[:100]
     projects = []
     if query:
@@ -437,6 +631,7 @@ def integrations():
         except IntegrationError as error:
             flash(str(error), "error")
 
+    distribution_settings = DistributionSettings.get_all()
     return render_template(
         "integrations.html",
         provider=selected_provider,
@@ -446,6 +641,70 @@ def integrations():
         can_manage_repositories=bool(
             User.get_permission_token(session["token"], "solder_env")
         ),
+    )
+
+
+@asite.route("/github", methods=["GET", "POST"])
+def github():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "mods_manage") == 0:
+        return redirect(url_for("asite.index"))
+
+    user_id = Session.get_user_id(session["token"])
+    if request.method == "POST":
+        try:
+            raw_mod_id = str(request.form.get("mod_id", ""))
+            if not raw_mod_id.isdigit():
+                raise IntegrationError("Select a valid config entry.")
+            mod_id = int(raw_mod_id)
+            mod = Mod.get_by_id(mod_id)
+            if mod is None:
+                raise IntegrationError("The selected config entry was not found.")
+            linked, project = ModIntegration.link_existing(
+                mod,
+                GITHUB,
+                request.form.get("repository"),
+                user_id,
+            )
+            flash(
+                f"linked {linked.pretty_name} to {project.author}/{project.slug}",
+                "success",
+            )
+            return redirect(url_for("asite.modversion", id=linked.id))
+        except IntegrationError as error:
+            flash(str(error), "error")
+        return redirect(url_for("asite.github"))
+
+    mods = Mod.get_all()
+    available_configs = sorted(
+        (
+            mod for mod in mods
+            if mod.modtype == "CONFIG"
+            and not mod.integration_provider
+            and not mod.integration_project_id
+        ),
+        key=lambda mod: (mod.pretty_name or mod.name).casefold(),
+    )
+    configured_configs = []
+    provider = provider_for_user(GITHUB, user_id)
+    for mod in (mod for mod in mods if mod.integration_provider == GITHUB):
+        project = None
+        error = None
+        try:
+            project = provider.get_project(mod.integration_project_id)
+        except IntegrationError as provider_error:
+            error = str(provider_error)
+        configured_configs.append(
+            {"mod": mod, "project": project, "error": error}
+        )
+
+    return render_template(
+        "github.html",
+        available_configs=available_configs,
+        configured_configs=configured_configs,
     )
 
 
@@ -504,6 +763,31 @@ def export_integration_manifest():
         mimetype="application/json",
         as_attachment=True,
         download_name="solder.py-integration-manifest.json",
+    )
+
+
+@asite.route("/help")
+def help_index():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    return render_template("help_index.html", documents=HELP_DOCUMENTS)
+
+
+@asite.route("/help/<document>")
+def help_document(document):
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    selected = get_help_document(document)
+    if selected is None:
+        return render_template("404.html", error="Help document not found"), 404
+    return render_template(
+        "help_document.html",
+        document=selected,
+        content=render_help_document(selected),
     )
 
 
@@ -771,17 +1055,107 @@ def mainsettings():
     if request.method == "POST" and "export_settings_submit" in request.form:
         try:
             DistributionSettings.update_exports(
+                mcil="mcil_enabled" in request.form,
                 packwiz="packwiz_enabled" in request.form,
                 filedirector="filedirector_enabled" in request.form,
+                modpack_director="modpack_director_enabled" in request.form,
+                mrpack="mrpack_enabled" in request.form,
+                curseforge="curseforge_export_enabled" in request.form,
+                prism="prism_export_enabled" in request.form,
             )
-            flash("Public distribution settings updated.", "success")
+            flash("Distribution settings updated.", "success")
         except DistributionSettingsError as error:
             ErrorPrinter.message("Unable to update distribution settings", error)
             flash(str(error), "error")
         return redirect(url_for("asite.mainsettings"))
 
     distribution_settings = DistributionSettings.get_all()
-    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, app_url=app_url, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_ttl=cache_ttl, distribution_settings=distribution_settings)
+    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, app_url=app_url, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_ttl=cache_ttl, distribution_settings=distribution_settings, curseforge_api_configured=bool(curseforge_api_key))
+
+
+@asite.route("/platform-export-overrides", methods=["GET", "POST"])
+def platform_export_overrides():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "solder_env") == 0:
+        return redirect(request.referrer or url_for("asite.index"))
+
+    if request.method == "POST":
+        try:
+            if "import_sync_manifest" in request.form:
+                created, updated = PlatformExportOverride.import_manifest(
+                    request.files.get("sync_manifest")
+                )
+                flash(
+                    f"Modrinth-CurseForge sync import: {created} added, "
+                    f"{updated} updated.",
+                    "success",
+                )
+            elif "create_override" in request.form:
+                project = ModrinthProvider().get_project(
+                    request.form.get("modrinth_project")
+                )
+                PlatformExportOverride.create(
+                    request.form.get("name") or project.title,
+                    project.project_id,
+                    request.form.get("curseforge_project_id"),
+                    request.form.get("side") or project.side,
+                    "override_solder_only" in request.form,
+                )
+                flash("Modrinth-CurseForge mapping added.", "success")
+            elif "set_override_enabled" in request.form:
+                enabled_value = request.form.get("override_enabled")
+                PlatformExportOverride.set_enabled(
+                    request.form.get("override_id"),
+                    enabled_value == "1"
+                    if enabled_value is not None
+                    else "enabled" in request.form,
+                )
+                flash("Modrinth-CurseForge mapping updated.", "success")
+            elif "set_override_solder_only" in request.form:
+                solder_only_value = request.form.get("override_solder_only")
+                PlatformExportOverride.set_override_solder_only(
+                    request.form.get("override_id"),
+                    solder_only_value == "1",
+                )
+                flash("Modrinth-CurseForge mapping updated.", "success")
+            elif "delete_override" in request.form:
+                PlatformExportOverride.delete(request.form.get("override_id"))
+                flash("Modrinth-CurseForge mapping deleted.", "success")
+        except (IntegrationError, PlatformExportOverrideError) as error:
+            flash(str(error), "error")
+        return redirect(url_for("asite.platform_export_overrides"))
+
+    return render_template(
+        "platform_export_overrides.html",
+        overrides=PlatformExportOverride.get_all(),
+        curseforge_api_configured=bool(curseforge_api_key),
+    )
+
+
+@asite.route("/platform-export-overrides/export", methods=["GET"])
+def export_platform_sync():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "solder_env") == 0:
+        return redirect(request.referrer or url_for("asite.index"))
+
+    try:
+        output = PlatformExportOverride.render_manifest()
+    except PlatformExportOverrideError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.platform_export_overrides"))
+
+    return send_file(
+        output,
+        mimetype="application/json",
+        as_attachment=True,
+        download_name="solder.py-modrinth-curseforge-sync.json",
+    )
 
 
 @asite.route("/apikeylibrary", methods=["GET"])
@@ -1060,8 +1434,19 @@ def modpackbuild(id):
                 flash("; ".join(integration_errors), "error")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "optional_submit" in request.form:
-            Build_modversion.update_optional(request.form["optional_modid"], request.form["optional_check"], id)
-            flash("updated " + id, "success")
+            try:
+                AdvancedOptional.set_listing(
+                    id,
+                    request.form["optional_modid"],
+                    request.form["optional_check"],
+                )
+            except AdvancedOptionalError as error:
+                flash(str(error), "error")
+            else:
+                from api import clear_api_caches
+
+                clear_api_caches()
+                flash("Advanced optional list updated.", "success")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "selmodver_submit" in request.form:
             try:
@@ -1104,13 +1489,24 @@ def modpackbuild(id):
             flash("deleted build" + id, "success")
             return redirect(url_for('asite.modpacklibrary'))
         if "add_mod_submit" in request.form:
-            newoptional = "0"
-            if "newoptional" in request.form:
-                newoptional = request.form['newoptional']
+            list_in_advanced = "newadvancedoptional" in request.form
             mod_id = request.form.get("modnames", "").strip()
             selected_version = request.form.get("modversion", "").strip()
             if not mod_id or not selected_version:
                 flash("select a mod and compatible version", "error")
+                return redirect(url_for("asite.modpackbuild", id=id))
+            selected_mod = Mod.get_by_id(mod_id)
+            if (
+                list_in_advanced
+                and selected_mod is not None
+                and str(selected_mod.modtype or "").upper()
+                in {"LAUNCHER", "MCIL"}
+            ):
+                flash(
+                    "Modloader and downloader packages cannot be listed as "
+                    "advanced optionals.",
+                    "error",
+                )
                 return redirect(url_for("asite.modpackbuild", id=id))
             try:
                 integration_version = _selected_integration_version(
@@ -1126,9 +1522,14 @@ def modpackbuild(id):
                     mod_id,
                     id,
                     "0",
-                    newoptional,
+                    "0",
                 )
+                if list_in_advanced:
+                    AdvancedOptional.set_modversion_listing(
+                        id, selected_version
+                    )
             except (
+                AdvancedOptionalError,
                 IncompatibleModVersionError,
                 IntegrationError,
                 MissingDependencyVersionError,
@@ -1152,6 +1553,36 @@ def modpackbuild(id):
         flash("unable to find build", "error")
         return redirect(url_for("asite.modpacklibrary"))
 
+    distribution_settings = DistributionSettings.get_all()
+    export_requested = (
+        request.method == "GET" and request.args.get("export") == "1"
+    )
+    modrinth_downloaders, modrinth_downloader_error = (), None
+    prism_downloaders, prism_downloader_error = (), None
+    curseforge_downloaders, curseforge_downloader_error = (), None
+    if export_requested and (
+        distribution_settings[DistributionSettings.MRPACK]
+        or distribution_settings[DistributionSettings.PRISM]
+    ):
+        resolved_downloaders, resolved_error = _available_downloaders(
+            editor.packbuild, distribution_settings, "modrinth"
+        )
+        if distribution_settings[DistributionSettings.MRPACK]:
+            modrinth_downloaders = resolved_downloaders
+            modrinth_downloader_error = resolved_error
+        if distribution_settings[DistributionSettings.PRISM]:
+            prism_downloaders = resolved_downloaders
+            prism_downloader_error = resolved_error
+    if (
+        export_requested
+        and distribution_settings[DistributionSettings.CURSEFORGE]
+    ):
+        curseforge_downloaders, curseforge_downloader_error = (
+            _available_downloaders(
+                editor.packbuild, distribution_settings, "curseforge"
+            )
+        )
+
     return render_template(
         "modpackbuild.html",
         listmod=editor.listmod,
@@ -1160,6 +1591,198 @@ def modpackbuild(id):
         listmodversions=editor.listmodversions,
         buildlist=editor.buildlist,
         java_runtime_options=MOJANG_JAVA_RUNTIME_OPTIONS,
+        distribution_settings=distribution_settings,
+        optional_mode=getattr(editor, "optional_mode", 0),
+        export_requested=export_requested,
+        modrinth_downloaders=modrinth_downloaders,
+        modrinth_downloader_error=modrinth_downloader_error,
+        prism_downloaders=prism_downloaders,
+        prism_downloader_error=prism_downloader_error,
+        curseforge_downloaders=curseforge_downloaders,
+        curseforge_downloader_error=curseforge_downloader_error,
+    )
+
+
+@asite.route("/modpackbuild/<int:build_id>/optionals", methods=["GET", "POST"])
+def advanced_optionals(build_id):
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+        return redirect(url_for("asite.index"))
+
+    modpack_id = Build.get_modpackid_by_id(build_id)
+    if not modpack_id or not User_modpack.get_user_modpackpermission(
+        session["token"], modpack_id
+    ):
+        return redirect(url_for("asite.modpacklibrary"))
+    modpack = Modpack.get_by_id(modpack_id)
+    if modpack is None:
+        return redirect(url_for("asite.modpacklibrary"))
+
+    if request.method == "POST":
+        try:
+            if "enable_technic_filedirector" in request.form:
+                if not DistributionSettings.is_enabled(
+                    DistributionSettings.FILEDIRECTOR
+                ):
+                    raise TechnicFileDirectorError(
+                        "Enable FileDirector files in Settings first."
+                    )
+                build = Build.get_by_id(build_id)
+                if build is None:
+                    raise TechnicFileDirectorError(
+                        "The build no longer exists."
+                    )
+                version = ModrinthProvider().get_version(
+                    FILEDIRECTOR_MODRINTH_PROJECT,
+                    request.form.get("filedirector_version"),
+                    build.minecraft,
+                    build.modloader,
+                )
+                TechnicFileDirector.configure(
+                    build,
+                    modpack,
+                    version,
+                    UPLOAD_FOLDER,
+                    public_repo_url,
+                    app_url,
+                    r2_client=R2 if R2_BUCKET else None,
+                    r2_bucket=R2_BUCKET,
+                )
+                flash("FileDirector enabled for this Technic build.", "success")
+            elif "disable_technic_filedirector" in request.form:
+                TechnicFileDirector.disable(build_id)
+                flash("FileDirector disabled for this Technic build.", "success")
+            elif "set_optional_mode" in request.form:
+                AdvancedOptional.set_modpack_mode(
+                    modpack_id, request.form.get("optional_mode", BASIC_MODE)
+                )
+                flash("Optional management mode updated.", "success")
+            elif "create_optional_group" in request.form:
+                if modpack.optional_mode != ADVANCED_MODE:
+                    AdvancedOptional.set_modpack_mode(modpack_id, ADVANCED_MODE)
+                AdvancedOptional.create_group(
+                    build_id,
+                    request.form.get("name"),
+                    request.form.get("description"),
+                    request.form.get("selection_type", 0),
+                    request.form.get("sort_order", 0),
+                )
+                flash("Advanced optional group added.", "success")
+            elif "save_optional_choice" in request.form:
+                if modpack.optional_mode != ADVANCED_MODE:
+                    raise AdvancedOptionalError(
+                        "Enable advanced optionals before configuring choices."
+                    )
+                AdvancedOptional.save_membership(
+                    build_id,
+                    request.form.get("build_modversion_id"),
+                    request.form.get("group_id"),
+                    request.form.get("optional_state", 0),
+                    "selected_by_default" in request.form,
+                    request.form.get("sort_order", 0),
+                )
+                flash("Advanced optional choice updated.", "success")
+            elif "delete_optional_group" in request.form:
+                AdvancedOptional.delete_group(
+                    build_id, request.form.get("group_id")
+                )
+                flash("Advanced optional group deleted.", "success")
+        except (
+            AdvancedOptionalError,
+            DistributionExportError,
+            IntegrationError,
+            PlatformExportError,
+            TechnicFileDirectorError,
+        ) as error:
+            flash(str(error), "error")
+        except Exception as error:
+            ErrorPrinter.message(
+                "failed to update Technic FileDirector delivery", error
+            )
+            flash(
+                "The Technic FileDirector configuration could not be updated. "
+                "Check the server log.",
+                "error",
+            )
+        # Advanced choices can now change the public Technic manifest. Clear
+        # only this process's short-lived read cache after any submitted edit.
+        from api import clear_api_caches
+
+        clear_api_caches()
+        return redirect(
+            url_for("asite.advanced_optionals", build_id=build_id)
+        )
+
+    editor = Build_modversion.get_build_editor_data(build_id)
+    if editor is None:
+        return redirect(url_for("asite.modpacklibrary"))
+    groups = AdvancedOptional.get_groups(build_id)
+    optional_items = {
+        item.build_modversion_id: item
+        for group in groups
+        for item in group.items
+    }
+    if modpack.optional_mode == ADVANCED_MODE:
+        listed_builds = [
+            combo
+            for combo in editor.buildlist
+            if bool(combo.get("advanced_listed"))
+        ]
+    else:
+        # Basic mode has no separate work list. Show the same legacy optional
+        # entries represented by build_modversion.optional = 1.
+        listed_builds = [
+            combo
+            for combo in editor.buildlist
+            if int(combo.get("optional") or 0) == 1
+        ]
+    distribution_settings = DistributionSettings.get_all()
+    technic_filedirector = TechnicFileDirector.get(build_id)
+    technic_filedirector_active = bool(
+        technic_filedirector
+        and TechnicFileDirector.get_active(build_id)
+    )
+    filedirector_releases = ()
+    filedirector_error = None
+    if request.args.get("filedirector") == "configure":
+        if not distribution_settings[DistributionSettings.FILEDIRECTOR]:
+            filedirector_error = "Enable FileDirector files in Settings first."
+        else:
+            spec = PlatformPackExport.downloader_spec("filedirector")
+            try:
+                available = PlatformPackExport.available_downloaders(
+                    editor.packbuild,
+                    "modrinth",
+                    specs=(spec,),
+                )
+                if available:
+                    filedirector_releases = available[0].releases
+                else:
+                    filedirector_error = (
+                        "No compatible FileDirector release was found for "
+                        "this Minecraft and modloader version."
+                    )
+            except PlatformExportError as error:
+                filedirector_error = str(error)
+    return render_template(
+        "advanced_optionals.html",
+        packbuild=editor.packbuild,
+        packbuildname=editor.packbuildname,
+        buildlist=listed_builds,
+        modpack=modpack,
+        groups=groups,
+        optional_items=optional_items,
+        distribution_settings=distribution_settings,
+        technic_filedirector=technic_filedirector,
+        technic_filedirector_active=technic_filedirector_active,
+        filedirector_releases=filedirector_releases,
+        filedirector_error=filedirector_error,
+        configure_filedirector=(
+            request.args.get("filedirector") == "configure"
+        ),
     )
 
 
@@ -1211,6 +1834,9 @@ def integration_versions(build_id, mod_id):
 
 @asite.route("/modpackbuild/<int:id>/mcinstance", methods=["GET"])
 def export_mcinstance(id):
+    if not DistributionSettings.is_enabled(DistributionSettings.MCIL):
+        return render_template("404.html", error="Not Found"), 404
+
     if "token" not in session or not Session.verify_session(
         session["token"], request.remote_addr
     ):
@@ -1227,14 +1853,337 @@ def export_mcinstance(id):
 
     try:
         build, packages = MCInstanceExport.load(id)
-        archive = MCInstanceExport.render(
-            build, packages, public_repo_url, UPLOAD_FOLDER
+        build = PlatformPackExport.override_modloader_version(
+            build, request.args.get("forge_version")
         )
-    except MCInstanceExportError as error:
+        source_mode = PlatformPackExport.source_mode(
+            request.args.get("source"), default="solder"
+        )
+        native_files = (
+            PlatformPackExport.native_modrinth_files(build, packages)
+            if source_mode == "hybrid"
+            else {}
+        )
+        archive = MCInstanceExport.render(
+            build,
+            packages,
+            public_repo_url,
+            UPLOAD_FOLDER,
+            native_files=native_files,
+            optional_groups=AdvancedOptional.get_active_groups_for_packages(
+                id, packages
+            ),
+        )
+    except (MCInstanceExportError, PlatformExportError) as error:
         flash(str(error), "error")
         return redirect(url_for("asite.modpack", id=modpack_id))
 
     filename = secure_filename(f"{build.modpack_slug}-{build.version}.mcinstance")
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+def _platform_export_build(id):
+    """Authorize and load a build used by a management-side pack export."""
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return None, redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+        return None, redirect(url_for("asite.modpacklibrary"))
+
+    modpack_id = Build.get_modpackid_by_id(id)
+    if not modpack_id or not User_modpack.get_user_modpackpermission(
+        session["token"], modpack_id
+    ):
+        return None, redirect(url_for("asite.modpacklibrary"))
+    try:
+        build, packages = MCInstanceExport.load(id)
+        build = PlatformPackExport.override_modloader_version(
+            build, request.args.get("forge_version")
+        )
+        return (build, packages), None
+    except (MCInstanceExportError, PlatformExportError) as error:
+        flash(str(error), "error")
+        return None, redirect(url_for("asite.modpackbuild", id=id))
+
+
+def _hosted_export_allowed(build):
+    if build.is_published and not build.private:
+        return True
+    flash("Hosted configs require a published, non-private build.", "error")
+    return False
+
+
+@asite.route("/modpackbuild/<int:id>/prism", methods=["GET"])
+def export_prism(id):
+    if not DistributionSettings.is_enabled(DistributionSettings.PRISM):
+        return render_template("404.html", error="Not Found"), 404
+
+    loaded, failure = _platform_export_build(id)
+    if failure is not None:
+        return failure
+    build, packages = loaded
+    downloader = request.args.get("prism_downloader")
+    if not _downloader_export_enabled(downloader):
+        return redirect(url_for("asite.modpackbuild", id=id))
+    try:
+        archive = PlatformPackExport.render_prism(
+            build,
+            packages,
+            public_repo_url,
+            UPLOAD_FOLDER,
+            downloader=downloader,
+            application_url=app_url,
+            source_mode=request.args.get("source"),
+            delivery=request.args.get("delivery"),
+            selector=request.args.get("selector"),
+            optional_groups=AdvancedOptional.get_active_groups_for_packages(
+                id, packages
+            ),
+        )
+    except PlatformExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpackbuild", id=id))
+
+    filename = secure_filename(
+        f"{build.modpack_slug}-{build.version}-prism.zip"
+    )
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@asite.route("/modpackbuild/<int:id>/packwiz", methods=["GET"])
+def export_packwiz(id):
+    if not DistributionSettings.is_enabled(DistributionSettings.PACKWIZ):
+        return render_template("404.html", error="Not Found"), 404
+
+    loaded, failure = _platform_export_build(id)
+    if failure is not None:
+        return failure
+    build, packages = loaded
+    try:
+        source_mode = PlatformPackExport.source_mode(request.args.get("source"))
+        delivery = PlatformPackExport.delivery_mode(request.args.get("delivery"))
+        if delivery == "hosted":
+            if not _hosted_export_allowed(build):
+                return redirect(url_for("asite.modpackbuild", id=id))
+            selector = PlatformPackExport.hosted_selector(
+                build, request.args.get("selector")
+            )
+            route_values = {
+                "pack_slug": build.modpack_slug,
+                "selector": selector,
+                "source": source_mode,
+            }
+            if "forge_version" in request.args:
+                route_values["forge_version"] = request.args.get("forge_version")
+            return redirect(
+                url_for("distribution_api.packwiz_pack", **route_values)
+            )
+        archive = PlatformPackExport.render_packwiz(
+            build,
+            packages,
+            public_repo_url,
+            source_mode=source_mode,
+        )
+    except PlatformExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpackbuild", id=id))
+
+    filename = secure_filename(f"{build.modpack_slug}-{build.version}-packwiz.zip")
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@asite.route("/modpackbuild/<int:id>/filedirector", methods=["GET"])
+def export_filedirector(id):
+    if not DistributionSettings.is_enabled(DistributionSettings.FILEDIRECTOR):
+        return render_template("404.html", error="Not Found"), 404
+
+    loaded, failure = _platform_export_build(id)
+    if failure is not None:
+        return failure
+    build, packages = loaded
+    try:
+        source_mode = PlatformPackExport.source_mode(request.args.get("source"))
+        delivery = PlatformPackExport.delivery_mode(request.args.get("delivery"))
+        if delivery == "hosted":
+            if not _hosted_export_allowed(build):
+                return redirect(url_for("asite.modpackbuild", id=id))
+            selector = PlatformPackExport.hosted_selector(
+                build, request.args.get("selector")
+            )
+            return redirect(
+                url_for(
+                    "distribution_api.filedirector_remote",
+                    pack_slug=build.modpack_slug,
+                    selector=selector,
+                    bundle_name="mods",
+                    source=source_mode,
+                )
+            )
+        archive = PlatformPackExport.render_filedirector(
+            build,
+            packages,
+            public_repo_url,
+            source_mode=source_mode,
+            optional_groups=AdvancedOptional.get_active_groups_for_packages(
+                id, packages
+            ),
+        )
+    except PlatformExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpackbuild", id=id))
+
+    filename = secure_filename(
+        f"{build.modpack_slug}-{build.version}-filedirector.zip"
+    )
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@asite.route("/modpackbuild/<int:id>/modpackdirector", methods=["GET"])
+def export_modpack_director(id):
+    if not DistributionSettings.is_enabled(
+        DistributionSettings.MODPACK_DIRECTOR
+    ):
+        return render_template("404.html", error="Not Found"), 404
+
+    loaded, failure = _platform_export_build(id)
+    if failure is not None:
+        return failure
+    build, packages = loaded
+    try:
+        source_mode = PlatformPackExport.source_mode(request.args.get("source"))
+        delivery = PlatformPackExport.delivery_mode(request.args.get("delivery"))
+        selector = request.args.get("selector")
+        if delivery == "hosted" and not _hosted_export_allowed(build):
+            return redirect(url_for("asite.modpackbuild", id=id))
+        archive = PlatformPackExport.render_modpack_director(
+            build,
+            packages,
+            public_repo_url,
+            app_url,
+            source_mode=source_mode,
+            delivery=delivery,
+            selector=selector,
+            optional_groups=AdvancedOptional.get_active_groups_for_packages(
+                id, packages
+            ),
+        )
+    except PlatformExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpackbuild", id=id))
+
+    filename = secure_filename(
+        f"{build.modpack_slug}-{build.version}-modpack-director.zip"
+    )
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@asite.route("/modpackbuild/<int:id>/mrpack", methods=["GET"])
+def export_mrpack(id):
+    if not DistributionSettings.is_enabled(DistributionSettings.MRPACK):
+        return render_template("404.html", error="Not Found"), 404
+
+    loaded, failure = _platform_export_build(id)
+    if failure is not None:
+        return failure
+    build, packages = loaded
+    downloader = request.args.get("modrinth_downloader") or request.args.get(
+        "downloader"
+    )
+    if not _downloader_export_enabled(downloader):
+        return redirect(url_for("asite.modpackbuild", id=id))
+    try:
+        archive = PlatformPackExport.render_mrpack(
+            build,
+            packages,
+            downloader,
+            public_repo_url,
+            UPLOAD_FOLDER,
+            app_url,
+            source_mode=request.args.get("source"),
+            delivery=request.args.get("delivery"),
+            selector=request.args.get("selector"),
+            export_overrides=PlatformExportOverride.get_enabled(),
+            optional_groups=AdvancedOptional.get_active_groups_for_packages(
+                id, packages
+            ),
+        )
+    except PlatformExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpackbuild", id=id))
+
+    filename = secure_filename(f"{build.modpack_slug}-{build.version}.mrpack")
+    return send_file(
+        archive,
+        mimetype="application/x-modrinth-modpack+zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@asite.route("/modpackbuild/<int:id>/curseforge", methods=["GET"])
+def export_curseforge(id):
+    if not DistributionSettings.is_enabled(DistributionSettings.CURSEFORGE):
+        return render_template("404.html", error="Not Found"), 404
+
+    loaded, failure = _platform_export_build(id)
+    if failure is not None:
+        return failure
+    build, packages = loaded
+    downloader = request.args.get("curseforge_downloader") or request.args.get(
+        "downloader"
+    )
+    if not _downloader_export_enabled(downloader):
+        return redirect(url_for("asite.modpackbuild", id=id))
+    try:
+        archive = PlatformPackExport.render_curseforge(
+            build,
+            packages,
+            downloader,
+            public_repo_url,
+            UPLOAD_FOLDER,
+            app_url,
+            curseforge_api_key=curseforge_api_key,
+            source_mode=request.args.get("source"),
+            delivery=request.args.get("delivery"),
+            selector=request.args.get("selector"),
+            export_overrides=PlatformExportOverride.get_enabled(),
+            optional_groups=AdvancedOptional.get_active_groups_for_packages(
+                id, packages
+            ),
+        )
+    except PlatformExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpackbuild", id=id))
+
+    filename = secure_filename(
+        f"{build.modpack_slug}-{build.version}-curseforge.zip"
+    )
     return send_file(
         archive,
         mimetype="application/zip",

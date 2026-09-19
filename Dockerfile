@@ -16,6 +16,7 @@ RUN apk upgrade --no-cache \
 WORKDIR /app
 COPY --from=dependencies /install /usr/local
 COPY /models/ /app/models/
+COPY /docs/ /app/docs/
 COPY /static/ /app/static/
 COPY /templates/ /app/templates/
 COPY /api.py /app/

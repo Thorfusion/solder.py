@@ -1,0 +1,21 @@
+.help-document {
+    max-width: 80rem;
+    padding-bottom: 3rem;
+}
+
+.help-document pre {
+    background: #f1f3f5;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+    padding: 1rem;
+    overflow-x: auto;
+}
+
+.help-document code {
+    overflow-wrap: anywhere;
+}
+
+.help-document h2,
+.help-document h3 {
+    margin-top: 1.5rem;
+}

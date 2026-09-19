@@ -8,11 +8,21 @@ class DistributionSettingsError(RuntimeError):
 class DistributionSettings:
     """Database-backed switches shared by management and API-only processes."""
 
+    MCIL = "mcil_enabled"
     PACKWIZ = "packwiz_enabled"
     FILEDIRECTOR = "filedirector_enabled"
+    MODPACK_DIRECTOR = "modpack_director_enabled"
+    MRPACK = "mrpack_enabled"
+    CURSEFORGE = "curseforge_export_enabled"
+    PRISM = "prism_export_enabled"
     DEFAULTS = {
+        MCIL: False,
         PACKWIZ: False,
         FILEDIRECTOR: False,
+        MODPACK_DIRECTOR: False,
+        MRPACK: False,
+        CURSEFORGE: False,
+        PRISM: False,
     }
 
     @staticmethod
@@ -33,9 +43,19 @@ class DistributionSettings:
 
         cursor = conn.cursor(dictionary=True)
         try:
+            names = (
+                cls.MCIL,
+                cls.PACKWIZ,
+                cls.FILEDIRECTOR,
+                cls.MODPACK_DIRECTOR,
+                cls.MRPACK,
+                cls.CURSEFORGE,
+                cls.PRISM,
+            )
             cursor.execute(
-                "SELECT name, value FROM solder_settings WHERE name IN (%s, %s)",
-                (cls.PACKWIZ, cls.FILEDIRECTOR),
+                "SELECT name, value FROM solder_settings "
+                "WHERE name IN (%s, %s, %s, %s, %s, %s, %s)",
+                names,
             )
             for row in cursor.fetchall():
                 if row["name"] in settings:
@@ -52,7 +72,16 @@ class DistributionSettings:
         return cls.get_all()[name]
 
     @classmethod
-    def update_exports(cls, packwiz: bool, filedirector: bool) -> None:
+    def update_exports(
+        cls,
+        packwiz: bool,
+        filedirector: bool,
+        modpack_director: bool = False,
+        mrpack: bool = False,
+        curseforge: bool = False,
+        mcil: bool = False,
+        prism: bool = False,
+    ) -> None:
         conn = Database.get_connection()
         if conn is None:
             raise DistributionSettingsError(
@@ -62,8 +91,13 @@ class DistributionSettings:
         cursor = conn.cursor()
         try:
             for name, enabled in (
+                (cls.MCIL, mcil),
                 (cls.PACKWIZ, packwiz),
                 (cls.FILEDIRECTOR, filedirector),
+                (cls.MODPACK_DIRECTOR, modpack_director),
+                (cls.MRPACK, mrpack),
+                (cls.CURSEFORGE, curseforge),
+                (cls.PRISM, prism),
             ):
                 value = "1" if enabled else "0"
                 cursor.execute(

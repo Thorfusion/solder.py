@@ -50,6 +50,7 @@ class BuildCsvExport:
                        ON build_modversion.modversion_id = modversions.id
                    INNER JOIN mods ON modversions.mod_id = mods.id
                    WHERE build_modversion.build_id = %s
+                     AND build_modversion.optional IN (0, 1)
                    ORDER BY LOWER(COALESCE(NULLIF(mods.pretty_name, ''),
                                            mods.name)),
                             LOWER(mods.name), modversions.id""",

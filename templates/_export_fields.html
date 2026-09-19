@@ -1,0 +1,45 @@
+{%macro export_settings(packbuild)%}
+<h6>Export settings</h6>
+<label for="export_source" class="form-label">Download source</label>
+<select class="form-select mb-2" name="source" id="export_source">
+    <option value="hybrid">Hybrid (Modrinth where mapped)</option>
+    <option value="solder">Solder only</option>
+</select>
+<label for="export_forge_version" class="form-label">Forge version</label>
+<input class="form-control mb-2" type="text" name="forge_version" id="export_forge_version" value="{{packbuild.forge or ''}}" maxlength="255">
+<fieldset class="mb-2">
+    <legend class="col-form-label pt-0">Build export delivery</legend>
+    <div class="form-check">
+        <input class="form-check-input" type="radio" name="delivery" id="export_delivery_bundled" value="bundled" checked>
+        <label class="form-check-label" for="export_delivery_bundled">Include configuration and metadata in the archive</label>
+    </div>
+    <div class="form-check">
+        <input class="form-check-input" type="radio" name="delivery" id="export_delivery_hosted" value="hosted">
+        <label class="form-check-label" for="export_delivery_hosted">Use web-hosted configuration and metadata</label>
+    </div>
+</fieldset>
+<label for="export_selector" class="form-label">Hosted build</label>
+<select class="form-select" name="selector" id="export_selector">
+    <option value="build">This build ({{packbuild.version}})</option>
+    <option value="latest">Follow latest</option>
+    <option value="recommended">Follow recommended</option>
+</select>
+<div class="form-text mb-3">
+    Formats use the settings they support. CSV ignores these settings, and
+    MCInstance Loader always includes its configuration in the archive.
+    Prism uses them when a downloader is selected.
+</div>
+{%endmacro%}
+
+{%macro downloader_select(id, name, label, downloaders, allow_none=false, none_label='None (hybrid with all files on Modrinth)')%}
+<label for="{{id}}" class="form-label">{{label}}</label>
+<select class="form-select mb-2" name="{{name}}" id="{{id}}">
+    <option value="" selected disabled>Select downloader</option>
+    {%for downloader in downloaders%}
+    {%for release in downloader.releases%}
+    <option value="{{downloader.key}}:{{release.selector}}">{{downloader.label}} {{release.version}}{%if release.default%} (recommended){%endif%}</option>
+    {%endfor%}
+    {%endfor%}
+    {%if allow_none%}<option value="none">{{none_label}}</option>{%endif%}
+</select>
+{%endmacro%}

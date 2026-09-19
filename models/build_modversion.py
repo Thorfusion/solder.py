@@ -13,6 +13,7 @@ class BuildEditorData:
     listmod: list[dict]
     listmodversions: list[dict]
     buildlist: list[dict]
+    optional_mode: int = 0
 
 
 class Build_modversion:
@@ -28,12 +29,30 @@ class Build_modversion:
     def delete_build_modversion(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT group_id FROM build_optional_group_items "
+            "WHERE build_modversion_id = %s",
+            (id,),
+        )
+        optional_item = cur.fetchone()
+        cur.execute(
+            "DELETE FROM build_optional_group_items "
+            "WHERE build_modversion_id = %s",
+            (id,),
+        )
+        if optional_item:
+            from .advanced_optional import AdvancedOptional
+
+            AdvancedOptional.normalize_group(cur, optional_item["group_id"])
         cur.execute("DELETE FROM build_modversion WHERE id = %s", (id,))
         conn.commit()
         return None
 
     @staticmethod
     def update_optional(modversion_id, optional, build_id):
+        optional = int(optional)
+        if optional not in {0, 1}:
+            raise ValueError("Basic optional state must be required or optional.")
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         cur.execute("""UPDATE build_modversion 
@@ -72,7 +91,8 @@ class Build_modversion:
                           builds.is_published, builds.private,
                           builds.min_java, builds.java_runtime,
                           builds.min_memory, builds.marked,
-                          modpacks.name AS modpack_name
+                          modpacks.name AS modpack_name,
+                          modpacks.optional_mode
                    FROM builds
                    INNER JOIN modpacks ON builds.modpack_id = modpacks.id
                    WHERE builds.id = %s""",
@@ -84,13 +104,25 @@ class Build_modversion:
 
             build_row = dict(build_row)
             packbuildname = build_row.pop("modpack_name")
+            optional_mode = int(build_row.pop("optional_mode", 0) or 0)
             packbuild = Build(**build_row)
 
             cur.execute(
                 """SELECT build_modversion.id, build_modversion.optional,
                           modversions.version, modversions.id AS modverid,
                           mods.name, mods.pretty_name, mods.id AS modid,
-                          mods.integration_provider,
+                          mods.modtype, mods.integration_provider,
+                          EXISTS (
+                              SELECT 1 FROM build_optional_group_items
+                              WHERE build_optional_group_items.build_modversion_id =
+                                    build_modversion.id
+                          ) AS advanced_listed,
+                          EXISTS (
+                              SELECT 1 FROM build_optional_group_items
+                              WHERE build_optional_group_items.build_modversion_id =
+                                    build_modversion.id
+                                AND build_optional_group_items.group_id IS NOT NULL
+                          ) AS advanced_configured,
                           COALESCE(maven_repositories.name,
                                    mods.integration_provider)
                               AS integration_label
@@ -109,7 +141,7 @@ class Build_modversion:
             build_rows = cur.fetchall() or []
 
             cur.execute(
-                """SELECT mods.id, mods.name, mods.pretty_name,
+                """SELECT mods.id, mods.name, mods.pretty_name, mods.modtype,
                           mods.integration_provider,
                           COALESCE(maven_repositories.name,
                                    mods.integration_provider)
@@ -177,6 +209,7 @@ class Build_modversion:
             listmod=available_mods,
             listmodversions=available_versions,
             buildlist=buildlist,
+            optional_mode=optional_mode,
         )
 
     @staticmethod
@@ -213,10 +246,14 @@ class Build_modversion:
                 """SELECT build_modversion.id AS membership_id,
                           build_modversion.modversion_id AS current_version_id,
                           current.mod_id,
-                          candidate.id AS replacement_version_id
+                          candidate.id AS replacement_version_id,
+                          candidate.version AS replacement_version,
+                          candidate.modloader AS replacement_modloader,
+                          mods.modtype
                    FROM build_modversion
                    INNER JOIN modversions AS current
                        ON build_modversion.modversion_id = current.id
+                   INNER JOIN mods ON current.mod_id = mods.id
                    INNER JOIN builds ON build_modversion.build_id = builds.id
                    INNER JOIN modversions AS candidate
                        ON candidate.mod_id = current.mod_id
@@ -231,6 +268,7 @@ class Build_modversion:
                 (build_id,),
             )
             replacements = {}
+            replacement_metadata = {}
             current_versions = {}
             for row in cur.fetchall() or []:
                 membership_id = row["membership_id"]
@@ -239,14 +277,19 @@ class Build_modversion:
                 if preferred_id is not None:
                     if row["replacement_version_id"] == preferred_id:
                         replacements[membership_id] = preferred_id
+                        replacement_metadata[membership_id] = row
                     else:
-                        replacements.setdefault(
-                            membership_id, row["replacement_version_id"]
-                        )
+                        if membership_id not in replacements:
+                            replacements[membership_id] = row[
+                                "replacement_version_id"
+                            ]
+                            replacement_metadata[membership_id] = row
                 else:
-                    replacements.setdefault(
-                        membership_id, row["replacement_version_id"]
-                    )
+                    if membership_id not in replacements:
+                        replacements[membership_id] = row[
+                            "replacement_version_id"
+                        ]
+                        replacement_metadata[membership_id] = row
 
             updates = [
                 (replacement_id, membership_id)
@@ -260,6 +303,19 @@ class Build_modversion:
                        WHERE id = %s""",
                     updates,
                 )
+                # Imported lazily to avoid the existing Build -> Modversion
+                # model dependency becoming a module import cycle.
+                from .modversion import Modversion
+
+                for _replacement_id, membership_id in updates:
+                    metadata = replacement_metadata[membership_id]
+                    Modversion.sync_launcher_build_metadata(
+                        cur,
+                        build_id,
+                        metadata.get("modtype"),
+                        metadata.get("replacement_version"),
+                        metadata.get("replacement_modloader"),
+                    )
             conn.commit()
             return len(updates)
         except Exception:

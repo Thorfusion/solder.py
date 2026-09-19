@@ -52,7 +52,76 @@ class PasswordHasherTests(unittest.TestCase):
         self.assertNotEqual(first, other_user)
 
 
+class SessionTests(unittest.TestCase):
+    def test_active_session_is_extended_and_resources_are_closed(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        expiry = datetime.datetime(2026, 1, 1)
+        cursor.fetchone.return_value = ("token", "127.0.0.1", expiry)
+
+        with patch.object(Database, "get_connection", return_value=connection):
+            stored = Session.get_and_update_from_token("token")
+
+        self.assertEqual(stored, Session("token", "127.0.0.1", expiry))
+        self.assertIn("expiry > NOW()", cursor.execute.call_args_list[0].args[0])
+        connection.commit.assert_called_once_with()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_expired_session_is_not_extended(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = None
+
+        with patch.object(Database, "get_connection", return_value=connection):
+            self.assertIsNone(Session.get_and_update_from_token("expired"))
+
+        self.assertEqual(cursor.execute.call_count, 1)
+        connection.commit.assert_not_called()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_new_session_replaces_only_the_same_users_session(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+
+        with (
+            patch.object(Database, "get_connection", return_value=connection),
+            patch("models.session.secrets.token_hex", return_value="new-token"),
+        ):
+            token = Session.new_session("10.0.0.1", 17)
+
+        self.assertEqual(token, "new-token")
+        cursor.execute.assert_any_call(
+            "DELETE FROM sessions WHERE user_id = %s", (17,)
+        )
+        self.assertNotIn("DELETE FROM sessions WHERE ip", str(cursor.mock_calls))
+
+
 class ModelSerializationTests(unittest.TestCase):
+    def test_linking_an_integration_only_updates_the_existing_mod_row(self):
+        connection = MagicMock()
+        cursor = MagicMock()
+        cursor.rowcount = 1
+        connection.cursor.return_value = cursor
+        linked = SimpleNamespace(id=9)
+
+        with (
+            patch.object(Database, "get_connection", return_value=connection),
+            patch.object(Mod, "get_by_id", return_value=linked) as get_by_id,
+        ):
+            result = Mod.link_integration(9, "modrinth", "PROJECT")
+
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("UPDATE mods", query)
+        self.assertIn("integration_provider IS NULL", query)
+        self.assertNotIn("modversions", query)
+        self.assertEqual(parameters[0:2], ("MODRINTH", "PROJECT"))
+        self.assertEqual(parameters[3], 9)
+        connection.commit.assert_called_once_with()
+        get_by_id.assert_called_once_with(9)
+        self.assertIs(result, linked)
+
     def test_mojang_java_runtime_components_are_strictly_validated(self):
         self.assertEqual(
             normalize_java_runtime(" java-runtime-delta "),
@@ -121,7 +190,12 @@ class ModelSerializationTests(unittest.TestCase):
         )
         self.assertEqual(
             modpack.to_json()["capabilities"],
-            {"optional": True, "server": True},
+            {
+                "advanced_optionals": False,
+                "bootstrap_manifest": True,
+                "optional": True,
+                "server": True,
+            },
         )
 
     def test_modversion_serialization_matches_the_api_contract(self):
@@ -145,6 +219,32 @@ class ModelSerializationTests(unittest.TestCase):
 
 
 class ModelBehaviorTests(unittest.TestCase):
+    def test_runtime_schema_migrates_export_override_before_seeding(self):
+        connection = MagicMock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = None
+
+        with (
+            patch("models.database.DISABLE_is_setup", False),
+            patch.object(Database, "get_connection", return_value=connection),
+            patch.object(Database, "normalize_legacy_timestamps"),
+            patch.object(Database, "migrate_legacy_mod_notes"),
+            patch.object(Database, "migrate_jar_hash_mod_types"),
+        ):
+            self.assertTrue(Database.ensure_runtime_schema())
+
+        statements = [call.args[0] for call in cursor.execute.call_args_list]
+        migration = next(
+            index
+            for index, statement in enumerate(statements)
+            if statement.startswith(
+                "ALTER TABLE platform_export_overrides ADD COLUMN override_solder_only"
+            )
+        )
+        seed = statements.index(Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL)
+        self.assertLess(migration, seed)
+        connection.commit.assert_called_once_with()
+
     def test_dashboard_checks_updates_only_on_each_modpacks_newest_build(self):
         connection = Mock()
         cursor = connection.cursor.return_value
@@ -417,6 +517,92 @@ class ModelBehaviorTests(unittest.TestCase):
         connection.rollback.assert_not_called()
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
+
+    def test_adding_launcher_version_syncs_build_modloader_metadata(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.side_effect = [
+            {
+                "mod_id": 1,
+                "version": "1.7.10-10.13.4.1614",
+                "mcversion": "1.7.10",
+                "modloader": "FORGE",
+                "modtype": "LAUNCHER",
+                "minecraft": "1.7.10",
+                "build_modloader": None,
+            },
+            None,
+        ]
+
+        with (
+            patch(
+                "models.modversion.Database.get_connection",
+                return_value=connection,
+            ),
+            patch.object(
+                Modversion, "_add_required_dependencies", return_value=[]
+            ) as add_dependencies,
+        ):
+            Modversion.add_modversion_to_selected_build(
+                101, 1, 10, "0", "0"
+            )
+
+        cursor.execute.assert_any_call(
+            """UPDATE builds
+                   SET forge = %s, modloader = %s
+                   WHERE id = %s""",
+            ("1.7.10-10.13.4.1614", "FORGE", 10),
+        )
+        add_dependencies.assert_called_once_with(
+            cursor, 10, "1.7.10", 1, "FORGE"
+        )
+        connection.commit.assert_called_once_with()
+
+    def test_legacy_launcher_without_loader_keeps_build_loader(self):
+        cursor = Mock()
+
+        synchronized = Modversion.sync_launcher_build_metadata(
+            cursor,
+            10,
+            "LAUNCHER",
+            "1.7.10-10.13.4.1614",
+        )
+
+        self.assertTrue(synchronized)
+        cursor.execute.assert_called_once_with(
+            """UPDATE builds
+                   SET forge = %s
+                   WHERE id = %s""",
+            ("1.7.10-10.13.4.1614", 10),
+        )
+
+    def test_changing_launcher_version_syncs_build_modloader_version(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = {
+            "mod_id": 1,
+            "version": "1.7.10-10.13.4.1614",
+            "mcversion": "1.7.10",
+            "modloader": "FORGE",
+            "modtype": "LAUNCHER",
+            "current_mod_id": 1,
+            "minecraft": "1.7.10",
+            "build_modloader": "FORGE",
+        }
+
+        with patch(
+            "models.modversion.Database.get_connection",
+            return_value=connection,
+        ):
+            Modversion.update_modversion_in_build(100, 101, 10)
+
+        cursor.execute.assert_any_call(
+            """UPDATE builds
+                   SET forge = %s, modloader = %s
+                   WHERE id = %s""",
+            ("1.7.10-10.13.4.1614", "FORGE", 10),
+        )
+        connection.commit.assert_called_once_with()
 
     def test_legacy_solderpy_mod_note_is_moved_to_technic_notes(self):
         cursor = Mock()
@@ -944,7 +1130,7 @@ class ModelBehaviorTests(unittest.TestCase):
         )
         query, parameters = cursor.execute.call_args.args
         self.assertIn("mods.side IN ('CLIENT', 'BOTH')", query)
-        self.assertEqual(parameters, (1, 0))
+        self.assertEqual(parameters, (1, 0, 0))
 
     def test_server_manifest_can_include_optional_server_mods(self):
         connection = Mock()
@@ -983,7 +1169,7 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertEqual(versions[0].optional, 1)
         query, parameters = cursor.execute.call_args.args
         self.assertIn("mods.side IN ('SERVER', 'BOTH')", query)
-        self.assertEqual(parameters, (1, 1))
+        self.assertEqual(parameters, (1, 1, 0))
 
     def test_modversion_build_memberships_are_shaped_for_the_read_api(self):
         connection = Mock()
@@ -1022,6 +1208,7 @@ class ModelBehaviorTests(unittest.TestCase):
         )
         query, parameters = cursor.execute.call_args.args
         self.assertIn("builds.is_published = 1", query)
+        self.assertIn("build_modversion.optional IN (0, 1)", query)
         self.assertEqual(parameters, (2, "client-id"))
 
     def test_build_editor_groups_versions_and_excludes_assigned_mods(self):
@@ -1053,6 +1240,7 @@ class ModelBehaviorTests(unittest.TestCase):
                     "name": "first",
                     "pretty_name": "First Mod",
                     "modid": 1,
+                    "modtype": "MOD",
                     "integration_provider": "MODRINTH",
                 },
                 {
@@ -1063,13 +1251,14 @@ class ModelBehaviorTests(unittest.TestCase):
                     "name": "second",
                     "pretty_name": "Second Mod",
                     "modid": 2,
+                    "modtype": "CONFIG",
                 },
             ],
             [
-                {"id": 1, "pretty_name": "First Mod"},
-                {"id": 2, "pretty_name": "Second Mod"},
-                {"id": 3, "pretty_name": "Available Mod"},
-                {"id": 4, "pretty_name": "No Compatible Version"},
+                {"id": 1, "pretty_name": "First Mod", "modtype": "MOD"},
+                {"id": 2, "pretty_name": "Second Mod", "modtype": "CONFIG"},
+                {"id": 3, "pretty_name": "Available Mod", "modtype": "RES"},
+                {"id": 4, "pretty_name": "No Compatible Version", "modtype": "NONE"},
             ],
             [
                 {"id": 102, "mod_id": 1, "version": "1.1", "mcversion": None, "modloader": None},
@@ -1106,6 +1295,7 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertEqual(editor.packbuild.id, 7)
         self.assertEqual(editor.packbuildname, "Example Pack")
         self.assertEqual([mod["id"] for mod in editor.listmod], [3, 4])
+        self.assertEqual(editor.listmod[0]["modtype"], "RES")
         self.assertEqual(
             [version["id"] for version in editor.listmodversions], [301]
         )
@@ -1116,6 +1306,7 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertEqual(
             editor.buildlist[0]["integration_provider"], "MODRINTH"
         )
+        self.assertEqual(editor.buildlist[0]["modtype"], "MOD")
         self.assertEqual(
             [version["id"] for version in editor.buildlist[1]["versions"]],
             [201],
@@ -1217,6 +1408,35 @@ class ModelBehaviorTests(unittest.TestCase):
                        SET modversion_id = %s
                        WHERE id = %s""",
             [(102, 11)],
+        )
+
+    def test_update_all_syncs_an_updated_launcher_version_to_the_build(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [
+            {
+                "membership_id": 11,
+                "current_version_id": 101,
+                "mod_id": 1,
+                "replacement_version_id": 103,
+                "replacement_version": "1.7.10-10.13.4.1614",
+                "replacement_modloader": "FORGE",
+                "modtype": "LAUNCHER",
+            }
+        ]
+
+        with patch(
+            "models.build_modversion.Database.get_connection",
+            return_value=connection,
+        ):
+            updated = Build_modversion.update_all_compatible(7)
+
+        self.assertEqual(updated, 1)
+        cursor.execute.assert_any_call(
+            """UPDATE builds
+                   SET forge = %s, modloader = %s
+                   WHERE id = %s""",
+            ("1.7.10-10.13.4.1614", "FORGE", 7),
         )
 
     def test_empty_database_returns_empty_public_modpack_lists(self):

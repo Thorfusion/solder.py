@@ -41,6 +41,66 @@ class Database:
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )"""
 
+    PLATFORM_EXPORT_OVERRIDES_TABLE_SQL = """CREATE TABLE IF NOT EXISTS platform_export_overrides (
+        id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        modrinth_project_id VARCHAR(64) NOT NULL,
+        curseforge_project_id INT UNSIGNED NOT NULL,
+        side ENUM('CLIENT', 'SERVER', 'BOTH') NOT NULL DEFAULT 'BOTH',
+        enabled TINYINT(1) NOT NULL DEFAULT 0,
+        override_solder_only TINYINT(1) NOT NULL DEFAULT 0,
+        built_in TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uq_platform_export_overrides_modrinth (modrinth_project_id),
+        UNIQUE KEY uq_platform_export_overrides_curseforge (curseforge_project_id)
+    )"""
+
+    PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL = """INSERT IGNORE INTO platform_export_overrides
+        (name, modrinth_project_id, curseforge_project_id, side, enabled,
+         override_solder_only, built_in)
+        VALUES ('TX Loader', 'eh8us8FY', 706505, 'CLIENT', 0, 0, 1)"""
+
+    ADVANCED_OPTIONAL_TABLES_SQL = (
+        """CREATE TABLE IF NOT EXISTS build_optional_groups (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            build_id INT NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            description VARCHAR(1000) NOT NULL DEFAULT '',
+            selection_type TINYINT NOT NULL DEFAULT 0,
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_build_optional_group_name (build_id, name),
+            INDEX idx_build_optional_groups_build (build_id, sort_order)
+        )""",
+        """CREATE TABLE IF NOT EXISTS build_optional_group_items (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            group_id INT NULL,
+            build_modversion_id INT NOT NULL,
+            selected_by_default TINYINT(1) NOT NULL DEFAULT 0,
+            sort_order INT NOT NULL DEFAULT 0,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_build_optional_group_membership (build_modversion_id),
+            INDEX idx_build_optional_group_items_group (group_id, sort_order)
+        )""",
+    )
+
+    TECHNIC_FILEDIRECTOR_TABLE_SQL = """CREATE TABLE IF NOT EXISTS technic_filedirector_builds (
+        build_id INT NOT NULL PRIMARY KEY,
+        version_id VARCHAR(64) NOT NULL,
+        version VARCHAR(255) NOT NULL,
+        bootstrap_path VARCHAR(512) NOT NULL,
+        bootstrap_md5 CHAR(32) NOT NULL,
+        bootstrap_filesize BIGINT UNSIGNED NOT NULL,
+        config_path VARCHAR(512) NOT NULL,
+        config_md5 CHAR(32) NOT NULL,
+        config_filesize BIGINT UNSIGNED NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )"""
+
     PERSONAL_ACCESS_TOKENS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS personal_access_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
         tokenable_type VARCHAR(255) NOT NULL,
@@ -305,6 +365,24 @@ class Database:
         return cur.fetchone() is not None
 
     @staticmethod
+    def allow_ungrouped_advanced_optionals(cur) -> None:
+        """Let the advanced work list exist before a group is selected."""
+        cur.execute(
+            """SELECT IS_NULLABLE
+               FROM information_schema.COLUMNS
+               WHERE TABLE_SCHEMA = %s
+                 AND TABLE_NAME = 'build_optional_group_items'
+                 AND COLUMN_NAME = 'group_id'""",
+            (db_name,),
+        )
+        row = cur.fetchone()
+        if row and row[0] == "NO":
+            cur.execute(
+                "ALTER TABLE build_optional_group_items "
+                "MODIFY group_id INT NULL"
+            )
+
+    @staticmethod
     def migrate_legacy_mod_notes(cur) -> None:
         """Move solder.py 1.7.4 mod notes to Technic's plural column."""
         if Database.column_exists(cur, "mods", "note"):
@@ -464,7 +542,8 @@ class Database:
                         private TINYINT(1) DEFAULT(0),
                         pinned TINYINT(1) NOT NULL DEFAULT(0),
                         enable_optionals BOOLEAN DEFAULT(0),
-                        enable_server BOOLEAN DEFAULT(0)
+                        enable_server BOOLEAN DEFAULT(0),
+                        optional_mode TINYINT NOT NULL DEFAULT(0)
                         )"""
             )
             cur.execute(
@@ -541,6 +620,12 @@ class Database:
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
             cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
+            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
+            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL)
+            for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
+                cur.execute(query)
+            Database.allow_ungrouped_advanced_optionals(cur)
+            cur.execute(Database.TECHNIC_FILEDIRECTOR_TABLE_SQL)
             for query in Database.MAVEN_TABLES_SQL:
                 cur.execute(query)
             cur.execute(
@@ -654,6 +739,11 @@ class Database:
                 "ALTER TABLE modpacks ADD COLUMN enable_server BOOLEAN DEFAULT 0",
             ),
             (
+                "modpacks",
+                "optional_mode",
+                "ALTER TABLE modpacks ADD COLUMN optional_mode TINYINT NOT NULL DEFAULT 0",
+            ),
+            (
                 "mods",
                 "side",
                 "ALTER TABLE mods ADD COLUMN side ENUM('CLIENT', 'SERVER', 'BOTH') DEFAULT 'BOTH'",
@@ -702,6 +792,11 @@ class Database:
             *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
             *Database.NOTES_COLUMN_MIGRATIONS,
             *Database.INTEGRATION_COLUMN_MIGRATIONS,
+            (
+                "platform_export_overrides",
+                "override_solder_only",
+                "ALTER TABLE platform_export_overrides ADD COLUMN override_solder_only TINYINT(1) NOT NULL DEFAULT 0 AFTER enabled",
+            ),
         )
         con = Database.get_connection()
         if con is None:
@@ -710,6 +805,9 @@ class Database:
         cur = None
         try:
             cur = con.cursor()
+            # This table does not exist in a Technic database. Create its
+            # current shape before applying additive column checks.
+            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
             Database.normalize_legacy_timestamps(cur)
             for table, column, query in column_migrations:
                 cur.execute(
@@ -743,6 +841,12 @@ class Database:
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
             cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
+            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
+            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL)
+            for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
+                cur.execute(query)
+            Database.allow_ungrouped_advanced_optionals(cur)
+            cur.execute(Database.TECHNIC_FILEDIRECTOR_TABLE_SQL)
             for query in Database.MAVEN_TABLES_SQL:
                 cur.execute(query)
 
@@ -785,6 +889,11 @@ class Database:
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
             cur.execute(Database.USER_MODPACK_TABLE_SQL)
             cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
+            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
+            for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
+                cur.execute(query)
+            Database.allow_ungrouped_advanced_optionals(cur)
+            cur.execute(Database.TECHNIC_FILEDIRECTOR_TABLE_SQL)
             for query in Database.MAVEN_TABLES_SQL:
                 cur.execute(query)
 
@@ -793,6 +902,16 @@ class Database:
                 *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
                 *Database.NOTES_COLUMN_MIGRATIONS,
                 *Database.INTEGRATION_COLUMN_MIGRATIONS,
+                (
+                    "modpacks",
+                    "optional_mode",
+                    "ALTER TABLE modpacks ADD COLUMN optional_mode TINYINT NOT NULL DEFAULT 0",
+                ),
+                (
+                    "platform_export_overrides",
+                    "override_solder_only",
+                    "ALTER TABLE platform_export_overrides ADD COLUMN override_solder_only TINYINT(1) NOT NULL DEFAULT 0 AFTER enabled",
+                ),
             ):
                 cur.execute(
                     """SELECT 1
@@ -804,6 +923,11 @@ class Database:
                 )
                 if cur.fetchone() is None:
                     cur.execute(query)
+
+            # Existing installations can already have this table with an
+            # older shape. Seed built-in rows only after its additive column
+            # migrations have completed.
+            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL)
 
             Database.migrate_legacy_mod_notes(cur)
             Database.migrate_jar_hash_mod_types(cur)

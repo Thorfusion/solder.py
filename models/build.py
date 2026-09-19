@@ -74,9 +74,14 @@ class Build:
         if clone_id != "":
             cur.execute("SELECT * FROM build_modversion WHERE build_id = %s", (clone_id,))
             modversions = cur.fetchall()
+            membership_ids = {}
             if modversions:
                 for mv in modversions:
                     cur.execute("INSERT INTO build_modversion (modversion_id, build_id, optional) VALUES (%s, %s, %s)", (mv["modversion_id"], id, mv["optional"]))
+                    membership_ids[mv["id"]] = cur.lastrowid
+            from .advanced_optional import AdvancedOptional
+
+            AdvancedOptional.clone_build(cur, clone_id, id, membership_ids)
             conn.commit()
         cls(id, modpack_id, version, now, now, minecraft, forge, is_published, private, min_java, min_memory, "0", modloader=modloader, java_runtime=java_runtime)
 
@@ -84,6 +89,11 @@ class Build:
     def delete_build(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
+        from .advanced_optional import AdvancedOptional
+        from .technic_filedirector import TechnicFileDirector
+
+        AdvancedOptional.delete_build(cur, id)
+        TechnicFileDirector.delete_build(cur, id)
         cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (id,))
         cur.execute("DELETE FROM builds WHERE id=%s", (id,))
         conn.commit()
@@ -275,7 +285,11 @@ class Build:
             return 0
 
     def get_modversions_api(
-        self, tag: str = "", target=None, include_optional=None
+        self,
+        tag: str = "",
+        target=None,
+        include_optional=None,
+        include_excluded=False,
     ):
         if target is None:
             target = "server" if tag == "server" else "client"
@@ -292,45 +306,61 @@ class Build:
                     """SELECT modversions.id, modversions.mod_id,
                               modversions.version, modversions.mcversion,
                               modversions.modloader,
-                              modversions.md5, modversions.created_at,
+                              modversions.md5, modversions.jarmd5,
+                              modversions.created_at,
                               modversions.updated_at, modversions.filesize,
                               mods.name AS modname, mods.pretty_name,
                               mods.author, mods.link, mods.description,
                               mods.side, mods.modtype,
-                              build_modversion.optional
+                              build_modversion.optional,
+                              build_modversion.id AS membership_id
                        FROM modversions
                        INNER JOIN build_modversion
                            ON modversions.id = build_modversion.modversion_id
                        INNER JOIN mods ON modversions.mod_id = mods.id
                        WHERE build_modversion.build_id = %s
-                         AND (%s = 1 OR build_modversion.optional = 0)
+                         AND (build_modversion.optional = 0
+                              OR (%s = 1 AND build_modversion.optional = 1)
+                              OR (%s = 1 AND build_modversion.optional = 2))
                          AND mods.side IN ('SERVER', 'BOTH')""",
-                    (self.id, int(include_optional)),
+                    (
+                        self.id,
+                        int(include_optional),
+                        int(include_excluded),
+                    ),
                 )
             else:
                 cursor.execute(
                     """SELECT modversions.id, modversions.mod_id,
                               modversions.version, modversions.mcversion,
                               modversions.modloader,
-                              modversions.md5, modversions.created_at,
+                              modversions.md5, modversions.jarmd5,
+                              modversions.created_at,
                               modversions.updated_at, modversions.filesize,
                               mods.name AS modname, mods.pretty_name,
                               mods.author, mods.link, mods.description,
                               mods.side, mods.modtype,
-                              build_modversion.optional
+                              build_modversion.optional,
+                              build_modversion.id AS membership_id
                        FROM modversions
                        INNER JOIN build_modversion
                            ON modversions.id = build_modversion.modversion_id
                        INNER JOIN mods ON modversions.mod_id = mods.id
                        WHERE build_modversion.build_id = %s
-                         AND (%s = 1 OR build_modversion.optional = 0)
+                         AND (build_modversion.optional = 0
+                              OR (%s = 1 AND build_modversion.optional = 1)
+                              OR (%s = 1 AND build_modversion.optional = 2))
                          AND mods.side IN ('CLIENT', 'BOTH')""",
-                    (self.id, int(include_optional)),
+                    (
+                        self.id,
+                        int(include_optional),
+                        int(include_excluded),
+                    ),
                 )
             modversions = cursor.fetchall()
             versions = []
             for mv in modversions:
-                v = Modversion(mv["id"], mv["mod_id"], mv["version"], mv["mcversion"], mv["md5"], mv["created_at"], mv["updated_at"], mv["filesize"], mv["optional"], mv.get("modloader"))
+                v = Modversion(mv["id"], mv["mod_id"], mv["version"], mv["mcversion"], mv["md5"], mv["created_at"], mv["updated_at"], mv["filesize"], mv["optional"], mv.get("modloader"), jarmd5=mv.get("jarmd5"))
                 v.modname = mv["modname"]
                 v.pretty_name = mv["pretty_name"]
                 v.author = mv["author"]
@@ -338,6 +368,7 @@ class Build:
                 v.description = mv["description"]
                 v.side = mv.get("side", "BOTH")
                 v.modtype = mv.get("modtype", "MOD")
+                v.membership_id = mv.get("membership_id")
                 versions.append(v)
 
             def natural_name_key(modversion):

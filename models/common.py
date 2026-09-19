@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from models.database import Database
 
 ## Solderpy version
-solderpy_version = "1.9.0"
+solderpy_version = "1.10.0"
 
 load_dotenv(".env")
 
@@ -20,6 +20,7 @@ reverse_proxy = False
 host = os.getenv("APP_HOST")
 port = os.getenv("APP_PORT")
 app_url = os.getenv("APP_URL")
+curseforge_api_key = os.getenv("CURSEFORGE_API_KEY")
 
 if os.getenv("PROXY_IP"):
     reverse_proxy = True

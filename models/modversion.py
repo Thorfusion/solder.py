@@ -133,6 +133,34 @@ class Modversion:
         return True
 
     @staticmethod
+    def sync_launcher_build_metadata(
+        cur, build_id, modtype, version, modloader=None
+    ):
+        """Copy a legacy launcher package's version onto its target build."""
+        if str(modtype or "").strip().upper() != "LAUNCHER":
+            return False
+
+        modloader = normalize_modloader(modloader)
+        if modloader:
+            cur.execute(
+                """UPDATE builds
+                   SET forge = %s, modloader = %s
+                   WHERE id = %s""",
+                (version, modloader, build_id),
+            )
+        else:
+            # Old Technic launcher packages do not have loader metadata. Keep
+            # the build's existing loader choice, but still synchronize the
+            # legacy `forge` field used as the modloader version by the API.
+            cur.execute(
+                """UPDATE builds
+                   SET forge = %s
+                   WHERE id = %s""",
+                (version, build_id),
+            )
+        return True
+
+    @staticmethod
     def add_modversion_to_selected_build(modver_id, mod_id, build_id, marked, optional):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
@@ -152,10 +180,12 @@ class Modversion:
                 build_id = marked_build["id"]
 
             cur.execute(
-                """SELECT modversions.mod_id, modversions.mcversion,
-                          modversions.modloader, builds.minecraft,
+                """SELECT modversions.mod_id, modversions.version,
+                          modversions.mcversion, modversions.modloader,
+                          mods.modtype, builds.minecraft,
                           builds.modloader AS build_modloader
                    FROM modversions
+                   INNER JOIN mods ON mods.id = modversions.mod_id
                    INNER JOIN builds ON builds.id = %s
                    WHERE modversions.id = %s
                    FOR UPDATE""",
@@ -204,12 +234,26 @@ class Modversion:
                     (modver_id, existing["id"]),
                 )
 
+            Modversion.sync_launcher_build_metadata(
+                cur,
+                build_id,
+                selected.get("modtype"),
+                selected.get("version"),
+                selected.get("modloader"),
+            )
+            dependency_modloader = selected.get("build_modloader")
+            if (
+                str(selected.get("modtype") or "").upper() == "LAUNCHER"
+                and selected.get("modloader")
+            ):
+                dependency_modloader = selected["modloader"]
+
             added_dependencies = Modversion._add_required_dependencies(
                 cur,
                 build_id,
                 selected["minecraft"],
                 selected["mod_id"],
-                selected.get("build_modloader"),
+                dependency_modloader,
             )
             conn.commit()
             return added_dependencies
@@ -313,13 +357,15 @@ class Modversion:
         cur = conn.cursor(dictionary=True)
         try:
             cur.execute(
-                """SELECT replacement.mod_id, replacement.mcversion,
-                          replacement.modloader,
+                """SELECT replacement.mod_id, replacement.version,
+                          replacement.mcversion, replacement.modloader,
+                          mods.modtype,
                           current.mod_id AS current_mod_id,
                           builds.minecraft,
                           builds.modloader AS build_modloader
                    FROM modversions AS replacement
                    INNER JOIN modversions AS current ON current.id = %s
+                   INNER JOIN mods ON mods.id = replacement.mod_id
                    INNER JOIN builds ON builds.id = %s
                    WHERE replacement.id = %s""",
                 (oldmodver_id, build_id, modver_id),
@@ -344,6 +390,13 @@ class Modversion:
                    SET modversion_id = %s
                    WHERE modversion_id = %s AND build_id = %s""",
                 (modver_id, oldmodver_id, build_id),
+            )
+            Modversion.sync_launcher_build_metadata(
+                cur,
+                build_id,
+                selected.get("modtype"),
+                selected.get("version"),
+                selected.get("modloader"),
             )
             conn.commit()
         except Exception:
@@ -382,6 +435,9 @@ class Modversion:
     def delete_modversion(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
+        from .advanced_optional import AdvancedOptional
+
+        AdvancedOptional.delete_modversion_memberships(cur, [id])
         cur.execute("DELETE FROM modversions WHERE id=%s", (id,))
         cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s", (id,))
         conn.commit()
@@ -487,6 +543,7 @@ class Modversion:
                        INNER JOIN modpacks
                            ON builds.modpack_id = modpacks.id
                        WHERE build_modversion.modversion_id = %s
+                         AND build_modversion.optional IN (0, 1)
                          AND builds.is_published = 1
                        ORDER BY builds.id ASC""",
                     (self.id,),
@@ -508,6 +565,7 @@ class Modversion:
                        INNER JOIN modpacks
                            ON builds.modpack_id = modpacks.id
                        WHERE build_modversion.modversion_id = %s
+                         AND build_modversion.optional IN (0, 1)
                          AND builds.is_published = 1
                          AND (
                               (modpacks.private = 0 AND builds.private = 0)
@@ -538,6 +596,7 @@ class Modversion:
                        INNER JOIN modpacks
                            ON builds.modpack_id = modpacks.id
                        WHERE build_modversion.modversion_id = %s
+                         AND build_modversion.optional IN (0, 1)
                          AND builds.is_published = 1
                          AND (
                               (modpacks.private = 0 AND builds.private = 0)
@@ -556,7 +615,7 @@ class Modversion:
                 {
                     "id": row["build_id"],
                     "version": row["build_version"],
-                    "optional": bool(row["optional"]),
+                    "optional": int(row["optional"] or 0) == 1,
                     "modpack": {
                         "id": row["modpack_id"],
                         "name": row["modpack_slug"],

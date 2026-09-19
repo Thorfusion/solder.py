@@ -294,6 +294,9 @@ def verify_performance_indexes(database_container: str) -> None:
         ("modversions", "mod_id,integration_version_id"),
         ("maven_artifacts", "repository_id"),
         ("maven_versions", "maven_artifact_id,minecraft,modloader,enabled,available,metadata_order"),
+        ("build_optional_groups", "build_id,sort_order"),
+        ("build_optional_group_items", "group_id,sort_order"),
+        ("build_optional_group_items", "build_modversion_id"),
         ("user_permissions", "user_id"),
         ("user_modpack", "user_id,modpack_id"),
         ("user_modpack", "modpack_id,user_id"),
@@ -328,6 +331,7 @@ def verify_technic_migration(database_container: str) -> None:
         ("mods", "integration_project_id"),
         ("modpacks", "enable_optionals"),
         ("modpacks", "enable_server"),
+        ("modpacks", "optional_mode"),
         ("modpacks", "pinned"),
         ("modpacks", "user_id"),
         ("modpacks", "url"),
@@ -344,6 +348,7 @@ def verify_technic_migration(database_container: str) -> None:
         ("modversions", "mcversion"),
         ("modversions", "modloader"),
         ("modversions", "integration_version_id"),
+        ("platform_export_overrides", "override_solder_only"),
         ("user_permissions", "solder_env"),
         ("users", "two_factor_confirmed_at"),
         ("users", "two_factor_recovery_codes"),
@@ -377,11 +382,13 @@ def verify_technic_migration(database_container: str) -> None:
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
         "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies', "
-        "'solder_settings', "
+        "'solder_settings', 'platform_export_overrides', "
+        "'build_optional_groups', 'build_optional_group_items', "
+        "'technic_filedirector_builds', "
         "'personal_access_tokens', 'password_reset_tokens', "
         "'maven_repositories', 'maven_artifacts', 'maven_versions');",
     )
-    if int(table_count) != 9:
+    if int(table_count) != 13:
         raise AssertionError(
             "Migration did not preserve the current Technic tables and create "
             "the solder.py tables"
@@ -523,6 +530,61 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if settings_table_count != "1":
         raise AssertionError("Fresh schema did not create distribution settings")
+
+    advanced_optional_table_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME IN "
+        "('build_optional_groups', 'build_optional_group_items');",
+    )
+    if advanced_optional_table_count != "2":
+        raise AssertionError("Fresh schema did not create advanced optionals")
+
+    advanced_listing_nullable = mysql(
+        database_container,
+        "SELECT IS_NULLABLE FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME = 'build_optional_group_items' "
+        "AND COLUMN_NAME = 'group_id';",
+    )
+    if advanced_listing_nullable != "YES":
+        raise AssertionError(
+            "Advanced optional work-list entries still require a group"
+        )
+
+    technic_filedirector_table_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME = 'technic_filedirector_builds';",
+    )
+    if technic_filedirector_table_count != "1":
+        raise AssertionError(
+            "Fresh schema did not create Technic FileDirector settings"
+        )
+
+    advanced_optional_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ("
+        "(TABLE_NAME = 'modpacks' AND COLUMN_NAME = 'optional_mode') OR "
+        "(TABLE_NAME = 'platform_export_overrides' AND "
+        "COLUMN_NAME = 'override_solder_only'));",
+    )
+    if advanced_optional_column_count != "2":
+        raise AssertionError("Fresh schema omitted advanced export columns")
+
+    override_default = mysql(
+        database_container,
+        "SELECT CONCAT(modrinth_project_id, ':', curseforge_project_id, ':', "
+        "side, ':', enabled, ':', override_solder_only, ':', built_in) "
+        "FROM platform_export_overrides "
+        "WHERE name = 'TX Loader';",
+    )
+    if override_default != "eh8us8FY:706505:CLIENT:0:0:1":
+        raise AssertionError(
+            f"Fresh schema has an invalid TX Loader override: {override_default}"
+        )
 
     maven_table_count = mysql(
         database_container,
@@ -766,7 +828,10 @@ def seed_mcinstance_scenario(database_container: str) -> None:
                 'BOTH', 'MCIL'),
                (27, 'ci-mcil-optional', 'Synthetic optional MCIL export mod',
                 'CI', 'https://example.invalid/mcil-optional',
-                'CI MCIL Optional', 'CLIENT', 'MOD');
+                'CI MCIL Optional', 'CLIENT', 'MOD'),
+               (28, 'ci-forge-launcher', 'Synthetic modpack.jar package',
+                'CI', 'https://example.invalid/forge', 'CI Forge Launcher',
+                'BOTH', 'LAUNCHER');
            INSERT INTO modversions
                (id, mod_id, version, mcversion, md5, jarmd5, filesize)
            VALUES
@@ -775,7 +840,9 @@ def seed_mcinstance_scenario(database_container: str) -> None:
                 '26262626262626262626262626262626', 2626),
                (27, 27, '1.7.10-1.0', '1.7.10',
                 '27272727272727272727272727272727',
-                '27272727272727272727272727272727', 2727);
+                '27272727272727272727272727272727', 2727),
+               (28, 28, '1.7.10-10.13.4.1614', '1.7.10',
+                '28282828282828282828282828282828', '0', 2828);
            INSERT INTO build_modversion
                (id, modversion_id, build_id, optional)
            VALUES
@@ -1697,13 +1764,23 @@ def exercise_synthetic_user_login(
             response.status != 200
             or b"CI Example Mod" not in build_editor
             or b">Update all mods</button>" not in build_editor
-            or b">Export mod list (CSV)</a>" not in build_editor
+            or b">Export</a>" not in build_editor
+            or b"export=1" not in build_editor
+            or b'id="export_modpack_modal"' in build_editor
             or b'id="build_version_fields"' not in build_editor
             or b'name="java_runtime"' not in build_editor
-            or b">Advanced</span>" not in build_editor
-            or b">Export mod list</button>" in build_editor
+            or b">Advanced</span>" in build_editor
         ):
             raise AssertionError("The authenticated build editor did not render")
+
+    with opener.open(f"{base_url}/modpackbuild/1?export=1", timeout=5) as response:
+        export_editor = response.read()
+        if (
+            response.status != 200
+            or b'id="export_modpack_modal"' not in export_editor
+            or b">Export CSV</button>" not in export_editor
+        ):
+            raise AssertionError("The build export window did not render")
 
     build_settings_request = urllib.request.Request(
         f"{base_url}/modpackbuild/1",
@@ -1753,6 +1830,37 @@ def exercise_synthetic_user_login(
     if java_manifest.get("java_runtime") != "java-runtime-delta":
         raise AssertionError(
             f"The API omitted the Mojang Java runtime: {java_manifest}"
+        )
+
+    add_launcher_request = urllib.request.Request(
+        f"{base_url}/modpackbuild/20",
+        data=urllib.parse.urlencode(
+            {
+                "modversion": "28",
+                "modnames": "28",
+                "add_mod_submit": "1",
+            }
+        ).encode(),
+        method="POST",
+    )
+    try:
+        opener.open(add_launcher_request, timeout=5)
+    except urllib.error.HTTPError as error:
+        if error.code != 302 or error.headers.get("Location") != "/modpackbuild/20":
+            raise AssertionError(
+                f"Adding a launcher package returned an unexpected response: {error}"
+            ) from error
+    else:
+        raise AssertionError("Adding a launcher package did not redirect")
+
+    stored_modloader = mysql(
+        database_container,
+        "SELECT forge, modloader FROM builds WHERE id = 20;",
+    )
+    if stored_modloader != "1.7.10-10.13.4.1614\tFORGE":
+        raise AssertionError(
+            "The launcher package version was not synchronized to the build: "
+            f"{stored_modloader}"
         )
 
     with opener.open(f"{base_url}/modpackbuild/20/mcinstance", timeout=5) as response:
@@ -1902,7 +2010,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
                 )
         mysql(
             database_container,
-            "UPDATE modversions SET modloader = 'FORGE' WHERE id IN (26, 27);",
+            "UPDATE modversions SET modloader = 'FORGE' WHERE id IN (26, 27, 28);",
         )
         dependency_table_count = mysql(
             database_container,
@@ -1921,6 +2029,36 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         if settings_table_count != "1":
             raise AssertionError(
                 "Application startup did not create distribution settings"
+            )
+        advanced_optional_table_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.TABLES "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME IN "
+            "('build_optional_groups', 'build_optional_group_items');",
+        )
+        if advanced_optional_table_count != "2":
+            raise AssertionError(
+                "Application startup did not create advanced optionals"
+            )
+        technic_filedirector_table_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.TABLES "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+            "AND TABLE_NAME = 'technic_filedirector_builds';",
+        )
+        if technic_filedirector_table_count != "1":
+            raise AssertionError(
+                "Application startup did not create Technic FileDirector settings"
+            )
+        override_default = mysql(
+            database_container,
+            "SELECT CONCAT(modrinth_project_id, ':', curseforge_project_id, ':', "
+            "side, ':', enabled, ':', override_solder_only, ':', built_in) "
+            "FROM platform_export_overrides WHERE name = 'TX Loader';",
+        )
+        if override_default != "eh8us8FY:706505:CLIENT:0:0:1":
+            raise AssertionError(
+                "Application startup did not create the disabled TX Loader override"
             )
         maven_table_count = mysql(
             database_container,
@@ -1962,7 +2100,8 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         mysql(
             database_container,
             "INSERT INTO solder_settings (name, value) VALUES "
-            "('packwiz_enabled', '1'), ('filedirector_enabled', '1') "
+            "('mcil_enabled', '1'), ('packwiz_enabled', '1'), "
+            "('filedirector_enabled', '1') "
             "ON DUPLICATE KEY UPDATE value = '1';",
         )
         verify_api_only_distribution_files(image, network)

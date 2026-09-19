@@ -147,6 +147,11 @@ class Mod:
         cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (id,))
         modversions = cur.fetchall()
         if modversions:
+            from .advanced_optional import AdvancedOptional
+
+            AdvancedOptional.delete_modversion_memberships(
+                cur, [mv["id"] for mv in modversions]
+            )
             for mv in modversions:
                 cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s", (mv["id"],))
         cur.execute(
@@ -284,6 +289,62 @@ class Mod:
         finally:
             cur.close()
             conn.close()
+
+    @classmethod
+    def link_integration(cls, id, provider, project_id):
+        """Attach provider metadata without replacing a mod or its versions."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        try:
+            cur.execute(
+                """UPDATE mods
+                   SET integration_provider = %s,
+                       integration_project_id = %s,
+                       updated_at = %s
+                   WHERE id = %s
+                     AND integration_provider IS NULL
+                     AND integration_project_id IS NULL""",
+                (str(provider).upper(), str(project_id), now, id),
+            )
+            if cur.rowcount != 1:
+                conn.rollback()
+                return None
+            conn.commit()
+        except IntegrityError as error:
+            conn.rollback()
+            if error.errno == errorcode.ER_DUP_ENTRY:
+                raise DuplicateModError(project_id) from error
+            raise
+        finally:
+            cur.close()
+            conn.close()
+        return cls.get_by_id(id)
+
+    @classmethod
+    def unlink_integration(cls, id, provider):
+        """Detach provider metadata while retaining local versions and builds."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        try:
+            cur.execute(
+                """UPDATE mods
+                   SET integration_provider = NULL,
+                       integration_project_id = NULL,
+                       updated_at = %s
+                   WHERE id = %s AND integration_provider = %s""",
+                (now, id, str(provider).upper()),
+            )
+            changed = cur.rowcount == 1
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+        return cls.get_by_id(id) if changed else None
 
     @staticmethod
     def get_integration_project_ids(provider):

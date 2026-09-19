@@ -7,10 +7,12 @@ from datetime import datetime, timezone
 import hashlib
 import hmac
 import json
+import logging
 import os
 from pathlib import Path
 import re
 import tempfile
+from types import SimpleNamespace
 import unicodedata
 from urllib.parse import urljoin, urlparse
 import zipfile
@@ -19,6 +21,12 @@ import requests
 from werkzeug.utils import secure_filename
 
 from .compatibility import normalize_modloader
+from .github_config import (
+    GitHubClient,
+    GitHubConfigError,
+    GitHubConfigPack,
+    github_repository_reference,
+)
 from .maven import (
     MAVEN,
     MavenArtifact,
@@ -33,8 +41,12 @@ from .mod import DuplicateModError, Mod
 from .modversion import Modversion
 
 
+logger = logging.getLogger(__name__)
+
+
 MODRINTH = "MODRINTH"
-SUPPORTED_PROVIDERS = (MODRINTH, MAVEN)
+GITHUB = "GITHUB"
+SUPPORTED_PROVIDERS = (MODRINTH, MAVEN, GITHUB)
 SUPPORTED_LOADERS = (
     "FORGE",
     "NEOFORGE",
@@ -45,7 +57,7 @@ SUPPORTED_LOADERS = (
 MAX_INTEGRATION_FILE_SIZE = 512 * 1024 * 1024
 REQUEST_TIMEOUT = (5, 30)
 DOWNLOAD_TIMEOUT = (5, 120)
-USER_AGENT = "solder.py/1.9.0 (+https://github.com/Thorfusion/solder.py)"
+USER_AGENT = "solder.py/1.10.0 (+https://github.com/Thorfusion/solder.py)"
 
 
 class IntegrationError(ValueError):
@@ -162,6 +174,7 @@ class ExternalProvider:
                 f"{self.base_url}{path}",
                 params=params,
                 headers=self._headers(),
+                allow_redirects=False,
                 timeout=REQUEST_TIMEOUT,
             )
         except requests.RequestException as error:
@@ -170,6 +183,10 @@ class ExternalProvider:
             ) from error
 
         try:
+            if 300 <= response.status_code < 400:
+                raise IntegrationError(
+                    f"{self.provider.title()} returned an unexpected redirect."
+                )
             if response.status_code in {401, 403}:
                 raise IntegrationError(
                     f"{self.provider.title()} rejected the request."
@@ -188,6 +205,9 @@ class ExternalProvider:
 
     def resolve_download_url(self, version):
         return version.download_url
+
+    def list_all_versions(self, project_id):
+        raise NotImplementedError
 
     def _download_host_allowed(self, hostname):
         raise NotImplementedError
@@ -350,7 +370,7 @@ class ModrinthProvider(ExternalProvider):
         return [self._project(item) for item in payload.get("hits", [])]
 
     def get_project(self, project_id):
-        project_id = external_id(project_id)
+        project_id = self.project_reference(project_id)
         payload = self._request_json(f"/project/{project_id}")
         if payload.get("project_type") != "mod":
             raise IntegrationError("The selected Modrinth project is not a mod.")
@@ -374,9 +394,30 @@ class ModrinthProvider(ExternalProvider):
             )
         author = ", ".join(names)
         project = self._project(payload, author=author)
-        if project.project_id != project_id:
+        if project.project_id != project_id and project.slug != project_id:
             raise IntegrationError("Modrinth returned a different project.")
         return project
+
+    @staticmethod
+    def project_reference(value):
+        value = str(value or "").strip()
+        if "://" in value:
+            parsed = urlparse(value)
+            if (
+                parsed.scheme != "https"
+                or (parsed.hostname or "").lower()
+                not in {"modrinth.com", "www.modrinth.com"}
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.query
+                or parsed.fragment
+            ):
+                raise IntegrationError("Enter a normal HTTPS Modrinth project URL.")
+            parts = [part for part in parsed.path.split("/") if part]
+            if len(parts) != 2 or parts[0] not in {"mod", "project"}:
+                raise IntegrationError("Enter a Modrinth mod project URL.")
+            value = parts[1]
+        return external_id(value)
 
     @staticmethod
     def _version(payload):
@@ -461,6 +502,27 @@ class ModrinthProvider(ExternalProvider):
         )
         return versions
 
+    def list_all_versions(self, project_id):
+        project_id = external_id(project_id)
+        payload = self._request_json(
+            f"/project/{project_id}/version",
+            params={"include_changelog": "false"},
+        )
+        versions = []
+        for item in payload:
+            try:
+                versions.append(self._version(item))
+            except IntegrationError:
+                continue
+        versions.sort(
+            key=lambda version: (
+                self._published_at(version),
+                version.version_id,
+            ),
+            reverse=True,
+        )
+        return versions
+
     def get_version(self, project_id, version_id, minecraft, modloader=None):
         project_id = external_id(project_id)
         version_id = external_id(version_id)
@@ -473,6 +535,196 @@ class ModrinthProvider(ExternalProvider):
         if normalized_loader and normalized_loader not in version.loaders:
             raise IntegrationError("The selected version does not support this modloader.")
         return version
+
+    def get_versions(self, project_versions, minecraft, modloader=None):
+        """Resolve exact project/version pairs with Modrinth's batch endpoint."""
+        requested = {}
+        for project_id, version_id in project_versions:
+            project_id = external_id(project_id)
+            version_id = external_id(version_id)
+            previous = requested.get(version_id)
+            if previous is not None and previous != project_id:
+                raise IntegrationError(
+                    "One Modrinth version was linked to multiple projects."
+                )
+            requested[version_id] = project_id
+
+        resolved = {}
+        version_ids = list(requested)
+        for offset in range(0, len(version_ids), 100):
+            chunk = version_ids[offset : offset + 100]
+            payload = self._request_json(
+                "/versions", params={"ids": json.dumps(chunk)}
+            )
+            if not isinstance(payload, list):
+                raise IntegrationError(
+                    "Modrinth returned an invalid version list."
+                )
+            for item in payload:
+                version = self._version(item)
+                expected_project = requested.get(version.version_id)
+                if expected_project is None:
+                    raise IntegrationError(
+                        "Modrinth returned an unrequested version."
+                    )
+                if version.project_id != expected_project:
+                    raise IntegrationError(
+                        "A selected Modrinth version belongs to another project."
+                    )
+                resolved[version.version_id] = version
+
+        if set(resolved) != set(requested):
+            raise IntegrationError(
+                "One or more selected Modrinth versions are no longer available."
+            )
+
+        normalized_loader = normalize_modloader(modloader)
+        for version in resolved.values():
+            if str(minecraft) not in version.game_versions:
+                raise IntegrationError(
+                    "A selected Modrinth version does not support this Minecraft version."
+                )
+            if normalized_loader and normalized_loader not in version.loaders:
+                raise IntegrationError(
+                    "A selected Modrinth version does not support this modloader."
+                )
+        return resolved
+
+
+class GitHubProvider(ExternalProvider):
+    """Expose GitHub repository tags as materializable CONFIG versions."""
+
+    provider = GITHUB
+    require_download_hash = False
+
+    def __init__(self, http=None):
+        # GitHubClient owns all HTTP validation, redirects, and rate-limit
+        # errors. Keep ExternalProvider's session convention for tests.
+        super().__init__(http=http)
+        self.github = GitHubClient(http=self.http)
+
+    def _download_host_allowed(self, hostname):
+        return False
+
+    @staticmethod
+    def _project(repository):
+        return ExternalProject(
+            provider=GITHUB,
+            project_id=repository.repository_id,
+            slug=repository.name,
+            title=repository.name,
+            description=repository.description,
+            author=repository.owner,
+            link=repository.html_url,
+            license=repository.license,
+            side="BOTH",
+            distribution_allowed=not repository.private,
+            available=True,
+        )
+
+    def resolve_project(self, reference):
+        try:
+            return self._project(self.github.repository(reference))
+        except GitHubConfigError as error:
+            raise IntegrationError(str(error)) from error
+
+    def get_project(self, project_id):
+        project_id = external_id(project_id)
+        if not project_id.isdigit():
+            raise IntegrationError("GitHub returned an invalid repository identifier.")
+        project = self.resolve_project(project_id)
+        if project.project_id != project_id:
+            raise IntegrationError("GitHub returned a different repository.")
+        return project
+
+    @staticmethod
+    def _tag_version_id(repository_id, tag):
+        return hashlib.sha256(
+            f"github-tag\0{repository_id}\0{tag}".encode("utf-8")
+        ).hexdigest()
+
+    @staticmethod
+    def _manual_version_id(repository_id, sha, version):
+        return hashlib.sha256(
+            f"github-manual\0{repository_id}\0{sha}\0{version}".encode("utf-8")
+        ).hexdigest()
+
+    @staticmethod
+    def _external(repository, name, sha, version_id, minecraft, modloader=None):
+        loader = normalize_modloader(modloader)
+        minecraft = str(minecraft or "").strip()
+        return ExternalVersion(
+            provider=GITHUB,
+            project_id=repository.repository_id,
+            version_id=version_id,
+            name=name,
+            version_number=name,
+            game_versions=(minecraft,) if minecraft else (),
+            loaders=(loader,) if loader else (),
+            release_type="release",
+            date_published=None,
+            filename=f"{repository.name}-{name}.zip",
+            download_url=None,
+            hashes={"git": sha},
+            size=0,
+            integration_label=repository.full_name,
+        )
+
+    def list_versions(self, project_id, minecraft, modloader=None):
+        try:
+            repository = self.github.repository(external_id(project_id))
+            return [
+                self._external(
+                    repository,
+                    tag,
+                    sha,
+                    self._tag_version_id(repository.repository_id, tag),
+                    minecraft,
+                    modloader,
+                )
+                for tag, sha in self.github.tags(repository)
+            ]
+        except GitHubConfigError as error:
+            raise IntegrationError(str(error)) from error
+
+    def list_all_versions(self, project_id):
+        return self.list_versions(project_id, "")
+
+    def get_version(self, project_id, version_id, minecraft, modloader=None):
+        version_id = external_id(version_id)
+        for version in self.list_versions(project_id, minecraft, modloader):
+            if hmac.compare_digest(version.version_id, version_id):
+                return version
+        raise IntegrationError("The selected GitHub tag is no longer available.")
+
+    def resolve_ref(self, project_id, ref, version, minecraft, modloader=None):
+        version = str(version or "").strip()
+        if not version or len(version) > 255:
+            raise IntegrationError("Enter a version for this GitHub config package.")
+        try:
+            repository = self.github.repository(external_id(project_id))
+            reference = self.github.resolve_ref(repository, ref)
+        except GitHubConfigError as error:
+            raise IntegrationError(str(error)) from error
+        return self._external(
+            repository,
+            version,
+            reference.sha,
+            self._manual_version_id(
+                repository.repository_id, reference.sha, version
+            ),
+            minecraft,
+            modloader,
+        )
+
+    def build_config_package(self, version, destination):
+        sha = str(version.hashes.get("git") or "")
+        try:
+            repository = self.github.repository(version.project_id)
+            reference = self.github.resolve_ref(repository, sha)
+            GitHubConfigPack(self.github).build(repository, reference, destination)
+        except GitHubConfigError as error:
+            raise IntegrationError(str(error)) from error
 
 
 class MavenProvider(ExternalProvider):
@@ -552,6 +804,22 @@ class MavenProvider(ExternalProvider):
         )
         return [self._external_version(artifact, mapping) for mapping in mappings]
 
+    def list_all_versions(self, project_id):
+        artifact = self._artifact(project_id)
+        try:
+            MavenCatalog.refresh(artifact, http=self.http)
+        except MavenError as error:
+            raise IntegrationError(str(error)) from error
+        mappings = (
+            mapping
+            for mapping in MavenVersion.get_all(artifact.id)
+            if mapping.enabled
+            and mapping.available
+            and mapping.minecraft
+            and mapping.mod_version
+        )
+        return [self._external_version(artifact, mapping) for mapping in mappings]
+
     def get_version(self, project_id, version_id, minecraft, modloader=None):
         artifact = self._artifact(project_id)
         version_id = external_id(version_id)
@@ -603,6 +871,8 @@ def provider_for_user(provider, user_id, *, http=None):
     provider = normalize_provider(provider)
     if provider == MAVEN:
         return MavenProvider(user_id=user_id, http=http)
+    if provider == GITHUB:
+        return GitHubProvider(http=http)
     return ModrinthProvider(http=http)
 
 
@@ -620,6 +890,11 @@ class ModIntegration:
     def import_project(
         cls, provider_name, project_id, user_id, *, http=None, metadata=None
     ):
+        provider_name = normalize_provider(provider_name)
+        if provider_name == GITHUB:
+            raise IntegrationError(
+                "GitHub repositories must be linked from an existing CONFIG entry."
+            )
         provider = provider_for_user(provider_name, user_id, http=http)
         project = provider.get_project(external_id(project_id))
         if not project.available:
@@ -642,6 +917,50 @@ class ModIntegration:
         link = str(metadata.get("link") or project.link)[:255]
         side = str(metadata.get("side") or project.side).upper()
         slug = cls._slug(project.slug or title)
+
+        # A manual Solder mod may predate its Modrinth integration. Link the
+        # existing row instead of forcing an administrator to delete it (and
+        # all of its locally hosted versions) before importing the project.
+        if project.provider == MODRINTH:
+            existing_slug = Mod.get_by_name_api(slug)
+            if existing_slug is not None:
+                if (
+                    existing_slug.integration_provider
+                    or existing_slug.integration_project_id
+                ):
+                    raise IntegrationError(
+                        f'The local mod slug "{slug}" is already managed by '
+                        "another integration."
+                    )
+                try:
+                    linked = Mod.link_integration(
+                        existing_slug.id,
+                        project.provider,
+                        project.project_id,
+                    )
+                except DuplicateModError as error:
+                    mapped = Mod.get_by_integration(
+                        project.provider, project.project_id
+                    )
+                    if mapped:
+                        return mapped, False
+                    raise IntegrationError(
+                        "This Modrinth project is already linked to another mod."
+                    ) from error
+                if linked is not None:
+                    return linked, False
+
+                refreshed = Mod.get_by_name_api(slug)
+                if (
+                    refreshed is not None
+                    and refreshed.integration_provider == project.provider
+                    and refreshed.integration_project_id == project.project_id
+                ):
+                    return refreshed, False
+                raise IntegrationError(
+                    f'The local mod slug "{slug}" could not be linked safely.'
+                )
+
         try:
             mod = Mod.new(
                 slug,
@@ -666,6 +985,53 @@ class ModIntegration:
             ) from error
         return mod, True
 
+    @classmethod
+    def link_existing(cls, mod, provider_name, reference, user_id, *, http=None):
+        """Link a manually selected upstream project without changing local data."""
+        if mod is None:
+            raise IntegrationError("The selected mod no longer exists.")
+        if mod.integration_provider or mod.integration_project_id:
+            raise IntegrationError("This mod is already managed by an integration.")
+
+        provider_name = normalize_provider(provider_name)
+        if provider_name == MAVEN:
+            raise IntegrationError("Maven artifacts are configured from the Maven page.")
+        if provider_name == GITHUB:
+            if str(mod.modtype or "").upper() != "CONFIG":
+                raise IntegrationError(
+                    "GitHub config repositories can only be linked to CONFIG mods."
+                )
+            provider = GitHubProvider(http=http)
+            project = provider.resolve_project(reference)
+        else:
+            if str(mod.modtype or "").upper() != "MOD":
+                raise IntegrationError(
+                    "Modrinth projects can only be linked to MOD entries."
+                )
+            provider = ModrinthProvider(http=http)
+            project = provider.get_project(
+                ModrinthProvider.project_reference(reference)
+            )
+
+        if not project.available or not project.distribution_allowed:
+            raise IntegrationError("That upstream project cannot be used by Solder.")
+        existing = Mod.get_by_integration(project.provider, project.project_id)
+        if existing is not None and int(existing.id) != int(mod.id):
+            raise IntegrationError(
+                "That upstream project is already linked to another mod."
+            )
+        try:
+            linked = Mod.link_integration(
+                mod.id, project.provider, project.project_id
+            )
+        except DuplicateModError as error:
+            raise IntegrationError(
+                "That upstream project is already linked to another mod."
+            ) from error
+        if linked is None:
+            raise IntegrationError("The mod could not be linked safely.")
+        return linked, project
+
     @staticmethod
     def list_versions(mod, build, user_id, *, http=None):
         if not mod.integration_provider or not mod.integration_project_id:
@@ -680,6 +1046,54 @@ class ModIntegration:
             mod.integration_project_id,
             build.minecraft,
             build.modloader,
+        )
+
+    @staticmethod
+    def list_unimported_versions(mod, user_id, *, http=None):
+        if not mod.integration_provider or not mod.integration_project_id:
+            return []
+        provider = provider_for_user(mod.integration_provider, user_id, http=http)
+        imported = Modversion.get_integration_version_ids(mod.id)
+        return [
+            version
+            for version in provider.list_all_versions(
+                mod.integration_project_id
+            )
+            if version.version_id not in imported
+        ]
+
+    @classmethod
+    def materialize_for_management(
+        cls,
+        mod,
+        integration_version_id,
+        minecraft,
+        modloader,
+        user_id,
+        upload_folder,
+        *,
+        r2_client=None,
+        r2_bucket=None,
+        http=None,
+    ):
+        minecraft = str(minecraft or "").strip()
+        if not minecraft or len(minecraft) > 255:
+            raise IntegrationError(
+                "Select the Minecraft version for the upstream version."
+            )
+        try:
+            modloader = normalize_modloader(modloader)
+        except ValueError as error:
+            raise IntegrationError(str(error)) from error
+        return cls.materialize(
+            mod,
+            SimpleNamespace(minecraft=minecraft, modloader=modloader),
+            integration_version_id,
+            user_id,
+            upload_folder,
+            r2_client=r2_client,
+            r2_bucket=r2_bucket,
+            http=http,
         )
 
     @staticmethod
@@ -702,6 +1116,173 @@ class ModIntegration:
             ).hexdigest()[:12]
             version = f"{version[:maximum_length - 13]}-{suffix}"
         return version
+
+    @classmethod
+    def _materialize_github_config(
+        cls,
+        mod,
+        build,
+        external,
+        provider,
+        upload_folder,
+        *,
+        r2_client=None,
+        r2_bucket=None,
+    ):
+        if str(mod.modtype or "").upper() != "CONFIG":
+            raise IntegrationError(
+                "GitHub repository versions can only be imported for CONFIG mods."
+            )
+        selected_loader = external.loader_for_build(build.modloader)
+        if build.modloader and external.loaders and selected_loader is None:
+            raise IntegrationError(
+                "The selected config version does not support this modloader."
+            )
+        version_name = cls._local_version(mod, external, build.minecraft)
+        destination_folder = Path(upload_folder, mod.name)
+        destination_folder.mkdir(parents=True, exist_ok=True)
+        zip_filename = f"{mod.name}-{version_name}.zip"
+        final_zip = destination_folder / zip_filename
+        uploaded_key = None
+        try:
+            with tempfile.TemporaryDirectory(
+                prefix=".solder-github-", dir=destination_folder
+            ) as staging_directory:
+                staged_zip = Path(staging_directory, zip_filename)
+                provider.build_config_package(external, staged_zip)
+                package_md5 = Mod.file_md5(staged_zip)
+                package_size = staged_zip.stat().st_size
+                os.replace(staged_zip, final_zip)
+
+            if r2_client is not None and r2_bucket:
+                uploaded_key = f"mods/{mod.name}/{zip_filename}"
+                r2_client.upload_file(
+                    str(final_zip),
+                    r2_bucket,
+                    uploaded_key,
+                    ExtraArgs={"ContentType": "application/zip"},
+                )
+
+            version = Modversion.new(
+                mod.id,
+                version_name,
+                build.minecraft,
+                package_md5,
+                package_size,
+                "0",
+                "0",
+                "0",
+                modloader=selected_loader,
+                integration_version_id=external.version_id,
+            )
+            return MaterializedVersion(version, True)
+        except Exception:
+            raced = Modversion.get_by_integration(mod.id, external.version_id)
+            if raced:
+                return MaterializedVersion(raced, False)
+            final_zip.unlink(missing_ok=True)
+            if uploaded_key and r2_client is not None and r2_bucket:
+                try:
+                    r2_client.delete_object(Bucket=r2_bucket, Key=uploaded_key)
+                except Exception:
+                    logger.warning(
+                        "Unable to remove an incomplete R2 integration upload.",
+                        exc_info=True,
+                    )
+            raise
+
+    @classmethod
+    def materialize_github_ref(
+        cls,
+        mod,
+        minecraft,
+        modloader,
+        ref,
+        version,
+        user_id,
+        upload_folder,
+        *,
+        r2_client=None,
+        r2_bucket=None,
+        http=None,
+    ):
+        if mod is None or mod.integration_provider != GITHUB:
+            raise IntegrationError("This CONFIG mod is not linked to GitHub.")
+        if not mod.name or secure_filename(mod.name) != mod.name:
+            raise IntegrationError(
+                "The managed mod slug contains unsafe filename characters."
+            )
+        minecraft = str(minecraft or "").strip()
+        if not minecraft or len(minecraft) > 255:
+            raise IntegrationError("Enter the Minecraft version for this config package.")
+        provider = provider_for_user(GITHUB, user_id, http=http)
+        external = provider.resolve_ref(
+            mod.integration_project_id,
+            ref,
+            version,
+            minecraft,
+            modloader,
+        )
+        existing = Modversion.get_by_integration(mod.id, external.version_id)
+        if existing:
+            return MaterializedVersion(existing, False)
+        build = type(
+            "GitHubConfigBuild",
+            (),
+            {"minecraft": minecraft, "modloader": normalize_modloader(modloader)},
+        )()
+        return cls._materialize_github_config(
+            mod,
+            build,
+            external,
+            provider,
+            upload_folder,
+            r2_client=r2_client,
+            r2_bucket=r2_bucket,
+        )
+
+    @classmethod
+    def materialize_latest_github_tag(
+        cls,
+        mod,
+        minecraft,
+        modloader,
+        user_id,
+        upload_folder,
+        *,
+        r2_client=None,
+        r2_bucket=None,
+        http=None,
+    ):
+        if mod is None or mod.integration_provider != GITHUB:
+            raise IntegrationError("This CONFIG mod is not linked to GitHub.")
+        minecraft = str(minecraft or "").strip()
+        if not minecraft or len(minecraft) > 255:
+            raise IntegrationError("Enter the Minecraft version for this config package.")
+        provider = provider_for_user(GITHUB, user_id, http=http)
+        versions = provider.list_versions(
+            mod.integration_project_id, minecraft, modloader
+        )
+        if not versions:
+            raise IntegrationError("This GitHub repository has no tags to import.")
+        external = versions[0]
+        existing = Modversion.get_by_integration(mod.id, external.version_id)
+        if existing:
+            return MaterializedVersion(existing, False)
+        build = type(
+            "GitHubConfigBuild",
+            (),
+            {"minecraft": minecraft, "modloader": normalize_modloader(modloader)},
+        )()
+        return cls._materialize_github_config(
+            mod,
+            build,
+            external,
+            provider,
+            upload_folder,
+            r2_client=r2_client,
+            r2_bucket=r2_bucket,
+        )
 
     @classmethod
     def materialize(
@@ -739,6 +1320,16 @@ class ModIntegration:
             build.minecraft,
             build.modloader,
         )
+        if mod.integration_provider == GITHUB:
+            return cls._materialize_github_config(
+                mod,
+                build,
+                external,
+                provider,
+                upload_folder,
+                r2_client=r2_client,
+                r2_bucket=r2_bucket,
+            )
         selected_loader = external.loader_for_build(build.modloader)
         if build.modloader and external.loaders and selected_loader is None:
             raise IntegrationError("The selected version does not support this modloader.")
@@ -809,5 +1400,8 @@ class ModIntegration:
                     try:
                         r2_client.delete_object(Bucket=r2_bucket, Key=key)
                     except Exception:
-                        pass
+                        logger.warning(
+                            "Unable to remove an incomplete R2 integration upload.",
+                            exc_info=True,
+                        )
             raise

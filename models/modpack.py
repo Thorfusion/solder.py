@@ -20,6 +20,7 @@ class Modpack:
         pinned,
         enable_optionals=0,
         enable_server=0,
+        optional_mode=0,
     ):
         self.id = id
         self.name = name
@@ -34,6 +35,7 @@ class Modpack:
         self.pinned = pinned
         self.enable_optionals = enable_optionals
         self.enable_server = enable_server
+        self.optional_mode = int(optional_mode or 0)
 
     @classmethod
     def _from_row(cls, row):
@@ -52,6 +54,7 @@ class Modpack:
             row.get("pinned", 0),
             row.get("enable_optionals", 0),
             row.get("enable_server", 0),
+            row.get("optional_mode", 0),
         )
 
     @staticmethod
@@ -70,7 +73,12 @@ class Modpack:
         cur.execute("SELECT * FROM builds WHERE modpack_id = %s", (id,))
         modversions = cur.fetchall()
         if modversions:
+            from .advanced_optional import AdvancedOptional
+            from .technic_filedirector import TechnicFileDirector
+
             for mv in modversions:
+                AdvancedOptional.delete_build(cur, mv["id"])
+                TechnicFileDirector.delete_build(cur, mv["id"])
                 cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (mv["id"],))
         cur.execute("DELETE FROM builds WHERE modpack_id = %s", (id,))
         cur.execute("DELETE FROM modpacks WHERE id=%s", (id,))
@@ -219,6 +227,8 @@ class Modpack:
             "recommended": self.recommended,
             "latest": self.latest,
             "capabilities": {
+                "advanced_optionals": self.optional_mode == 1,
+                "bootstrap_manifest": True,
                 "optional": bool(self.enable_optionals),
                 "server": bool(self.enable_server),
             },

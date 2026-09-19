@@ -57,7 +57,7 @@
 
     <hr>
     <h4>Import integration manifest</h4>
-    <p class="text-muted">Import a reviewed JSON list resolved to Modrinth project IDs or Maven coordinates. Existing mods are left unchanged.</p>
+    <p class="text-muted">Import a reviewed JSON list resolved to Modrinth project IDs or exact Maven coordinates. Existing mods are left unchanged. The detailed example includes field rules and examples for embedded, fixed, and manual Maven mappings so it can be given directly to an AI together with a mod list.</p>
     <form method="post" action="{{url_for('asite.import_integration_manifest')}}" enctype="multipart/form-data" class="row g-3">
         <div class="col-md-8">
             <label for="manifest" class="form-label">Manifest JSON</label>
@@ -73,7 +73,7 @@
         <div class="col-12">
             <button class="btn btn-success" type="submit">Import manifest</button>
             <a class="btn btn-secondary" href="{{url_for('asite.export_integration_manifest')}}">Export configured integrations</a>
-            <a class="btn btn-link" href="{{url_for('static', filename='examples/integration-manifest.json')}}">Example manifest</a>
+            <a class="btn btn-link" href="{{url_for('static', filename='examples/integration-manifest.json')}}" download>Detailed AI manifest example</a>
         </div>
     </form>
 </div>

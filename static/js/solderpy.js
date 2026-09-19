@@ -83,7 +83,6 @@ function selectbuildmod(option, valueId, labelId, toggleId, submitId) {
     }
 }
 
-
 // sleep function
 // https://stackoverflow.com/questions/16873323/javascript-sleep-wait-before-continuing
 function sleep(milliseconds) {
