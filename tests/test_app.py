@@ -627,6 +627,17 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(b"submitecheckedpress", response.data)
         self.assertNotIn(b">Save</button>", response.data)
 
+        template = (
+            Path(__file__).resolve().parents[1]
+            / "templates"
+            / "platform_export_overrides.html"
+        ).read_text(encoding="utf-8")
+        main, aside = template.split("{%block aside%}", 1)
+        self.assertNotIn("Export list", main)
+        self.assertIn("Export list", aside)
+        self.assertIn('name="sync_manifest"', aside)
+        self.assertLess(aside.index("Add mapping"), aside.index("Export list"))
+
         with (
             patch("asite.Session.verify_session", return_value=True),
             patch("asite.User.get_permission_token", return_value=1),

@@ -72,13 +72,6 @@
         <input class="btn btn-primary invisible" type="submit" name="set_override_enabled" id="set_override_enabled" value="Save">
         <input class="btn btn-primary invisible" type="submit" name="set_override_solder_only" id="set_override_solder_only" value="Save Solder-only override">
     </form>
-    <div class="d-flex flex-wrap gap-2 mt-3">
-        <a class="btn btn-secondary" href="{{url_for('asite.export_platform_sync')}}">Export list</a>
-        <form method="post" action="{{url_for('asite.platform_export_overrides')}}" enctype="multipart/form-data" class="d-flex flex-wrap gap-2">
-            <input class="form-control" type="file" name="sync_manifest" accept="application/json,.json" required>
-            <button class="btn btn-primary" type="submit" name="import_sync_manifest" value="1">Import list</button>
-        </form>
-    </div>
 </div>
 {%endblock%}
 {%block aside%}
@@ -111,6 +104,18 @@
     </div>
     <p class="text-muted small">New mappings are disabled until you enable them in the list.</p>
     <button class="btn btn-success" type="submit" name="create_override" value="1">Add mapping</button>
+</form>
+<hr>
+<h3 class="h5">Mapping list</h3>
+<div class="d-grid gap-2 mb-3">
+    <a class="btn btn-secondary" href="{{url_for('asite.export_platform_sync')}}">Export list</a>
+</div>
+<form method="post" action="{{url_for('asite.platform_export_overrides')}}" enctype="multipart/form-data">
+    <div class="mb-2">
+        <label class="form-label" for="sync_manifest">Import list</label>
+        <input class="form-control" type="file" name="sync_manifest" id="sync_manifest" accept="application/json,.json" required>
+    </div>
+    <button class="btn btn-primary w-100" type="submit" name="import_sync_manifest" value="1">Import list</button>
 </form>
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 {%endblock%}
