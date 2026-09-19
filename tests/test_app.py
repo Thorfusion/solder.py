@@ -573,6 +573,10 @@ class ApplicationSmokeTests(unittest.TestCase):
             response.data.index(b'id="distribution_settings"'),
             response.data.index(b'id="manual_md5_hashing"'),
         )
+        self.assertLess(
+            response.data.index(b'id="legacy_jar_migration"'),
+            response.data.index(b'id="manual_md5_hashing"'),
+        )
 
         settings_source = (
             Path(__file__).resolve().parents[1]
@@ -610,6 +614,44 @@ class ApplicationSmokeTests(unittest.TestCase):
             mrpack=False,
             curseforge=False,
             prism=False,
+        )
+
+    def test_environment_settings_can_scan_legacy_jar_packages(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        result = SimpleNamespace(
+            scanned_mods=4,
+            scanned_versions=7,
+            converted_mods=2,
+            converted_versions=5,
+            failures=("mixed-package: contains additional files",),
+        )
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch(
+                "asite.MCInstanceJar.promote_jar_only_none_mods",
+                return_value=result,
+            ) as promote,
+            patch("asite.ErrorPrinter.message") as report,
+        ):
+            response = self.client.post(
+                "/mainsettings",
+                data={"convert_none_mods_submit": "1"},
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/mainsettings")
+        promote.assert_called_once()
+        report.assert_called_once_with(
+            "Legacy JAR scan left a mod unchanged",
+            "mixed-package: contains additional files",
+        )
+        with self.client.session_transaction() as flask_session:
+            flashes = flask_session.get("_flashes", [])
+        self.assertTrue(
+            any("2 of 4 NONE mods converted" in message for _, message in flashes)
         )
 
     def test_export_override_settings_render_and_toggle_tx_loader(self):

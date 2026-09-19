@@ -441,13 +441,27 @@ class Mod:
         return actual_md5
 
     @staticmethod
-    def extract_jar_from_zip(zip_paths, output_name=None, expected_md5=None):
-        """Extract the single mods/*.jar entry and optionally verify its MD5."""
+    def extract_jar_from_zip(
+        zip_paths,
+        output_name=None,
+        expected_md5=None,
+        require_only_jar=False,
+    ):
+        """Extract the single mods/*.jar entry and optionally verify its MD5.
+
+        ``require_only_jar`` is used by the legacy package maintenance scan. In
+        that mode directory entries are ignored, but the JAR must be the only
+        file payload in the ZIP. Normal uploads deliberately retain the older
+        behaviour which permits configuration files beside the mod JAR.
+        """
         base_dir = Path(zip_paths).parent
         try:
             with zipfile.ZipFile(zip_paths, "r") as zip_ref:
                 jar_files = []
+                payload_files = []
                 for info in zip_ref.infolist():
+                    if not info.is_dir():
+                        payload_files.append(info)
                     normalized = info.filename.replace("\\", "/")
                     path = PurePosixPath(normalized)
                     if (
@@ -462,6 +476,10 @@ class Mod:
                 if len(jar_files) != 1:
                     raise UploadVerificationError(
                         "A JAR upload must contain exactly one JAR inside the mods folder."
+                    )
+                if require_only_jar and payload_files != jar_files:
+                    raise UploadVerificationError(
+                        "The package contains files other than its single mods JAR."
                     )
                 if jar_files[0].file_size > _MAX_UPLOAD_JAR_SIZE:
                     raise UploadVerificationError(

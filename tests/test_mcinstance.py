@@ -426,6 +426,13 @@ class MCInstanceJarTests(unittest.TestCase):
             jarmd5=None,
         )
 
+    @staticmethod
+    def jar_only_package(jar_data=b"legacy jar"):
+        package = io.BytesIO()
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr("mods/original-name.jar", jar_data)
+        return package.getvalue()
+
     def test_create_legacy_jar_from_local_solder_package(self):
         jar_data = b"legacy local jar"
         package_data = self.legacy_package(jar_data)
@@ -568,6 +575,146 @@ class MCInstanceJarTests(unittest.TestCase):
             self.assertFalse(
                 Path(package_dir, "example-mod-1.7.10-1.0.jar").exists()
             )
+
+    def test_promote_jar_only_none_mod_converts_every_version_together(self):
+        first_jar = b"first legacy jar"
+        second_jar = b"second legacy jar"
+        first_package = self.jar_only_package(first_jar)
+        second_package = self.jar_only_package(second_jar)
+        rows = [
+            {
+                "mod_id": 3,
+                "mod_name": "example-mod",
+                "version_id": 9,
+                "version_name": "1.7.10-1.0",
+                "zip_md5": md5(first_package),
+            },
+            {
+                "mod_id": 3,
+                "mod_name": "example-mod",
+                "version_id": 10,
+                "version_name": "1.7.10-2.0",
+                "zip_md5": md5(second_package),
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.zip").write_bytes(
+                first_package
+            )
+            Path(package_dir, "example-mod-1.7.10-2.0.zip").write_bytes(
+                second_package
+            )
+            with patch.object(
+                MCInstanceJar, "_load_none_mod_versions", return_value=rows
+            ), patch.object(MCInstanceJar, "_commit_none_mod") as commit:
+                result = MCInstanceJar.promote_jar_only_none_mods(
+                    "https://repo.example.test/mods/", directory
+                )
+
+            self.assertEqual(
+                Path(package_dir, "example-mod-1.7.10-1.0.jar").read_bytes(),
+                first_jar,
+            )
+            self.assertEqual(
+                Path(package_dir, "example-mod-1.7.10-2.0.jar").read_bytes(),
+                second_jar,
+            )
+
+        self.assertEqual(result.scanned_mods, 1)
+        self.assertEqual(result.scanned_versions, 2)
+        self.assertEqual(result.converted_mods, 1)
+        self.assertEqual(result.converted_versions, 2)
+        self.assertEqual(result.failures, ())
+        commit.assert_called_once()
+        self.assertEqual(commit.call_args.args[0], 3)
+        prepared = commit.call_args.args[1]
+        self.assertEqual(
+            [(item.version_id, item.jar_md5) for item in prepared],
+            [(9, md5(first_jar)), (10, md5(second_jar))],
+        )
+
+    def test_promote_none_mod_leaves_all_versions_when_one_has_extra_files(self):
+        jar_only_package = self.jar_only_package(b"eligible jar")
+        mixed_package = self.legacy_package(b"mixed jar")
+        rows = [
+            {
+                "mod_id": 3,
+                "mod_name": "example-mod",
+                "version_id": 9,
+                "version_name": "1.7.10-1.0",
+                "zip_md5": md5(jar_only_package),
+            },
+            {
+                "mod_id": 3,
+                "mod_name": "example-mod",
+                "version_id": 10,
+                "version_name": "1.7.10-2.0",
+                "zip_md5": md5(mixed_package),
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.zip").write_bytes(
+                jar_only_package
+            )
+            Path(package_dir, "example-mod-1.7.10-2.0.zip").write_bytes(
+                mixed_package
+            )
+            with patch.object(
+                MCInstanceJar, "_load_none_mod_versions", return_value=rows
+            ), patch.object(MCInstanceJar, "_commit_none_mod") as commit:
+                result = MCInstanceJar.promote_jar_only_none_mods(
+                    "https://repo.example.test/mods/", directory
+                )
+
+            self.assertFalse(
+                Path(package_dir, "example-mod-1.7.10-1.0.jar").exists()
+            )
+            self.assertFalse(
+                Path(package_dir, "example-mod-1.7.10-2.0.jar").exists()
+            )
+
+        self.assertEqual(result.converted_mods, 0)
+        self.assertEqual(result.converted_versions, 0)
+        self.assertEqual(len(result.failures), 1)
+        self.assertIn("files other than", result.failures[0])
+        commit.assert_not_called()
+
+    def test_commit_none_mod_updates_hashes_and_type_in_one_transaction(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = {"modtype": "NONE"}
+        cursor.fetchall.return_value = [{"id": 9}, {"id": 10}]
+        cursor.rowcount = 1
+        prepared = [
+            SimpleNamespace(version_id=9, jar_md5="a" * 32),
+            SimpleNamespace(version_id=10, jar_md5="b" * 32),
+        ]
+
+        with patch(
+            "models.mcinstance.Database.get_connection",
+            return_value=connection,
+        ):
+            MCInstanceJar._commit_none_mod(3, prepared)
+
+        self.assertEqual(cursor.execute.call_count, 5)
+        cursor.execute.assert_any_call(
+            "UPDATE modversions SET jarmd5 = %s WHERE id = %s",
+            ("a" * 32, 9),
+        )
+        cursor.execute.assert_any_call(
+            "UPDATE modversions SET jarmd5 = %s WHERE id = %s",
+            ("b" * 32, 10),
+        )
+        connection.commit.assert_called_once_with()
+        connection.rollback.assert_not_called()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
 
 
 if __name__ == "__main__":

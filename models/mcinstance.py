@@ -39,6 +39,26 @@ class MCInstanceJarError(MCInstanceExportError):
 
 
 @dataclass(frozen=True)
+class JarOnlyMigrationResult:
+    """Summary from classifying legacy NONE packages as raw-JAR mods."""
+
+    scanned_mods: int
+    scanned_versions: int
+    converted_mods: int
+    converted_versions: int
+    failures: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _PreparedJarArtifact:
+    version_id: int
+    jar_md5: str
+    staged_path: Path
+    final_path: Path
+    object_key: str
+
+
+@dataclass(frozen=True)
 class MCInstanceBuild:
     id: int
     version: str
@@ -145,71 +165,264 @@ class MCInstanceJar:
         if cls.is_ready(version.jarmd5):
             return str(version.jarmd5).strip().lower()
 
-        MCInstanceExport._validate_artifact_component(mod.name, "mod slug")
-        MCInstanceExport._validate_artifact_component(version.version, "mod version")
-        expected_zip_md5 = str(version.md5 or "").strip().lower()
-        if not _MD5_RE.fullmatch(expected_zip_md5):
-            raise MCInstanceJarError(
-                "This version needs a valid ZIP MD5 before its MCIL JAR can be created. "
-                "Rehash the version first."
-            )
-
         root = Path(local_repo_root).resolve()
-        destination_folder = (root / mod.name).resolve()
-        try:
-            destination_folder.relative_to(root)
-        except ValueError as error:
-            raise MCInstanceJarError("The mod has an invalid repository path.") from error
+        destination_folder = cls._destination_folder(root, mod.name)
         destination_folder.mkdir(parents=True, exist_ok=True)
-
-        zip_filename = f"{mod.name}-{version.version}.zip"
-        jar_filename = f"{mod.name}-{version.version}.jar"
-        source_zip = destination_folder / zip_filename
-        final_jar = destination_folder / jar_filename
 
         try:
             with tempfile.TemporaryDirectory(
                 prefix=".solder-mcil-", dir=destination_folder
             ) as staging_directory:
-                staged_zip = Path(staging_directory, zip_filename)
-                if source_zip.is_file():
-                    if source_zip.stat().st_size > _MAX_PACKAGE_SIZE:
-                        raise MCInstanceJarError(
-                            "The stored ZIP exceeds the 512 MiB conversion limit."
-                        )
-                    shutil.copyfile(source_zip, staged_zip)
-                else:
-                    cls._download_package(
-                        repository_url, mod.name, zip_filename, staged_zip
-                    )
-
-                try:
-                    Mod.verify_file_md5(staged_zip, expected_zip_md5, "the stored ZIP")
-                    Mod.extract_jar_from_zip(
-                        staged_zip,
-                        output_name=jar_filename,
-                    )
-                except UploadVerificationError as error:
-                    raise MCInstanceJarError(str(error)) from error
-
-                staged_jar = Path(staging_directory, jar_filename)
-                jar_md5 = Mod.file_md5(staged_jar)
-                os.replace(staged_jar, final_jar)
+                prepared = cls._prepare_jar_artifact(
+                    mod.name,
+                    version.id,
+                    version.version,
+                    version.md5,
+                    repository_url,
+                    root,
+                    Path(staging_directory),
+                )
+                os.replace(prepared.staged_path, prepared.final_path)
 
             if r2_client is not None and r2_bucket:
                 r2_client.upload_file(
-                    str(final_jar),
+                    str(prepared.final_path),
                     r2_bucket,
-                    f"mods/{mod.name}/{jar_filename}",
+                    prepared.object_key,
                     ExtraArgs={"ContentType": "application/jar"},
                 )
 
-            Modversion.update_modversion_jarmd5(version.id, jar_md5)
-            return jar_md5
+            Modversion.update_modversion_jarmd5(version.id, prepared.jar_md5)
+            return prepared.jar_md5
         except MCInstanceJarError:
             raise
         except OSError as error:
             raise MCInstanceJarError("The MCIL JAR could not be stored.") from error
+
+    @staticmethod
+    def _destination_folder(root, mod_name):
+        MCInstanceExport._validate_artifact_component(mod_name, "mod slug")
+        destination_folder = (root / mod_name).resolve()
+        try:
+            destination_folder.relative_to(root)
+        except ValueError as error:
+            raise MCInstanceJarError("The mod has an invalid repository path.") from error
+        return destination_folder
+
+    @classmethod
+    def _prepare_jar_artifact(
+        cls,
+        mod_name,
+        version_id,
+        version_name,
+        expected_md5,
+        repository_url,
+        root,
+        staging_directory,
+        *,
+        require_only_jar=False,
+    ):
+        MCInstanceExport._validate_artifact_component(version_name, "mod version")
+        expected_zip_md5 = str(expected_md5 or "").strip().lower()
+        if not _MD5_RE.fullmatch(expected_zip_md5):
+            raise MCInstanceJarError(
+                "This version needs a valid ZIP MD5 before its JAR can be created. "
+                "Rehash the version first."
+            )
+
+        destination_folder = cls._destination_folder(root, mod_name)
+        zip_filename = f"{mod_name}-{version_name}.zip"
+        jar_filename = f"{mod_name}-{version_name}.jar"
+        source_zip = destination_folder / zip_filename
+        staging_directory.mkdir(parents=True, exist_ok=True)
+        staged_zip = staging_directory / zip_filename
+
+        if source_zip.is_file():
+            if source_zip.stat().st_size > _MAX_PACKAGE_SIZE:
+                raise MCInstanceJarError(
+                    "The stored ZIP exceeds the 512 MiB conversion limit."
+                )
+            shutil.copyfile(source_zip, staged_zip)
+        else:
+            cls._download_package(
+                repository_url, mod_name, zip_filename, staged_zip
+            )
+
+        try:
+            Mod.verify_file_md5(staged_zip, expected_zip_md5, "the stored ZIP")
+            Mod.extract_jar_from_zip(
+                staged_zip,
+                output_name=jar_filename,
+                require_only_jar=require_only_jar,
+            )
+        except UploadVerificationError as error:
+            raise MCInstanceJarError(str(error)) from error
+
+        staged_jar = staging_directory / jar_filename
+        return _PreparedJarArtifact(
+            version_id=int(version_id),
+            jar_md5=Mod.file_md5(staged_jar),
+            staged_path=staged_jar,
+            final_path=destination_folder / jar_filename,
+            object_key=f"mods/{mod_name}/{jar_filename}",
+        )
+
+    @staticmethod
+    def _load_none_mod_versions():
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT mods.id AS mod_id, mods.name AS mod_name,
+                          modversions.id AS version_id,
+                          modversions.version AS version_name,
+                          modversions.md5 AS zip_md5
+                   FROM mods
+                   LEFT JOIN modversions ON modversions.mod_id = mods.id
+                   WHERE COALESCE(mods.modtype, 'NONE') = 'NONE'
+                   ORDER BY mods.id ASC, modversions.id ASC"""
+            )
+            return cur.fetchall() or []
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
+    def _commit_none_mod(mod_id, prepared):
+        """Commit all JAR hashes only if the NONE mod was unchanged while scanned."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                "SELECT modtype FROM mods WHERE id = %s FOR UPDATE",
+                (mod_id,),
+            )
+            mod_row = cur.fetchone()
+            if mod_row is None or str(mod_row.get("modtype") or "NONE").upper() != "NONE":
+                raise MCInstanceJarError(
+                    "The mod changed while it was being scanned; run the scan again."
+                )
+
+            cur.execute(
+                "SELECT id FROM modversions WHERE mod_id = %s ORDER BY id FOR UPDATE",
+                (mod_id,),
+            )
+            current_ids = [int(row["id"]) for row in (cur.fetchall() or [])]
+            prepared_ids = sorted(item.version_id for item in prepared)
+            if current_ids != prepared_ids:
+                raise MCInstanceJarError(
+                    "The mod versions changed while they were being scanned; "
+                    "run the scan again."
+                )
+
+            for item in prepared:
+                cur.execute(
+                    "UPDATE modversions SET jarmd5 = %s WHERE id = %s",
+                    (item.jar_md5, item.version_id),
+                )
+            cur.execute(
+                """UPDATE mods SET modtype = 'MOD'
+                   WHERE id = %s AND COALESCE(modtype, 'NONE') = 'NONE'""",
+                (mod_id,),
+            )
+            if cur.rowcount != 1:
+                raise MCInstanceJarError(
+                    "The mod changed while it was being scanned; run the scan again."
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def promote_jar_only_none_mods(
+        cls,
+        repository_url,
+        local_repo_root="./mods/",
+        r2_client=None,
+        r2_bucket=None,
+    ):
+        """Convert NONE mods whose every ZIP contains only one ``mods/*.jar``."""
+        rows = cls._load_none_mod_versions()
+        grouped = {}
+        for row in rows:
+            entry = grouped.setdefault(
+                int(row["mod_id"]),
+                {"name": row["mod_name"], "versions": []},
+            )
+            if row.get("version_id") is not None:
+                entry["versions"].append(row)
+
+        root = Path(local_repo_root).resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        scanned_versions = sum(len(entry["versions"]) for entry in grouped.values())
+        converted_mods = 0
+        converted_versions = 0
+        failures = []
+
+        for mod_id, entry in grouped.items():
+            mod_name = entry["name"]
+            versions = entry["versions"]
+            if not versions:
+                failures.append(f"{mod_name}: the mod has no versions.")
+                continue
+            try:
+                prepared = []
+                with tempfile.TemporaryDirectory(
+                    prefix=".solder-none-scan-", dir=root
+                ) as staging_root:
+                    for row in versions:
+                        prepared.append(
+                            cls._prepare_jar_artifact(
+                                mod_name,
+                                row["version_id"],
+                                row["version_name"],
+                                row["zip_md5"],
+                                repository_url,
+                                root,
+                                Path(staging_root, str(row["version_id"])),
+                                require_only_jar=True,
+                            )
+                        )
+
+                    if r2_client is not None and r2_bucket:
+                        try:
+                            for item in prepared:
+                                r2_client.upload_file(
+                                    str(item.staged_path),
+                                    r2_bucket,
+                                    item.object_key,
+                                    ExtraArgs={"ContentType": "application/jar"},
+                                )
+                        except Exception as error:
+                            raise MCInstanceJarError(
+                                "A converted JAR could not be uploaded to object storage."
+                            ) from error
+
+                    for item in prepared:
+                        item.final_path.parent.mkdir(parents=True, exist_ok=True)
+                        os.replace(item.staged_path, item.final_path)
+
+                cls._commit_none_mod(mod_id, prepared)
+                converted_mods += 1
+                converted_versions += len(prepared)
+            except MCInstanceJarError as error:
+                failures.append(f"{mod_name}: {error}")
+            except OSError:
+                failures.append(f"{mod_name}: a converted JAR could not be stored.")
+            except Exception:
+                failures.append(f"{mod_name}: the database update failed.")
+
+        return JarOnlyMigrationResult(
+            scanned_mods=len(grouped),
+            scanned_versions=scanned_versions,
+            converted_mods=converted_mods,
+            converted_versions=converted_versions,
+            failures=tuple(failures),
+        )
 
     @staticmethod
     def _download_package(repository_location, mod_name, filename, destination):

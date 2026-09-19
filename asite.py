@@ -1051,6 +1051,40 @@ def mainsettings():
     if User.get_permission_token(session["token"], "solder_env") == 0:
         return redirect(request.referrer)
 
+    if request.method == "POST" and "convert_none_mods_submit" in request.form:
+        if User.get_permission_token(session["token"], "mods_manage") == 0:
+            return redirect(url_for("asite.modlibrary"))
+        try:
+            result = MCInstanceJar.promote_jar_only_none_mods(
+                md5_repo_url,
+                UPLOAD_FOLDER,
+                R2,
+                R2_BUCKET,
+            )
+            message = (
+                f"Legacy JAR scan finished: {result.converted_mods} of "
+                f"{result.scanned_mods} NONE mods converted "
+                f"({result.converted_versions} of {result.scanned_versions} versions)."
+            )
+            if result.failures:
+                message += f" {len(result.failures)} mods were left unchanged."
+                for failure in result.failures[:25]:
+                    ErrorPrinter.message("Legacy JAR scan left a mod unchanged", failure)
+                if len(result.failures) > 25:
+                    ErrorPrinter.message(
+                        "Legacy JAR scan omitted additional unchanged mods",
+                        len(result.failures) - 25,
+                    )
+            if result.converted_mods:
+                from api import clear_api_caches
+
+                clear_api_caches()
+            flash(message, "success")
+        except Exception as error:
+            ErrorPrinter.message("Unable to scan legacy JAR packages", error)
+            flash("The legacy JAR package scan could not be completed.", "error")
+        return redirect(url_for("asite.mainsettings"))
+
     if request.method == "POST" and "export_settings_submit" in request.form:
         try:
             DistributionSettings.update_exports(
