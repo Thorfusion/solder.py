@@ -38,6 +38,7 @@ from .maven import (
     artifact_file_url,
 )
 from .mod import DuplicateModError, Mod
+from .mod_dependency import DependencyError, ModDependency
 from .modversion import Modversion
 
 
@@ -55,6 +56,9 @@ SUPPORTED_LOADERS = (
     "LITELOADER",
 )
 MAX_INTEGRATION_FILE_SIZE = 512 * 1024 * 1024
+MAX_MODRINTH_DEPENDENCIES_PER_VERSION = 128
+MAX_MODRINTH_DEPENDENCY_PROJECTS = 256
+MAX_MODRINTH_DEPENDENCY_DEPTH = 32
 REQUEST_TIMEOUT = (5, 30)
 DOWNLOAD_TIMEOUT = (5, 120)
 USER_AGENT = "solder.py/1.10.0 (+https://github.com/Thorfusion/solder.py)"
@@ -81,6 +85,12 @@ class ExternalProject:
 
 
 @dataclass(frozen=True)
+class ExternalDependency:
+    project_id: str | None
+    version_id: str | None = None
+
+
+@dataclass(frozen=True)
 class ExternalVersion:
     provider: str
     project_id: str
@@ -95,7 +105,7 @@ class ExternalVersion:
     download_url: str | None
     hashes: dict[str, str]
     size: int
-    dependencies: tuple[str, ...] = ()
+    dependencies: tuple[ExternalDependency, ...] = ()
     integration_label: str | None = None
 
     def loader_for_build(self, build_loader):
@@ -450,10 +460,24 @@ class ModrinthProvider(ExternalProvider):
             },
             size=int(file_data.get("size") or 0),
             dependencies=tuple(
-                str(dependency.get("project_id"))
+                ExternalDependency(
+                    project_id=(
+                        str(dependency.get("project_id"))
+                        if dependency.get("project_id")
+                        else None
+                    ),
+                    version_id=(
+                        str(dependency.get("version_id"))
+                        if dependency.get("version_id")
+                        else None
+                    ),
+                )
                 for dependency in payload.get("dependencies", [])
                 if dependency.get("dependency_type") == "required"
-                and dependency.get("project_id")
+                and (
+                    dependency.get("project_id")
+                    or dependency.get("version_id")
+                )
             ),
         )
 
@@ -523,17 +547,22 @@ class ModrinthProvider(ExternalProvider):
         )
         return versions
 
-    def get_version(self, project_id, version_id, minecraft, modloader=None):
-        project_id = external_id(project_id)
+    def get_version_by_id(self, version_id, minecraft, modloader=None):
+        """Resolve a version when Modrinth omits its dependency project ID."""
         version_id = external_id(version_id)
         version = self._version(self._request_json(f"/version/{version_id}"))
-        if version.project_id != str(project_id):
-            raise IntegrationError("The selected version belongs to another project.")
         if str(minecraft) not in version.game_versions:
             raise IntegrationError("The selected version does not support this Minecraft version.")
         normalized_loader = normalize_modloader(modloader)
         if normalized_loader and normalized_loader not in version.loaders:
             raise IntegrationError("The selected version does not support this modloader.")
+        return version
+
+    def get_version(self, project_id, version_id, minecraft, modloader=None):
+        project_id = external_id(project_id)
+        version = self.get_version_by_id(version_id, minecraft, modloader)
+        if version.project_id != str(project_id):
+            raise IntegrationError("The selected version belongs to another project.")
         return version
 
     def get_versions(self, project_versions, minecraft, modloader=None):
@@ -1285,6 +1314,167 @@ class ModIntegration:
         )
 
     @classmethod
+    def _materialize_modrinth_dependencies(
+        cls,
+        mod,
+        build,
+        external,
+        provider,
+        user_id,
+        upload_folder,
+        *,
+        r2_client=None,
+        r2_bucket=None,
+        dependency_path=(),
+        dependency_context=None,
+    ):
+        """Import, materialize and declare required Modrinth dependencies."""
+        if len(dependency_path) > MAX_MODRINTH_DEPENDENCY_DEPTH:
+            raise IntegrationError(
+                "The Modrinth required dependency chain is too deep."
+            )
+        if len(external.dependencies) > MAX_MODRINTH_DEPENDENCIES_PER_VERSION:
+            raise IntegrationError(
+                "A Modrinth version declared too many required dependencies."
+            )
+        if dependency_context is None:
+            dependency_context = {
+                "externals": {},
+                "mods": {},
+                "processed": set(),
+            }
+        dependencies = {}
+        for dependency in external.dependencies:
+            version_id = (
+                external_id(dependency.version_id)
+                if dependency.version_id
+                else None
+            )
+            resolved_version = None
+            if dependency.project_id:
+                project_id = external_id(dependency.project_id)
+            elif version_id:
+                resolved_version = provider.get_version_by_id(
+                    version_id,
+                    str(build.minecraft),
+                    normalize_modloader(build.modloader)
+                    or external.loader_for_build(None),
+                )
+                project_id = external_id(resolved_version.project_id)
+            else:
+                continue
+            previous = dependencies.get(project_id)
+            if (
+                project_id in dependencies
+                and previous[0] != version_id
+            ):
+                raise IntegrationError(
+                    "Modrinth returned conflicting required versions for "
+                    f'project "{project_id}".'
+                )
+            dependencies[project_id] = (version_id, resolved_version)
+
+        if not dependencies:
+            return
+
+        selected_loader = normalize_modloader(build.modloader)
+        if selected_loader is None:
+            selected_loader = external.loader_for_build(None)
+        dependency_build = SimpleNamespace(
+            minecraft=str(build.minecraft),
+            modloader=selected_loader,
+        )
+        imported_dependencies = []
+        for project_id, dependency_data in dependencies.items():
+            version_id, resolved_version = dependency_data
+            if project_id in dependency_path:
+                chain = " -> ".join((*dependency_path, project_id))
+                raise IntegrationError(
+                    f"Modrinth returned a circular required dependency: {chain}."
+                )
+
+            dependency_mod = dependency_context["mods"].get(project_id)
+            if dependency_mod is None:
+                if (
+                    len(dependency_context["mods"])
+                    >= MAX_MODRINTH_DEPENDENCY_PROJECTS
+                ):
+                    raise IntegrationError(
+                        "The Modrinth dependency graph contains too many projects."
+                    )
+                dependency_mod, _created = cls.import_project(
+                    MODRINTH,
+                    project_id,
+                    user_id,
+                    http=provider.http,
+                )
+                dependency_context["mods"][project_id] = dependency_mod
+
+            dependency_version = dependency_context["externals"].get(
+                project_id
+            )
+            if (
+                dependency_version is not None
+                and version_id
+                and dependency_version.version_id != version_id
+            ):
+                raise IntegrationError(
+                    "Modrinth required two different versions of "
+                    f'project "{project_id}" in the same dependency graph.'
+                )
+            if dependency_version is None and resolved_version is not None:
+                dependency_version = resolved_version
+            if dependency_version is None:
+                if version_id:
+                    dependency_version = provider.get_version(
+                        project_id,
+                        version_id,
+                        dependency_build.minecraft,
+                        dependency_build.modloader,
+                    )
+                else:
+                    compatible_versions = provider.list_versions(
+                        project_id,
+                        dependency_build.minecraft,
+                        dependency_build.modloader,
+                    )
+                    if not compatible_versions:
+                        raise IntegrationError(
+                            f'Required dependency "{dependency_mod.pretty_name}" '
+                            "has no compatible Modrinth version for this build."
+                        )
+                    dependency_version = compatible_versions[0]
+            dependency_context["externals"][project_id] = dependency_version
+
+            dependency_key = (project_id, dependency_version.version_id)
+            if dependency_key not in dependency_context["processed"]:
+                cls.materialize(
+                    dependency_mod,
+                    dependency_build,
+                    dependency_version.version_id,
+                    user_id,
+                    upload_folder,
+                    r2_client=r2_client,
+                    r2_bucket=r2_bucket,
+                    http=provider.http,
+                    _provider=provider,
+                    _external=dependency_version,
+                    _dependency_path=dependency_path,
+                    _dependency_context=dependency_context,
+                )
+                dependency_context["processed"].add(dependency_key)
+            imported_dependencies.append(dependency_mod)
+
+        for dependency_mod in imported_dependencies:
+            try:
+                ModDependency.ensure(mod.id, dependency_mod.id)
+            except DependencyError as error:
+                raise IntegrationError(
+                    f'Could not declare "{dependency_mod.pretty_name}" as a '
+                    "required dependency."
+                ) from error
+
+    @classmethod
     def materialize(
         cls,
         mod,
@@ -1296,6 +1486,10 @@ class ModIntegration:
         r2_client=None,
         r2_bucket=None,
         http=None,
+        _provider=None,
+        _external=None,
+        _dependency_path=(),
+        _dependency_context=None,
     ):
         if not mod.integration_provider or not mod.integration_project_id:
             raise IntegrationError("This mod is not managed by an integration.")
@@ -1305,21 +1499,35 @@ class ModIntegration:
             )
 
         existing = Modversion.get_by_integration(mod.id, integration_version_id)
-        if existing:
+        if existing and _external is None:
             return MaterializedVersion(existing, False)
 
-        provider = provider_for_user(mod.integration_provider, user_id, http=http)
-        project = provider.get_project(mod.integration_project_id)
-        if not project.available or not project.distribution_allowed:
-            raise IntegrationError(
-                "This provider no longer permits this project to be imported."
-            )
-        external = provider.get_version(
-            mod.integration_project_id,
-            str(integration_version_id),
-            build.minecraft,
-            build.modloader,
+        provider = _provider or provider_for_user(
+            mod.integration_provider, user_id, http=http
         )
+        external = _external
+        if external is None:
+            project = provider.get_project(mod.integration_project_id)
+            if not project.available or not project.distribution_allowed:
+                raise IntegrationError(
+                    "This provider no longer permits this project to be imported."
+                )
+            external = provider.get_version(
+                mod.integration_project_id,
+                str(integration_version_id),
+                build.minecraft,
+                build.modloader,
+            )
+        if (
+            normalize_provider(external.provider) != mod.integration_provider
+            or external_id(external.project_id)
+            != external_id(mod.integration_project_id)
+            or external_id(external.version_id)
+            != external_id(integration_version_id)
+        ):
+            raise IntegrationError(
+                "The resolved provider version does not belong to this mod."
+            )
         if mod.integration_provider == GITHUB:
             return cls._materialize_github_config(
                 mod,
@@ -1333,6 +1541,47 @@ class ModIntegration:
         selected_loader = external.loader_for_build(build.modloader)
         if build.modloader and external.loaders and selected_loader is None:
             raise IntegrationError("The selected version does not support this modloader.")
+
+        if mod.integration_provider == MODRINTH:
+            project_id = external_id(mod.integration_project_id)
+            if project_id in _dependency_path:
+                chain = " -> ".join((*_dependency_path, project_id))
+                raise IntegrationError(
+                    f"Modrinth returned a circular required dependency: {chain}."
+                )
+            dependency_path = (*_dependency_path, project_id)
+            if _dependency_context is None:
+                _dependency_context = {
+                    "externals": {},
+                    "mods": {},
+                    "processed": set(),
+                }
+            previous_external = _dependency_context["externals"].get(project_id)
+            if (
+                previous_external is not None
+                and previous_external.version_id != external.version_id
+            ):
+                raise IntegrationError(
+                    "Modrinth required two different versions of "
+                    f'project "{project_id}" in the same dependency graph.'
+                )
+            _dependency_context["externals"][project_id] = external
+            _dependency_context["mods"][project_id] = mod
+            cls._materialize_modrinth_dependencies(
+                mod,
+                build,
+                external,
+                provider,
+                user_id,
+                upload_folder,
+                r2_client=r2_client,
+                r2_bucket=r2_bucket,
+                dependency_path=dependency_path,
+                dependency_context=_dependency_context,
+            )
+
+        if existing:
+            return MaterializedVersion(existing, False)
 
         version_name = cls._local_version(mod, external, build.minecraft)
         destination_folder = Path(upload_folder, mod.name)

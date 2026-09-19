@@ -25,7 +25,11 @@ from models.common import common  # noqa: E402
 from models.database import Database  # noqa: E402
 from models.dashboard import Dashboard  # noqa: E402
 from models.mod import DuplicateModError, Mod, UploadVerificationError  # noqa: E402
-from models.mod_dependency import CircularDependencyError, ModDependency  # noqa: E402
+from models.mod_dependency import (  # noqa: E402
+    CircularDependencyError,
+    DuplicateDependencyError,
+    ModDependency,
+)
 from models.modpack import Modpack  # noqa: E402
 from models.modversion import (  # noqa: E402
     IncompatibleModVersionError,
@@ -517,6 +521,16 @@ class ModelBehaviorTests(unittest.TestCase):
         connection.rollback.assert_not_called()
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
+
+    def test_dependency_ensure_reuses_existing_relationship(self):
+        with patch.object(
+            ModDependency,
+            "add",
+            side_effect=DuplicateDependencyError(
+                "That required dependency is already configured."
+            ),
+        ):
+            self.assertFalse(ModDependency.ensure(1, 2))
 
     def test_adding_launcher_version_syncs_build_modloader_metadata(self):
         connection = Mock()
@@ -1344,24 +1358,35 @@ class ModelBehaviorTests(unittest.TestCase):
                 "current_version_id": 101,
                 "mod_id": 1,
                 "replacement_version_id": 103,
+                "build_minecraft": "1.21.1",
+                "build_modloader": "FABRIC",
             },
             {
                 "membership_id": 11,
                 "current_version_id": 101,
                 "mod_id": 1,
                 "replacement_version_id": 102,
+                "build_minecraft": "1.21.1",
+                "build_modloader": "FABRIC",
             },
             {
                 "membership_id": 12,
                 "current_version_id": 201,
                 "mod_id": 2,
                 "replacement_version_id": 201,
+                "build_minecraft": "1.21.1",
+                "build_modloader": "FABRIC",
             },
         ]
 
-        with patch(
-            "models.build_modversion.Database.get_connection",
-            return_value=connection,
+        with (
+            patch(
+                "models.build_modversion.Database.get_connection",
+                return_value=connection,
+            ),
+            patch(
+                "models.modversion.Modversion._add_required_dependencies"
+            ) as add_dependencies,
         ):
             updated = Build_modversion.update_all_compatible(7)
 
@@ -1377,6 +1402,9 @@ class ModelBehaviorTests(unittest.TestCase):
         connection.rollback.assert_not_called()
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
+        add_dependencies.assert_called_once_with(
+            cursor, 7, "1.21.1", 1, "FABRIC"
+        )
 
     def test_update_all_prefers_provider_version_over_newer_local_id(self):
         connection = Mock()
@@ -1387,18 +1415,27 @@ class ModelBehaviorTests(unittest.TestCase):
                 "current_version_id": 101,
                 "mod_id": 9,
                 "replacement_version_id": 103,
+                "build_minecraft": "1.21.1",
+                "build_modloader": "FABRIC",
             },
             {
                 "membership_id": 11,
                 "current_version_id": 101,
                 "mod_id": 9,
                 "replacement_version_id": 102,
+                "build_minecraft": "1.21.1",
+                "build_modloader": "FABRIC",
             },
         ]
 
-        with patch(
-            "models.build_modversion.Database.get_connection",
-            return_value=connection,
+        with (
+            patch(
+                "models.build_modversion.Database.get_connection",
+                return_value=connection,
+            ),
+            patch(
+                "models.modversion.Modversion._add_required_dependencies"
+            ),
         ):
             updated = Build_modversion.update_all_compatible(7, {9: 102})
 
@@ -1421,13 +1458,20 @@ class ModelBehaviorTests(unittest.TestCase):
                 "replacement_version_id": 103,
                 "replacement_version": "1.7.10-10.13.4.1614",
                 "replacement_modloader": "FORGE",
+                "build_minecraft": "1.7.10",
+                "build_modloader": None,
                 "modtype": "LAUNCHER",
             }
         ]
 
-        with patch(
-            "models.build_modversion.Database.get_connection",
-            return_value=connection,
+        with (
+            patch(
+                "models.build_modversion.Database.get_connection",
+                return_value=connection,
+            ),
+            patch(
+                "models.modversion.Modversion._add_required_dependencies"
+            ) as add_dependencies,
         ):
             updated = Build_modversion.update_all_compatible(7)
 
@@ -1437,6 +1481,9 @@ class ModelBehaviorTests(unittest.TestCase):
                    SET forge = %s, modloader = %s
                    WHERE id = %s""",
             ("1.7.10-10.13.4.1614", "FORGE", 7),
+        )
+        add_dependencies.assert_called_once_with(
+            cursor, 7, "1.7.10", 1, "FORGE"
         )
 
     def test_empty_database_returns_empty_public_modpack_lists(self):

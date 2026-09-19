@@ -104,6 +104,13 @@ versions appear when the mod is selected in a build. The chosen release is then
 downloaded, hash-checked, validated as a JAR, and packaged in the Solder
 repository.
 
+Required dependencies declared by that Modrinth release are imported
+recursively at the same time and added to the local mod's dependency list.
+Pinned dependency versions are honored; project-only requirements use the
+newest compatible version. Because Solder dependencies apply to the whole mod
+rather than one version, imported relationships remain until an administrator
+removes them.
+
 If a manual mod already has the same slug, the import links that existing mod
 to the Modrinth project. Existing local versions, build selections, metadata,
 and repository files are preserved. A mod already managed by Maven or another

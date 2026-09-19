@@ -63,8 +63,10 @@ export usage, and file layouts are documented in the
 
     Search Modrinth from the management interface and link a project to
     the mod library without downloading every release. Selecting a compatible
-    version in a build downloads, verifies and packages it on demand. Modrinth
-    does not require an API key.
+    version in a build downloads, verifies and packages it on demand. Required
+    Modrinth dependencies are imported recursively, recorded in Solder's
+    dependency list, and added to the build. Modrinth does not require an API
+    key.
 
   + **GitHub config-pack integration**
 
@@ -165,7 +167,10 @@ mods. No project file is downloaded at this stage. In a modpack build, select
 the linked mod and then a compatible provider version. solder.py downloads the
 upstream JAR, verifies the provider hash and file size, packages the JAR as a
 normal Solder ZIP, and records the local version. Re-selecting it reuses the
-stored version.
+stored version. Required Modrinth projects are imported recursively and linked
+through the normal Solder dependency list. Exact dependency versions are used
+when Modrinth supplies them; otherwise solder.py selects the newest compatible
+release.
 
 See the [integration guide](docs/integrations.md) for storage,
 permissions and operational details.

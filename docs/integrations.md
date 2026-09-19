@@ -24,6 +24,14 @@ Upstream references: [Modrinth API](https://docs.modrinth.com/api/) and the
    the build. A later selection of the same provider version reuses it without
    another download.
 
+When the selected Modrinth version declares required dependencies, solder.py
+also imports or links those projects, materializes their compatible versions,
+and records them in the normal Solder dependency list. A dependency with an
+explicit Modrinth version ID uses that exact compatible release; a project-only
+dependency uses its newest release compatible with the build. Nested required
+dependencies are handled recursively. Optional, incompatible, and embedded
+Modrinth dependency types are not promoted to required Solder dependencies.
+
 Provider-managed mods cannot receive versions through the manual upload forms.
 Their already imported versions can still be rehashed, added to builds, or
 deleted like other Solder versions.
@@ -262,7 +270,15 @@ They do not change the Technic read API schema or response format.
 
 ## Upstream dependencies
 
-Provider version metadata may identify required upstream projects, but solder.py
-does not silently create or alter mod-wide dependency relationships during a
-lazy import. Configure required dependencies on the local mod page so their
-behavior remains explicit and consistent across all local versions.
+Materializing a Modrinth version imports its required upstream projects and
+stores the relationships in the existing `mod_dependencies` table. They are
+therefore visible and editable in the mod's **Required dependencies** list and
+are added transitively when the parent is added to a build. Existing projects,
+versions, and relationships are reused.
+
+Solder dependencies are mod-wide, while Modrinth reports them per version.
+Consequently, an automatically discovered requirement remains attached to the
+local mod for its other versions as well. Imports add or reuse requirements but
+do not silently delete an existing dependency merely because a later upstream
+version omits it. Review or remove such a relationship on the local mod page if
+the upstream project's requirements genuinely changed.

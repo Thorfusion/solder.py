@@ -249,6 +249,8 @@ class Build_modversion:
                           candidate.id AS replacement_version_id,
                           candidate.version AS replacement_version,
                           candidate.modloader AS replacement_modloader,
+                          builds.minecraft AS build_minecraft,
+                          builds.modloader AS build_modloader,
                           mods.modtype
                    FROM build_modversion
                    INNER JOIN modversions AS current
@@ -315,6 +317,20 @@ class Build_modversion:
                         metadata.get("modtype"),
                         metadata.get("replacement_version"),
                         metadata.get("replacement_modloader"),
+                    )
+                    dependency_modloader = metadata.get("build_modloader")
+                    if (
+                        str(metadata.get("modtype") or "").upper()
+                        == "LAUNCHER"
+                        and metadata.get("replacement_modloader")
+                    ):
+                        dependency_modloader = metadata["replacement_modloader"]
+                    Modversion._add_required_dependencies(
+                        cur,
+                        build_id,
+                        metadata.get("build_minecraft"),
+                        metadata["mod_id"],
+                        dependency_modloader,
                     )
             conn.commit()
             return len(updates)
