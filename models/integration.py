@@ -22,10 +22,12 @@ from werkzeug.utils import secure_filename
 
 from .compatibility import (
     compatibility_values,
+    minecraft_version_storage,
     normalize_minecraft_versions,
     normalize_modloader,
     normalize_modloaders,
 )
+from .database import Database
 from .github_config import (
     GitHubClient,
     GitHubConfigError,
@@ -912,6 +914,21 @@ def provider_for_user(provider, user_id, *, http=None):
 
 class ModIntegration:
     @staticmethod
+    def _modrinth_download_source(external, *, md5=None, filesize=None):
+        """Return the immutable Modrinth file metadata stored for bootstrap."""
+        if normalize_provider(external.provider) != MODRINTH:
+            return None
+        return {
+            "provider": MODRINTH,
+            "url": external.download_url,
+            "filename": external.filename,
+            "md5": md5 or external.hashes.get("md5"),
+            "sha1": external.hashes.get("sha1"),
+            "sha512": external.hashes.get("sha512"),
+            "filesize": filesize if filesize is not None else external.size,
+        }
+
+    @staticmethod
     def _slug(value):
         value = unicodedata.normalize("NFKD", str(value or ""))
         value = value.encode("ascii", "ignore").decode("ascii")
@@ -922,7 +939,14 @@ class ModIntegration:
 
     @classmethod
     def import_project(
-        cls, provider_name, project_id, user_id, *, http=None, metadata=None
+        cls,
+        provider_name,
+        project_id,
+        user_id,
+        *,
+        http=None,
+        metadata=None,
+        _change_context=None,
     ):
         provider_name = normalize_provider(provider_name)
         if provider_name == GITHUB:
@@ -982,6 +1006,10 @@ class ModIntegration:
                         "This Modrinth project is already linked to another mod."
                     ) from error
                 if linked is not None:
+                    if _change_context is not None:
+                        _change_context.setdefault("linked_mods", []).append(
+                            (linked.id, project.provider, project.project_id)
+                        )
                     return linked, False
 
                 refreshed = Mod.get_by_name_api(slug)
@@ -990,6 +1018,14 @@ class ModIntegration:
                     and refreshed.integration_provider == project.provider
                     and refreshed.integration_project_id == project.project_id
                 ):
+                    if _change_context is not None:
+                        _change_context.setdefault("linked_mods", []).append(
+                            (
+                                refreshed.id,
+                                project.provider,
+                                project.project_id,
+                            )
+                        )
                     return refreshed, False
                 raise IntegrationError(
                     f'The local mod slug "{slug}" could not be linked safely.'
@@ -1017,6 +1053,8 @@ class ModIntegration:
             raise IntegrationError(
                 f'The local mod slug "{slug}" is already in use.'
             ) from error
+        if _change_context is not None:
+            _change_context.setdefault("created_mods", set()).add(mod.id)
         return mod, True
 
     @classmethod
@@ -1112,6 +1150,7 @@ class ModIntegration:
     ):
         try:
             minecraft = normalize_minecraft_versions(minecraft)
+            minecraft_version_storage(minecraft)
             modloader = normalize_modloaders(modloader)
         except ValueError as error:
             raise IntegrationError(str(error)) from error
@@ -1258,6 +1297,10 @@ class ModIntegration:
         minecraft = str(minecraft or "").strip()
         if not minecraft or len(minecraft) > 255:
             raise IntegrationError("Enter the Minecraft version for this config package.")
+        try:
+            minecraft_version_storage(minecraft)
+        except ValueError as error:
+            raise IntegrationError(str(error)) from error
         provider = provider_for_user(GITHUB, user_id, http=http)
         external = provider.resolve_ref(
             mod.integration_project_id,
@@ -1268,6 +1311,16 @@ class ModIntegration:
         )
         existing = Modversion.get_by_integration(mod.id, external.version_id)
         if existing:
+            if mod.integration_provider == MODRINTH:
+                provider._validate_download_url(external.download_url)
+                Modversion.store_download_source(
+                    existing.id,
+                    cls._modrinth_download_source(
+                        external,
+                        md5=existing.jarmd5,
+                        filesize=existing.jarfilesize,
+                    ),
+                )
             return MaterializedVersion(existing, False)
         build = type(
             "GitHubConfigBuild",
@@ -1302,6 +1355,10 @@ class ModIntegration:
         minecraft = str(minecraft or "").strip()
         if not minecraft or len(minecraft) > 255:
             raise IntegrationError("Enter the Minecraft version for this config package.")
+        try:
+            minecraft_version_storage(minecraft)
+        except ValueError as error:
+            raise IntegrationError(str(error)) from error
         provider = provider_for_user(GITHUB, user_id, http=http)
         versions = provider.list_versions(
             mod.integration_project_id, minecraft, modloader
@@ -1341,6 +1398,8 @@ class ModIntegration:
         r2_bucket=None,
         dependency_path=(),
         dependency_context=None,
+        stored_minecraft=None,
+        stored_modloader=None,
     ):
         """Import, materialize and declare required Modrinth dependencies."""
         if len(dependency_path) > MAX_MODRINTH_DEPENDENCY_DEPTH:
@@ -1421,6 +1480,7 @@ class ModIntegration:
                     project_id,
                     user_id,
                     http=provider.http,
+                    _change_context=dependency_context,
                 )
                 dependency_context["mods"][project_id] = dependency_mod
 
@@ -1475,21 +1535,219 @@ class ModIntegration:
                     _external=dependency_version,
                     _dependency_path=dependency_path,
                     _dependency_context=dependency_context,
+                    _stored_minecraft=stored_minecraft,
+                    _stored_modloader=stored_modloader,
                 )
                 dependency_context["processed"].add(dependency_key)
             imported_dependencies.append(dependency_mod)
 
         for dependency_mod in imported_dependencies:
             try:
-                ModDependency.ensure(mod.id, dependency_mod.id)
+                created = ModDependency.ensure(mod.id, dependency_mod.id)
+                if created:
+                    dependency_context.setdefault("dependency_edges", []).append(
+                        (mod.id, dependency_mod.id)
+                    )
             except DependencyError as error:
                 raise IntegrationError(
                     f'Could not declare "{dependency_mod.pretty_name}" as a '
                     "required dependency."
                 ) from error
 
+    @staticmethod
+    def _rollback_modrinth_materialization(
+        context, *, r2_client=None, r2_bucket=None
+    ):
+        """Compensate committed graph nodes when a top-level import fails."""
+        version_ids = tuple(sorted(context.get("created_versions", ())))
+        mod_ids = tuple(sorted(context.get("created_mods", ())))
+        connection = Database.get_connection()
+        if connection is None:
+            logger.error(
+                "Unable to roll back a failed Modrinth dependency import: "
+                "the database is unavailable."
+            )
+            return
+        cursor = connection.cursor()
+        try:
+            for mod_id, dependency_mod_id in reversed(
+                context.get("dependency_edges", ())
+            ):
+                cursor.execute(
+                    """DELETE FROM mod_dependencies
+                       WHERE mod_id = %s AND dependency_mod_id = %s""",
+                    (mod_id, dependency_mod_id),
+                )
+            if version_ids:
+                placeholders = ", ".join(["%s"] * len(version_ids))
+                cursor.execute(
+                    f"""DELETE build_optional_group_items
+                        FROM build_optional_group_items
+                        INNER JOIN build_modversion
+                            ON build_modversion.id =
+                               build_optional_group_items.build_modversion_id
+                        WHERE build_modversion.modversion_id
+                              IN ({placeholders})""",  # nosec B608
+                    version_ids,
+                )
+                cursor.execute(
+                    f"DELETE FROM build_modversion WHERE modversion_id "
+                    f"IN ({placeholders})",  # nosec B608
+                    version_ids,
+                )
+                for table in (
+                    "modversion_download_overrides",
+                    "modversion_download_sources",
+                    "modversion_minecraft_versions",
+                ):
+                    cursor.execute(
+                        f"DELETE FROM {table} WHERE modversion_id "
+                        f"IN ({placeholders})",  # nosec B608
+                        version_ids,
+                    )
+                cursor.execute(
+                    f"DELETE FROM modversions WHERE id "
+                    f"IN ({placeholders})",  # nosec B608
+                    version_ids,
+                )
+            if mod_ids:
+                placeholders = ", ".join(["%s"] * len(mod_ids))
+                cursor.execute(
+                    f"""DELETE FROM mods
+                        WHERE id IN ({placeholders})
+                          AND NOT EXISTS (
+                              SELECT 1 FROM modversions
+                              WHERE modversions.mod_id = mods.id
+                          )
+                          AND NOT EXISTS (
+                              SELECT 1 FROM mod_dependencies
+                              WHERE mod_dependencies.mod_id = mods.id
+                                 OR mod_dependencies.dependency_mod_id = mods.id
+                          )""",  # nosec B608
+                    mod_ids,
+                )
+            for mod_id, provider, project_id in reversed(
+                context.get("linked_mods", ())
+            ):
+                cursor.execute(
+                    """UPDATE mods
+                       SET integration_provider = NULL,
+                           integration_project_id = NULL
+                        WHERE id = %s
+                          AND integration_provider = %s
+                          AND integration_project_id = %s
+                          AND NOT EXISTS (
+                              SELECT 1 FROM modversions
+                              WHERE modversions.mod_id = mods.id
+                                AND modversions.integration_version_id IS NOT NULL
+                          )""",
+                    (mod_id, provider, project_id),
+                )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            logger.error(
+                "Unable to roll back a failed Modrinth dependency import.",
+                exc_info=True,
+            )
+            return
+        finally:
+            cursor.close()
+            connection.close()
+
+        for artifact in reversed(context.get("artifacts", ())):
+            for path in artifact.get("paths", ()):
+                try:
+                    Path(path).unlink(missing_ok=True)
+                except OSError:
+                    logger.warning(
+                        "Unable to remove a rolled-back integration artifact.",
+                        exc_info=True,
+                    )
+            if r2_client is not None and r2_bucket:
+                for key in artifact.get("keys", ()):
+                    try:
+                        r2_client.delete_object(Bucket=r2_bucket, Key=key)
+                    except Exception:
+                        logger.warning(
+                            "Unable to remove a rolled-back R2 integration artifact.",
+                            exc_info=True,
+                        )
+
     @classmethod
     def materialize(
+        cls,
+        mod,
+        build,
+        integration_version_id,
+        user_id,
+        upload_folder,
+        *,
+        r2_client=None,
+        r2_bucket=None,
+        http=None,
+        _provider=None,
+        _external=None,
+        _dependency_path=(),
+        _dependency_context=None,
+        _stored_minecraft=None,
+        _stored_modloader=None,
+    ):
+        """Materialize one graph and remove newly created rows on failure."""
+        root_graph = (
+            _dependency_context is None
+            and str(getattr(mod, "integration_provider", "") or "").upper()
+            == MODRINTH
+        )
+        if root_graph:
+            _dependency_context = {
+                "externals": {},
+                "mods": {},
+                "processed": set(),
+                "created_mods": set(),
+                "linked_mods": [],
+                "created_versions": set(),
+                "dependency_edges": [],
+                "artifacts": [],
+            }
+        try:
+            return cls._materialize(
+                mod,
+                build,
+                integration_version_id,
+                user_id,
+                upload_folder,
+                r2_client=r2_client,
+                r2_bucket=r2_bucket,
+                http=http,
+                _provider=_provider,
+                _external=_external,
+                _dependency_path=_dependency_path,
+                _dependency_context=_dependency_context,
+                _stored_minecraft=_stored_minecraft,
+                _stored_modloader=_stored_modloader,
+            )
+        except Exception:
+            changed_graph = root_graph and any(
+                _dependency_context.get(key)
+                for key in (
+                    "created_mods",
+                    "linked_mods",
+                    "created_versions",
+                    "dependency_edges",
+                    "artifacts",
+                )
+            )
+            if changed_graph:
+                cls._rollback_modrinth_materialization(
+                    _dependency_context,
+                    r2_client=r2_client,
+                    r2_bucket=r2_bucket,
+                )
+            raise
+
+    @classmethod
+    def _materialize(
         cls,
         mod,
         build,
@@ -1618,12 +1876,19 @@ class ModIntegration:
                 r2_bucket=r2_bucket,
                 dependency_path=dependency_path,
                 dependency_context=_dependency_context,
+                stored_minecraft=stored_minecraft,
+                stored_modloader=stored_modloader,
             )
 
         if existing:
             return MaterializedVersion(existing, False)
 
-        version_name = cls._local_version(mod, external, build.minecraft)
+        version_minecraft, _minecraft_versions = minecraft_version_storage(
+            stored_minecraft
+        )
+        version_name = cls._local_version(
+            mod, external, version_minecraft or build.minecraft
+        )
         destination_folder = Path(upload_folder, mod.name)
         destination_folder.mkdir(parents=True, exist_ok=True)
         jar_filename = f"{mod.name}-{version_name}.jar"
@@ -1678,11 +1943,35 @@ class ModIntegration:
                 modloader=stored_modloader,
                 integration_version_id=external.version_id,
                 jarfilesize=jar_filesize,
+                download_source=cls._modrinth_download_source(
+                    external, md5=jar_md5, filesize=jar_filesize
+                ),
             )
+            if _dependency_context is not None:
+                _dependency_context.setdefault("created_versions", set()).add(
+                    version.id
+                )
+                _dependency_context.setdefault("artifacts", []).append(
+                    {
+                        "version_id": version.id,
+                        "paths": (final_jar, final_zip),
+                        "keys": tuple(uploaded_keys),
+                    }
+                )
             return MaterializedVersion(version, True)
         except Exception:
             raced = Modversion.get_by_integration(mod.id, integration_version_id)
             if raced:
+                if mod.integration_provider == MODRINTH:
+                    provider._validate_download_url(external.download_url)
+                    Modversion.store_download_source(
+                        raced.id,
+                        cls._modrinth_download_source(
+                            external,
+                            md5=raced.jarmd5,
+                            filesize=raced.jarfilesize,
+                        ),
+                    )
                 return MaterializedVersion(raced, False)
             final_zip.unlink(missing_ok=True)
             final_jar.unlink(missing_ok=True)

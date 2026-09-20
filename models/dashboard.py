@@ -222,9 +222,21 @@ class Dashboard:
                               SELECT 1 FROM modversions candidate
                               WHERE candidate.mod_id = current_version.mod_id
                                 AND candidate.id > current_version.id
-                                AND (FIND_IN_SET(builds.minecraft,
-                                                 candidate.mcversion) > 0
-                                     OR candidate.mcversion IS NULL)
+                                AND (
+                                     candidate.mcversion IS NULL
+                                     OR candidate.mcversion = builds.minecraft
+                                     OR FIND_IN_SET(builds.minecraft,
+                                                    candidate.mcversion) > 0
+                                     OR (
+                                         candidate.mcversion = 'MULTI'
+                                         AND EXISTS (
+                                             SELECT 1
+                                             FROM modversion_minecraft_versions compatibility
+                                             WHERE compatibility.modversion_id = candidate.id
+                                               AND compatibility.minecraft_version = builds.minecraft
+                                         )
+                                     )
+                                )
                                 AND (builds.modloader IS NULL
                                      OR FIND_IN_SET(builds.modloader,
                                                     candidate.modloader) > 0
@@ -263,7 +275,18 @@ class Dashboard:
                         ))
                           AND (
                               (modversions.mcversion IS NOT NULL
-                               AND modversions.mcversion <> builds.minecraft)
+                               AND modversions.mcversion <> builds.minecraft
+                               AND FIND_IN_SET(builds.minecraft,
+                                               modversions.mcversion) = 0
+                               AND NOT (
+                                   modversions.mcversion = 'MULTI'
+                                   AND EXISTS (
+                                       SELECT 1
+                                       FROM modversion_minecraft_versions compatibility
+                                       WHERE compatibility.modversion_id = modversions.id
+                                         AND compatibility.minecraft_version = builds.minecraft
+                                   )
+                               ))
                               OR (builds.modloader IS NOT NULL
                                   AND modversions.modloader IS NOT NULL
                                   AND modversions.modloader <> builds.modloader)
@@ -426,7 +449,24 @@ class Dashboard:
                               CONCAT(mods.pretty_name, ' - ',
                                      modversions.version) AS title,
                               CONCAT(
-                                  COALESCE(modversions.mcversion, 'All Minecraft'),
+                                  COALESCE(
+                                      NULLIF(
+                                          CASE
+                                              WHEN modversions.mcversion = 'MULTI'
+                                              THEN (
+                                                  SELECT GROUP_CONCAT(
+                                                      compatibility.minecraft_version
+                                                      ORDER BY compatibility.minecraft_version
+                                                      SEPARATOR ',')
+                                                  FROM modversion_minecraft_versions compatibility
+                                                  WHERE compatibility.modversion_id = modversions.id
+                                              )
+                                              ELSE modversions.mcversion
+                                          END,
+                                          ''
+                                      ),
+                                      'All Minecraft'
+                                  ),
                                   CASE
                                       WHEN modversions.modloader IS NOT NULL
                                       THEN CONCAT(' / ', modversions.modloader)

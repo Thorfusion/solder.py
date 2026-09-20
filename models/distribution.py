@@ -62,6 +62,12 @@ class DistributionPackage:
     integration_provider: str | None = None
     integration_project_id: str | None = None
     integration_version_id: str | None = None
+    download_source_provider: str | None = None
+    download_source_url: str | None = None
+    download_source_filename: str | None = None
+    download_source_sha1: str | None = None
+    download_source_sha512: str | None = None
+    download_source_filesize: int | None = None
 
     @property
     def jar_ready(self) -> bool:
@@ -186,6 +192,7 @@ class DistributionExport:
                               modversions.version,
                               modversions.md5,
                               modversions.jarmd5,
+                              modversions.jarfilesize,
                               mods.name AS mod_slug,
                               mods.pretty_name,
                               mods.description,
@@ -194,11 +201,27 @@ class DistributionExport:
                               mods.integration_provider,
                               mods.integration_project_id,
                               modversions.integration_version_id,
+                              modversion_download_sources.provider
+                                  AS download_source_provider,
+                              modversion_download_sources.url
+                                  AS download_source_url,
+                              modversion_download_sources.filename
+                                  AS download_source_filename,
+                              modversion_download_sources.sha1
+                                  AS download_source_sha1,
+                              modversion_download_sources.sha512
+                                  AS download_source_sha512,
+                              modversion_download_sources.filesize
+                                  AS download_source_filesize,
                               build_modversion.optional
                        FROM build_modversion
                        INNER JOIN modversions
                            ON modversions.id = build_modversion.modversion_id
                        INNER JOIN mods ON mods.id = modversions.mod_id
+                       LEFT JOIN modversion_download_sources
+                           ON modversion_download_sources.modversion_id =
+                              modversions.id
+                          AND modversion_download_sources.provider = 'MODRINTH'
                        WHERE build_modversion.build_id = %s"""
             parameters = [build_id]
             if mod_slug is not None:
@@ -236,6 +259,13 @@ class DistributionExport:
             integration_provider=row.get("integration_provider"),
             integration_project_id=row.get("integration_project_id"),
             integration_version_id=row.get("integration_version_id"),
+            download_source_provider=row.get("download_source_provider"),
+            download_source_url=row.get("download_source_url"),
+            download_source_filename=row.get("download_source_filename"),
+            download_source_sha1=row.get("download_source_sha1"),
+            download_source_sha512=row.get("download_source_sha512"),
+            download_source_filesize=row.get("download_source_filesize")
+            or row.get("jarfilesize"),
         )
 
     @staticmethod

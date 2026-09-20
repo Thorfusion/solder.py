@@ -3,7 +3,25 @@
 <link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}" />
 {%endblock%}{%block main%}
 
-
+<section id="manual_md5_hashing" class="mb-4">
+    <h5>Manual MD5 hashing</h5>
+    <form method="post" action="" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label for="file" class="form-label">ZIP / JAR file</label>
+            <input class="form-control" type="file" id="file" onchange="hashmd5()">
+        </div>
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <label for="md5" class="form-label">MD5</label>
+                <input type="text" class="form-control" name="md5" id="md5" readonly>
+            </div>
+            <div class="col-md-6">
+                <label for="filesize" class="form-label">File size</label>
+                <input type="text" class="form-control" name="filesize" id="filesize" readonly>
+            </div>
+        </div>
+    </form>
+</section>
 
 <div class="wrappermod">
     <table class="table" id="table">
@@ -37,6 +55,10 @@
             <tr>
                 <td class="">DB_IS_UP:</td>
                 <td class="">{{DB_IS_UP}}</td>
+            </tr>
+            <tr>
+                <td class="">ENABLE_LEGACY_MODVERSION_ADDING:</td>
+                <td class="">{{legacy_modversion_adding}}</td>
             </tr>
             <thead class="table-light sticky-md-top">
                 <tr>
@@ -218,27 +240,6 @@
         </button>
     </form>
 </section>
-
-<hr>
-
-<section id="manual_md5_hashing">
-    <h5>Manual MD5 hashing</h5>
-    <form method="post" action="" enctype="multipart/form-data">
-        <div class="mb-3">
-            <label for="file" class="form-label">ZIP file</label>
-            <input class="form-control" type="file" id="file" onchange="hashmd5()">
-        </div>
-        <div class="mb-3">
-            <label for="md5" class="form-label">md5</label>
-            <input type="text" class="form-control" name="md5" id="md5" readonly>
-        </div>
-        <div class="mb-3">
-            <label for="filesize" class="form-label">filesize</label>
-            <input type="text" class="form-control" name="filesize" id="filesize" readonly>
-        </div>
-    </form>
-</section>
-
 
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 <script src="{{ url_for('static',filename='js/md5.min.js') }}"></script>

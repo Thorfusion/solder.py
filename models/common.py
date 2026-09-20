@@ -14,6 +14,7 @@ migratetechnic = False
 api_only = False
 management_only = False
 write_api = False
+legacy_modversion_adding = False
 debug = False
 reverse_proxy = False
 
@@ -36,6 +37,10 @@ if os.getenv("MANAGEMENT_ONLY"):
     management_only = os.getenv("MANAGEMENT_ONLY").lower() in ["true", "t", "1", "yes", "y"]
 if os.getenv("WRITE_API") or os.getenv("WRITABLE_API"):
     write_api = (os.getenv("WRITE_API") or os.getenv("WRITABLE_API")).lower() in ["true", "t", "1", "yes", "y"]
+if os.getenv("ENABLE_LEGACY_MODVERSION_ADDING"):
+    legacy_modversion_adding = os.getenv(
+        "ENABLE_LEGACY_MODVERSION_ADDING"
+    ).lower() in ["true", "t", "1", "yes", "y"]
 
 if os.getenv("APP_DEBUG"):
     debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]

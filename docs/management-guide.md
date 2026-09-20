@@ -92,8 +92,9 @@ A build offers versions whose Minecraft and modloader values match the build,
 plus universal values. Required dependencies use the same rules.
 
 For an old Technic Solder version that contains one JAR under `mods/` but has no
-raw JAR hash, select **Create MCIL JAR**. solder.py verifies the existing ZIP,
-extracts and stores the JAR, and leaves the original version and ZIP in place.
+raw JAR hash, open **Manage** and select **Create JAR**. solder.py verifies the
+existing ZIP, extracts and stores the JAR, and leaves the original version and
+ZIP in place. The same button is shown as **Verify JAR** after a hash is stored.
 
 ## Link or import mods
 
@@ -209,6 +210,11 @@ For a provider-managed mod, merely opening the version selector reads upstream
 metadata. The JAR is materialized only after a version is selected. Existing
 materialized versions are reused.
 
+**Check for updates** performs a read-only check of compatible stored versions
+and the configured Modrinth, Maven, or GitHub provider. A green down arrow to
+the left of a selected version marks an available update; its tooltip shows the
+new version. No provider file is imported and the build is not changed.
+
 **Update all mods** checks provider-managed entries and replaces them only with
 available, enabled versions compatible with the build's Minecraft version and
 modloader. Review the changed build before publishing it.
@@ -271,7 +277,7 @@ A practical release flow is:
 7. Generate and review the changelog between the old and new builds.
 
 For alternative launchers, select **Export** from the build list or the build
-editor. Choose Solder-only or hybrid downloads and then
+editor. Choose Solder API only or hybrid downloads and then
 choose whether supported metadata is included in the archive or served from
 solder.py. See the [distribution guide](distribution-formats.md) for exact
 format behavior.

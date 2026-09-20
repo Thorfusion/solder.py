@@ -115,7 +115,10 @@ export usage, and file layouts are documented in the
   + **Server shadow build**
 
     Mark mods for the client, server, or both and expose a server-compatible
-    view of the same build.
+    view of the same build. Export a small dedicated-server ZIP containing
+    SolderPy Loader and Relauncher in `mods/` plus one verified server-side
+    `LAUNCHER` JAR, such as Crucible, at the archive root; the remaining
+    server content is installed and updated from the bootstrap API.
 
 + **Internal notation on mods**
 
@@ -144,7 +147,7 @@ export usage, and file layouts are documented in the
   available.
   CurseForge packs contain only the selected
   downloader and any enabled Modrinth-CurseForge sync mappings as native projects.
-  Solder-only and hybrid modes either use the Solder repository for build
+  Solder API only and hybrid modes either use the Solder repository for build
   packages or use exact Modrinth CDN files where a mapping exists and Solder
   for everything else. The export window lets you
   choose a compatible downloader release loaded from the
@@ -224,6 +227,11 @@ modloader. Listing or refreshing releases downloads metadata only. The selected
 JAR is downloaded, checksum-verified when Maven publishes a standard checksum
 sidecar, validated as a JAR, and packaged into the normal Solder repository.
 Timestamped Maven snapshots are resolved through their version-level metadata.
+On an artifact's management page, **Use the Maven JAR URL directly** lets
+SolderPy Loader download that exact native Maven artifact before falling back
+to the Solder-hosted JAR. This is opt-in and requires a public HTTPS Maven
+repository. The downloaded bytes are always checked against the raw-JAR MD5
+stored when solder.py imported the version.
 
 See the [integration guide](docs/integrations.md) for the complete workflow.
 
@@ -232,10 +240,21 @@ See the [integration guide](docs/integrations.md) for the complete workflow.
 Enable the required formats under **Settings > Env Settings**, then open a
 build's **Export** window. The complete
 [distribution usage and format guide](docs/distribution-formats.md) explains
-the shared Solder-only and hybrid options, SolderPy Loader and MCInstance
+the shared Solder API only and hybrid options, SolderPy Loader and MCInstance
 Loader archive mapping, Packwiz, FileDirector, and Modpack Director hosting,
 Modrinth or CurseForge fallback exports, and Prism Launcher bootstrap or
 self-contained instance exports.
+
+Direct publishing is configured under **Settings > Publishing**. Add a
+Modrinth personal access token or CurseForge author API token, map a
+local modpack to an existing remote project, and use **Publish** in the build's
+Export window. solder.py generates the same archive offered by the normal
+download button, uploads it as a new remote version, and records the result.
+If that live build is changed after a successful publication, the action becomes
+**Send patch** and creates `-Patch-1`, `-Patch-2`, and later remote versions.
+Publishing accounts and mappings belong to the solder.py user who created them;
+another user who manages the same modpack must configure their own upload token
+and mapping.
 
 ## Server and optional API manifests
 
@@ -311,7 +330,7 @@ Useful follow-up documentation:
 Modrinth and CurseForge archives can also include administrator-configured
 native bootstrap projects. Manage these under **Settings > Modrinth-CurseForge sync**;
 TX Loader is supplied as a disabled default mapping. See the distribution
-guide for how sync mappings interact with Solder-only and hybrid exports.
+guide for how sync mappings interact with Solder API only and hybrid exports.
 
 ## Recommended Docker Compose installation
 
@@ -703,6 +722,14 @@ once during application startup; `/setup` no longer performs database changes.
 
 ```dotenv
 TECHNIC_MIGRATION=True
+```
+
+The old form for registering a repository ZIP by version and MD5 is hidden by
+default. Enable it only when an installation still uses that manual workflow;
+normal uploads and provider imports are unaffected:
+
+```dotenv
+ENABLE_LEGACY_MODVERSION_ADDING=True
 ```
 
 ### Split API and management modes

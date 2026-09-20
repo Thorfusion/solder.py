@@ -98,6 +98,7 @@
                 <select class="form-select mb-2" id="solderpy_loader_version" name="solderpy_loader_version" required>
                     {%for release in solderpy_loader_releases%}<option value="{{release.selector}}">{{release.version}}</option>{%endfor%}
                 </select>
+                <div class="alert alert-info py-2">Enabling this delivery disables the modpack's legacy Technic optional shadow build. SolderPy Loader handles its optional content instead.</div>
                 <button class="btn btn-success" type="submit" name="enable_technic_solderpy_loader" value="1">Enable for Technic</button>
             </form>
             {%endif%}

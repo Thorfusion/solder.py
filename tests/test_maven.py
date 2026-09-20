@@ -63,6 +63,7 @@ def artifact(**overrides):
         "link": "https://github.com/Thorfusion/Mekanism-Community-Edition",
         "side": "BOTH",
         "mod_id": 12,
+        "solderpy_loader_direct": False,
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -412,6 +413,7 @@ class MavenSchemaAndUiTests(unittest.TestCase):
         self.assertIn("maven_artifacts", schema)
         self.assertIn("maven_versions", schema)
         self.assertIn("idx_maven_version_compatibility", schema)
+        self.assertIn("solderpy_loader_direct", schema)
         self.assertIn("DEFAULT CURRENT_TIMESTAMP", schema)
         self.assertIn("ON UPDATE CURRENT_TIMESTAMP", schema)
 
@@ -451,6 +453,43 @@ class MavenSchemaAndUiTests(unittest.TestCase):
         )
         with self.assertRaises(MavenError):
             normalize_base_url("https://user:secret@maven.example.test/releases")
+
+    def test_enabled_artifact_resolves_direct_loader_url_in_one_query(self):
+        configured = artifact(solderpy_loader_direct=True)
+        row = vars(configured).copy()
+        row.update(
+            {
+                "mapping_artifact_id": 7,
+                "integration_version_id": "f" * 64,
+                "upstream_version": "1.7.10-9.10.48",
+            }
+        )
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [row]
+
+        with patch(
+            "models.maven.Database.get_connection", return_value=connection
+        ):
+            result = MavenArtifact.solderpy_loader_downloads(
+                (("7", "f" * 64),)
+            )
+
+        self.assertEqual(
+            result[("7", "f" * 64)],
+            "https://maven.example.test/releases/mekanism/"
+            "Mekanism-Community-Edition/1.7.10-9.10.48/"
+            "Mekanism-Community-Edition-1.7.10-9.10.48-ALL.jar",
+        )
+        self.assertEqual(cursor.execute.call_args.args[1], (7, "f" * 64))
+
+    def test_direct_loader_download_requires_https_repository(self):
+        configured = artifact(repository_url="http://maven.example.test/")
+        with (
+            patch.object(MavenArtifact, "get", return_value=configured),
+            self.assertRaisesRegex(MavenError, "HTTPS"),
+        ):
+            MavenArtifact.update_solderpy_loader_direct(7, True)
 
 
 if __name__ == "__main__":

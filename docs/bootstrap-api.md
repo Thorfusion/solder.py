@@ -40,6 +40,8 @@ The route accepts these query arguments:
 | Argument | Values | Default | Meaning |
 | --- | --- | --- | --- |
 | `target` | `client`, `server` | `client` | Filter packages by their configured side. |
+| `source` | `hybrid`, `solder` | `hybrid` | Include verified provider/override fallbacks, or restrict raw JARs to Solder. |
+| `platform` | `modrinth`, `curseforge`, `prism` | none | Omit packages already owned by the native archive that installed SolderPy Loader. |
 | `from` | Build version, `recommended`, or `latest` | none | Add changes from an installed build. |
 | `cid` | Client UUID | none | Read a private modpack associated with that client. |
 | `k` | Solder API key | none | Privileged read access; do not distribute this secret in a client mod. |
@@ -72,6 +74,7 @@ This abbreviated example is a complete, valid schema-version 1 response:
     "memory": 4096
   },
   "target": "client",
+  "source": "hybrid",
   "optional_mode": {
     "id": 1,
     "name": "advanced"
@@ -268,15 +271,18 @@ reasonable client download limit while streaming and still verify the MD5. A
 instruction, preserving legacy build compatibility while making the extra
 extraction cost explicit.
 
-A Modrinth-managed raw JAR may include an ordered `download.sources` list.
-SolderPy Loader tries the native Modrinth file first and the Solder-hosted JAR
-second. It retries the next source after a transport, size, or MD5 failure.
-Every source represents the same bytes and therefore uses the one parent
-`download.md5` and `download.filesize`; renaming a file does not change either
-value. `download.url` remains the Solder-hosted URL, so clients that do not
-understand `sources` retain the existing behavior. If solder.py cannot resolve
-Modrinth while producing the manifest, it omits `sources` and still returns the
-Solder URL.
+A raw JAR in `source=hybrid` may include an ordered `download.sources` list. A per-version HTTPS
+override is first, a native Modrinth or enabled Maven source is second, and the
+Solder-hosted JAR is last. SolderPy Loader retries the next source after a
+transport, size, or MD5 failure. Every source represents the same bytes and
+therefore uses the one parent `download.md5` and `download.filesize`; renaming
+a file does not change either value. `download.url` remains the Solder-hosted
+URL, so clients that do not understand `sources` retain the existing behavior.
+If solder.py cannot use saved native-provider metadata, it still returns the
+override, when configured, and the Solder URL. `source=solder` returns only the
+Solder URL. `platform=modrinth` omits native MRPack files, while
+`platform=curseforge` omits enabled Modrinth-CurseForge sync mappings, avoiding
+duplicate installation by SolderPy Loader.
 
 `download.format: solder_zip` is used by `CONFIG`, `RES`, `NONE`, and other
 non-mod content. Download the archive, verify its byte size when supplied,
@@ -339,7 +345,9 @@ example:
   "api": "https://solder.example.com/api/",
   "modpack": "example-pack",
   "build": "recommended",
-  "target": "client"
+  "target": "client",
+  "source": "hybrid",
+  "platform": "modrinth"
 }
 ```
 
@@ -357,7 +365,7 @@ A bootstrap mod is compatible with schema version 1 when it:
 - supports states `0`, `1`, and `2` and named single/multiple groups;
 - keys saved choices by group key and package slug;
 - closes required dependencies before downloading;
-- honors `target`, side filtering, and `bootstrap_managed`;
+- honors `target`, `source`, `platform`, side filtering, and `bootstrap_managed`;
 - verifies each ZIP's size and MD5 and extracts it safely;
 - tracks extracted-file ownership for reliable removal and rollback;
 - handles ETags, resolved channels, and the optional `changes` summary;

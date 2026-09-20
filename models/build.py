@@ -67,37 +67,56 @@ class Build:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO builds (modpack_id, version, created_at, updated_at, minecraft, forge, modloader, is_published, private, min_java, java_runtime, min_memory) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (modpack_id, version, now, now, minecraft, forge, modloader, is_published, private, min_java, java_runtime, min_memory))
-        conn.commit()
-        cur.execute("SELECT LAST_INSERT_ID() AS id")
-        id = cur.fetchone()["id"]
-        if clone_id != "":
-            cur.execute("SELECT * FROM build_modversion WHERE build_id = %s", (clone_id,))
-            modversions = cur.fetchall()
-            membership_ids = {}
-            if modversions:
-                for mv in modversions:
-                    cur.execute("INSERT INTO build_modversion (modversion_id, build_id, optional) VALUES (%s, %s, %s)", (mv["modversion_id"], id, mv["optional"]))
-                    membership_ids[mv["id"]] = cur.lastrowid
-            from .advanced_optional import AdvancedOptional
+        try:
+            cur.execute("INSERT INTO builds (modpack_id, version, created_at, updated_at, minecraft, forge, modloader, is_published, private, min_java, java_runtime, min_memory) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (modpack_id, version, now, now, minecraft, forge, modloader, is_published, private, min_java, java_runtime, min_memory))
+            id = cur.lastrowid
+            if clone_id != "":
+                cur.execute("SELECT * FROM build_modversion WHERE build_id = %s", (clone_id,))
+                modversions = cur.fetchall()
+                membership_ids = {}
+                if modversions:
+                    for mv in modversions:
+                        cur.execute("INSERT INTO build_modversion (modversion_id, build_id, optional) VALUES (%s, %s, %s)", (mv["modversion_id"], id, mv["optional"]))
+                        membership_ids[mv["id"]] = cur.lastrowid
+                from .advanced_optional import AdvancedOptional
 
-            AdvancedOptional.clone_build(cur, clone_id, id, membership_ids)
+                AdvancedOptional.clone_build(cur, clone_id, id, membership_ids)
             conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
         cls(id, modpack_id, version, now, now, minecraft, forge, is_published, private, min_java, min_memory, "0", modloader=modloader, java_runtime=java_runtime)
+
+    @staticmethod
+    def delete_related_rows(cursor, build_id):
+        """Delete build-owned rows using the caller's transaction."""
+        from .advanced_optional import AdvancedOptional
+        from .technic_solderpy_loader import TechnicSolderPyLoader
+
+        AdvancedOptional.delete_build(cursor, build_id)
+        TechnicSolderPyLoader.delete_build(cursor, build_id)
+        cursor.execute(
+            "DELETE FROM build_modversion WHERE build_id = %s", (build_id,)
+        )
 
     @staticmethod
     def delete_build(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        from .advanced_optional import AdvancedOptional
-        from .technic_solderpy_loader import TechnicSolderPyLoader
-
-        AdvancedOptional.delete_build(cur, id)
-        TechnicSolderPyLoader.delete_build(cur, id)
-        cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (id,))
-        cur.execute("DELETE FROM builds WHERE id=%s", (id,))
-        conn.commit()
-        return None
+        try:
+            Build.delete_related_rows(cur, id)
+            cur.execute("DELETE FROM builds WHERE id=%s", (id,))
+            conn.commit()
+            return None
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def update(id, version, minecraft, is_published, private, min_java, min_memory, forge=None, modloader=None, java_runtime=None):
@@ -166,17 +185,21 @@ class Build:
     def get_by_modpack(modpack):
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(
-            """SELECT builds.*, modcount.count
-                FROM builds
-                LEFT JOIN (SELECT build_id, COUNT(*) AS count FROM build_modversion GROUP BY build_id) modcount ON builds.id = modcount.build_id
-                WHERE modpack_id = %s
-                ORDER BY builds.id DESC
-            """, (modpack.id,))
-        builds = cursor.fetchall()
-        if builds:
-            return [Build(**build) for build in builds]
-        return []
+        try:
+            cursor.execute(
+                """SELECT builds.*,
+                          (SELECT COUNT(*)
+                           FROM build_modversion
+                           WHERE build_modversion.build_id = builds.id) AS count
+                   FROM builds
+                   WHERE builds.modpack_id = %s
+                   ORDER BY builds.id DESC""",
+                (modpack.id,),
+            )
+            return [Build(**build) for build in cursor.fetchall()]
+        finally:
+            cursor.close()
+            conn.close()
     
     @staticmethod
     def get_by_modpack_api(modpack, cid=None, api_key=False):
@@ -290,6 +313,8 @@ class Build:
         target=None,
         include_optional=None,
         include_excluded=False,
+        include_download_overrides=False,
+        include_download_sources=False,
     ):
         if target is None:
             target = "server" if tag == "server" else "client"
@@ -301,70 +326,88 @@ class Build:
         conn = Database.get_connection()
         cursor = conn.cursor(dictionary=True)
         try:
-            if target == "server":
-                cursor.execute(
-                    """SELECT modversions.id, modversions.mod_id,
-                              modversions.version, modversions.mcversion,
-                              modversions.modloader,
-                              modversions.integration_version_id,
-                              modversions.md5, modversions.jarmd5,
-                              modversions.jarfilesize,
-                              modversions.created_at,
-                              modversions.updated_at, modversions.filesize,
-                              mods.name AS modname, mods.pretty_name,
-                              mods.author, mods.link, mods.description,
-                              mods.side, mods.modtype,
-                              mods.integration_provider,
-                              mods.integration_project_id,
-                              build_modversion.optional,
-                              build_modversion.id AS membership_id
-                       FROM modversions
-                       INNER JOIN build_modversion
-                           ON modversions.id = build_modversion.modversion_id
-                       INNER JOIN mods ON modversions.mod_id = mods.id
-                       WHERE build_modversion.build_id = %s
-                         AND (build_modversion.optional = 0
-                              OR (%s = 1 AND build_modversion.optional = 1)
-                              OR (%s = 1 AND build_modversion.optional = 2))
-                         AND mods.side IN ('SERVER', 'BOTH')""",
-                    (
-                        self.id,
-                        int(include_optional),
-                        int(include_excluded),
-                    ),
-                )
-            else:
-                cursor.execute(
-                    """SELECT modversions.id, modversions.mod_id,
-                              modversions.version, modversions.mcversion,
-                              modversions.modloader,
-                              modversions.integration_version_id,
-                              modversions.md5, modversions.jarmd5,
-                              modversions.jarfilesize,
-                              modversions.created_at,
-                              modversions.updated_at, modversions.filesize,
-                              mods.name AS modname, mods.pretty_name,
-                              mods.author, mods.link, mods.description,
-                              mods.side, mods.modtype,
-                              mods.integration_provider,
-                              mods.integration_project_id,
-                              build_modversion.optional,
-                              build_modversion.id AS membership_id
-                       FROM modversions
-                       INNER JOIN build_modversion
-                           ON modversions.id = build_modversion.modversion_id
-                       INNER JOIN mods ON modversions.mod_id = mods.id
-                       WHERE build_modversion.build_id = %s
-                         AND (build_modversion.optional = 0
-                              OR (%s = 1 AND build_modversion.optional = 1)
-                              OR (%s = 1 AND build_modversion.optional = 2))
-                         AND mods.side IN ('CLIENT', 'BOTH')""",
-                    (
-                        self.id,
-                        int(include_optional),
-                        int(include_excluded),
-                    ),
-                )
+            override_column = (
+                "modversion_download_overrides.jar_url AS jar_url_override"
+                if include_download_overrides
+                else "NULL AS jar_url_override"
+            )
+            override_join = (
+                "LEFT JOIN modversion_download_overrides "
+                "ON modversion_download_overrides.modversion_id = "
+                "modversions.id"
+                if include_download_overrides
+                else ""
+            )
+            source_columns = (
+                "modversion_download_sources.provider AS download_source_provider, "
+                "modversion_download_sources.url AS download_source_url, "
+                "modversion_download_sources.filename AS download_source_filename, "
+                "modversion_download_sources.md5 AS download_source_md5, "
+                "modversion_download_sources.sha1 AS download_source_sha1, "
+                "modversion_download_sources.sha512 AS download_source_sha512, "
+                "modversion_download_sources.filesize AS download_source_filesize"
+                if include_download_sources
+                else "NULL AS download_source_provider, "
+                "NULL AS download_source_url, NULL AS download_source_filename, "
+                "NULL AS download_source_md5, NULL AS download_source_sha1, "
+                "NULL AS download_source_sha512, NULL AS download_source_filesize"
+            )
+            source_join = (
+                "LEFT JOIN modversion_download_sources "
+                "ON modversion_download_sources.modversion_id = modversions.id "
+                "AND modversion_download_sources.provider = "
+                "mods.integration_provider"
+                if include_download_sources
+                else ""
+            )
+            sides = (
+                "('SERVER', 'BOTH')"
+                if target == "server"
+                else "('CLIENT', 'BOTH')"
+            )
+            # All interpolated SQL fragments above are fixed internal strings.
+            cursor.execute(
+                f"""SELECT modversions.id, modversions.mod_id,
+                           modversions.version, modversions.mcversion,
+                           modversions.modloader,
+                           (SELECT GROUP_CONCAT(
+                                       compatibility.minecraft_version
+                                       ORDER BY compatibility.minecraft_version
+                                       SEPARATOR ',')
+                              FROM modversion_minecraft_versions compatibility
+                             WHERE compatibility.modversion_id = modversions.id)
+                               AS minecraft_versions_csv,
+                           modversions.integration_version_id,
+                           modversions.md5, modversions.jarmd5,
+                           modversions.jarfilesize,
+                           {override_column},
+                           {source_columns},
+                           modversions.created_at,
+                           modversions.updated_at, modversions.filesize,
+                           mods.name AS modname, mods.pretty_name,
+                           mods.author, mods.link, mods.description,
+                           mods.side, mods.modtype,
+                           mods.integration_provider,
+                           mods.integration_project_id,
+                           build_modversion.optional,
+                           build_modversion.id AS membership_id
+                    FROM modversions
+                    INNER JOIN build_modversion
+                        ON modversions.id = build_modversion.modversion_id
+                    INNER JOIN mods ON modversions.mod_id = mods.id
+                    {override_join}
+                    {source_join}
+                    WHERE build_modversion.build_id = %s
+                      AND (build_modversion.optional = 0
+                           OR (%s = 1 AND build_modversion.optional = 1)
+                           OR (%s = 1 AND build_modversion.optional = 2))
+                      AND mods.side IN {sides}""",  # nosec B608
+                (
+                    self.id,
+                    int(include_optional),
+                    int(include_excluded),
+                ),
+            )
             modversions = cursor.fetchall()
             versions = []
             for mv in modversions:
@@ -382,6 +425,8 @@ class Build:
                     integration_version_id=mv.get("integration_version_id"),
                     jarmd5=mv.get("jarmd5"),
                     jarfilesize=mv.get("jarfilesize"),
+                    jar_url_override=mv.get("jar_url_override"),
+                    minecraft_versions=mv.get("minecraft_versions_csv"),
                 )
                 v.modname = mv["modname"]
                 v.pretty_name = mv["pretty_name"]
@@ -392,6 +437,13 @@ class Build:
                 v.modtype = mv.get("modtype", "MOD")
                 v.integration_provider = mv.get("integration_provider")
                 v.integration_project_id = mv.get("integration_project_id")
+                v.download_source_provider = mv.get("download_source_provider")
+                v.download_source_url = mv.get("download_source_url")
+                v.download_source_filename = mv.get("download_source_filename")
+                v.download_source_md5 = mv.get("download_source_md5")
+                v.download_source_sha1 = mv.get("download_source_sha1")
+                v.download_source_sha512 = mv.get("download_source_sha512")
+                v.download_source_filesize = mv.get("download_source_filesize")
                 v.membership_id = mv.get("membership_id")
                 versions.append(v)
 

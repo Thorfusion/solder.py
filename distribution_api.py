@@ -107,7 +107,7 @@ def packwiz_pack(pack_slug, selector, source):
     try:
         packages = DistributionExport.load_packages(build.id)
         native_files = (
-            PlatformPackExport.native_modrinth_files(build, packages)
+            PlatformPackExport.stored_native_modrinth_files(build, packages)
             if source == "hybrid"
             else {}
         )
@@ -139,7 +139,7 @@ def packwiz_index(pack_slug, selector, source):
     try:
         packages = DistributionExport.load_packages(build.id)
         native_files = (
-            PlatformPackExport.native_modrinth_files(build, packages)
+            PlatformPackExport.stored_native_modrinth_files(build, packages)
             if source == "hybrid"
             else {}
         )
@@ -175,7 +175,7 @@ def packwiz_mod(pack_slug, selector, mod_slug, source):
     try:
         package = DistributionExport.load_package(build.id, mod_slug)
         native_files = (
-            PlatformPackExport.native_modrinth_files(build, [package])
+            PlatformPackExport.stored_native_modrinth_files(build, [package])
             if source == "hybrid"
             else {}
         )
@@ -255,7 +255,7 @@ def _director_bundle(pack_slug, selector, bundle_name, setting):
             build.id, packages
         )
         native_files = (
-            PlatformPackExport.native_modrinth_files(build, packages)
+            PlatformPackExport.stored_native_modrinth_files(build, packages)
             if source == "hybrid"
             else {}
         )

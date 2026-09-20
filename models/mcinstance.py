@@ -14,7 +14,11 @@ import zipfile
 
 import requests
 
-from .compatibility import normalize_modloader, version_is_compatible
+from .compatibility import (
+    normalize_modloader,
+    resolved_minecraft_versions,
+    version_is_compatible,
+)
 from .database import Database
 from .mod import Mod, UploadVerificationError
 from .modversion import Modversion
@@ -98,13 +102,21 @@ class MCInstancePackage:
     side: str
     modtype: str
     optional: bool
+    id: int | None = None
     optional_state: int = 0
     membership_id: int | None = None
     modloader: str | None = None
     minecraft: str | None = None
+    minecraft_versions: tuple[str, ...] = ()
     integration_provider: str | None = None
     integration_project_id: str | None = None
     integration_version_id: str | None = None
+    download_source_provider: str | None = None
+    download_source_url: str | None = None
+    download_source_filename: str | None = None
+    download_source_sha1: str | None = None
+    download_source_sha512: str | None = None
+    download_source_filesize: int | None = None
 
     @property
     def mod_slug(self):
@@ -151,6 +163,13 @@ class MCInstanceJar:
         return bool(_MD5_RE.fullmatch(str(jarmd5 or "").strip()))
 
     @classmethod
+    def has_complete_metadata(cls, jarmd5, jarfilesize):
+        try:
+            return cls.is_ready(jarmd5) and int(jarfilesize) > 0
+        except (TypeError, ValueError):
+            return False
+
+    @classmethod
     def create(
         cls,
         mod,
@@ -162,14 +181,38 @@ class MCInstanceJar:
     ):
         if mod is None or version is None or str(version.mod_id) != str(mod.id):
             raise MCInstanceJarError("The selected mod version no longer exists.")
-        if str(mod.modtype or "").upper() != "MOD":
-            raise MCInstanceJarError("Only MOD packages can be converted to MCIL JARs.")
-        if cls.is_ready(version.jarmd5):
-            return str(version.jarmd5).strip().lower()
-
+        modtype = str(mod.modtype or "").upper()
+        if modtype not in {"MOD", "LAUNCHER"}:
+            raise MCInstanceJarError(
+                "Only MOD and LAUNCHER packages can provide raw JARs."
+            )
         root = Path(local_repo_root).resolve()
         destination_folder = cls._destination_folder(root, mod.name)
         destination_folder.mkdir(parents=True, exist_ok=True)
+        jar_filename = f"{mod.name}-{version.version}.jar"
+        existing_jar = destination_folder / jar_filename
+        expected_jar_md5 = (
+            str(version.jarmd5).strip().lower()
+            if cls.is_ready(version.jarmd5)
+            else None
+        )
+
+        if existing_jar.is_file() and expected_jar_md5:
+            if existing_jar.stat().st_size > _MAX_PACKAGE_SIZE:
+                raise MCInstanceJarError(
+                    "The stored JAR exceeds the 512 MiB verification limit."
+                )
+            try:
+                Mod.verify_file_md5(
+                    existing_jar, expected_jar_md5, "the stored JAR"
+                )
+            except UploadVerificationError as error:
+                raise MCInstanceJarError(str(error)) from error
+            jar_filesize = existing_jar.stat().st_size
+            Modversion.update_modversion_jarmd5(
+                version.id, expected_jar_md5, jar_filesize
+            )
+            return expected_jar_md5
 
         try:
             with tempfile.TemporaryDirectory(
@@ -183,7 +226,16 @@ class MCInstanceJar:
                     repository_url,
                     root,
                     Path(staging_directory),
+                    allow_any_jar=modtype == "LAUNCHER",
                 )
+                if (
+                    expected_jar_md5
+                    and prepared.jar_md5 != expected_jar_md5
+                ):
+                    raise MCInstanceJarError(
+                        "The JAR extracted from the stored ZIP does not match "
+                        "the stored JAR MD5."
+                    )
                 os.replace(prepared.staged_path, prepared.final_path)
 
             if r2_client is not None and r2_bucket:
@@ -225,13 +277,14 @@ class MCInstanceJar:
         staging_directory,
         *,
         require_only_jar=False,
+        allow_any_jar=False,
     ):
         MCInstanceExport._validate_artifact_component(version_name, "mod version")
         expected_zip_md5 = str(expected_md5 or "").strip().lower()
         if not _MD5_RE.fullmatch(expected_zip_md5):
             raise MCInstanceJarError(
                 "This version needs a valid ZIP MD5 before its JAR can be created. "
-                "Rehash the version first."
+                "Verify the ZIP first."
             )
 
         destination_folder = cls._destination_folder(root, mod_name)
@@ -258,6 +311,7 @@ class MCInstanceJar:
                 staged_zip,
                 output_name=jar_filename,
                 require_only_jar=require_only_jar,
+                allow_any_jar=allow_any_jar,
             )
         except UploadVerificationError as error:
             raise MCInstanceJarError(str(error)) from error
@@ -515,12 +569,32 @@ class MCInstanceExport:
                           mods.integration_provider,
                           mods.integration_project_id,
                           build_modversion.id AS membership_id,
+                          modversions.id AS modversion_id,
                           modversions.version AS mod_version,
                           modversions.mcversion AS mod_minecraft,
+                          (SELECT GROUP_CONCAT(
+                                      compatibility.minecraft_version
+                                      ORDER BY compatibility.minecraft_version
+                                      SEPARATOR ',')
+                             FROM modversion_minecraft_versions compatibility
+                            WHERE compatibility.modversion_id = modversions.id)
+                              AS mod_minecraft_versions,
                           modversions.md5,
                           modversions.jarmd5,
                           modversions.modloader,
                           modversions.integration_version_id,
+                          modversion_download_sources.provider
+                              AS download_source_provider,
+                          modversion_download_sources.url
+                              AS download_source_url,
+                          modversion_download_sources.filename
+                              AS download_source_filename,
+                          modversion_download_sources.sha1
+                              AS download_source_sha1,
+                          modversion_download_sources.sha512
+                              AS download_source_sha512,
+                          modversion_download_sources.filesize
+                              AS download_source_filesize,
                           build_modversion.optional
                    FROM builds
                    INNER JOIN modpacks ON builds.modpack_id = modpacks.id
@@ -529,6 +603,10 @@ class MCInstanceExport:
                    LEFT JOIN modversions
                        ON build_modversion.modversion_id = modversions.id
                    LEFT JOIN mods ON modversions.mod_id = mods.id
+                   LEFT JOIN modversion_download_sources
+                       ON modversion_download_sources.modversion_id =
+                          modversions.id
+                      AND modversion_download_sources.provider = 'MODRINTH'
                    WHERE builds.id = %s
                    ORDER BY mods.name ASC, modversions.id ASC""",
                 (build_id,),
@@ -559,6 +637,7 @@ class MCInstanceExport:
         )
         packages = [
             MCInstancePackage(
+                id=row["modversion_id"],
                 mod_id=row["mod_id"],
                 name=row["mod_name"],
                 pretty_name=row["pretty_name"] or row["mod_name"],
@@ -573,9 +652,19 @@ class MCInstanceExport:
                 membership_id=row.get("membership_id"),
                 modloader=row.get("modloader"),
                 minecraft=row.get("mod_minecraft"),
+                minecraft_versions=resolved_minecraft_versions(
+                    row.get("mod_minecraft"),
+                    row.get("mod_minecraft_versions"),
+                ),
                 integration_provider=row.get("integration_provider"),
                 integration_project_id=row.get("integration_project_id"),
                 integration_version_id=row.get("integration_version_id"),
+                download_source_provider=row.get("download_source_provider"),
+                download_source_url=row.get("download_source_url"),
+                download_source_filename=row.get("download_source_filename"),
+                download_source_sha1=row.get("download_source_sha1"),
+                download_source_sha512=row.get("download_source_sha512"),
+                download_source_filesize=row.get("download_source_filesize"),
             )
             for row in rows
             if row["mod_id"] is not None
@@ -667,6 +756,7 @@ class MCInstanceExport:
                         package.modloader,
                         build.minecraft,
                         build.modloader,
+                        package.minecraft_versions,
                     ):
                         raise MCInstanceExportError(
                             f'Package "{package.pretty_name}" is not compatible '

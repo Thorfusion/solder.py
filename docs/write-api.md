@@ -76,10 +76,13 @@ when supplied and may contain mod IDs or slugs.
 
 Create-version requests require `version` and a 32-character `md5`. They may
 include `filesize`, `mcversion`, `modloader`, and the raw-JAR `jarmd5` and
-`jarfilesize`. ZIP and JAR sizes are separate byte counts. solder.py does not
-use mod-version notes. `mcversion` and `modloader` accept either one value, a
-comma-separated string, or a JSON array. Version responses retain the string
-fields and add `minecraft_versions` and `modloaders` arrays.
+`jarfilesize`. `jar_url_override` may contain a public HTTPS URL and requires a
+valid `jarmd5`; it is the highest-priority SolderPy Loader source. ZIP and JAR
+sizes are separate byte counts. solder.py does not use mod-version notes.
+`mcversion` and `modloader` accept either one value, a comma-separated string,
+or a JSON array. A response keeps a single Minecraft version in `mcversion`
+and returns `MULTI` there for a multi-version row; use `minecraft_versions`
+for the concrete list. `modloaders` similarly provides the parsed loader list.
 
 Adding a build mod uses the Technic fields `mod_slug` and `mod_version` and may
 also include `optional`. Compatibility is enforced against the build's exact
@@ -132,6 +135,10 @@ from the mod title followed by the configured repository name; a submitted
 ```json
 {"version_mode":"MANUAL"}
 ```
+
+Artifact creation and updates also accept `solderpy_loader_direct`. When true,
+the Maven repository must use HTTPS and bootstrap manifests prefer its native
+JAR URL before the Solder fallback.
 
 Manual version updates accept `minecraft`, `mod_version`, `modloader`, and
 `enabled`. An enabled mapping requires both version strings. Maven repository

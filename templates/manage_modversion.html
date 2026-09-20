@@ -1,0 +1,101 @@
+{%extends "layout.html"%} {%from "_badges.html" import integration_badge%} {% set active_page = "modversion" %}
+{%block head%}
+<title>{{mod.pretty_name}} {{version.version}} - solder.py</title>
+{%endblock%}
+{%block main%}
+<div class="container-fluid">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+        <div>
+            <h2>{{mod.pretty_name or mod.name}} {{version.version}}</h2>
+            <p class="text-muted mb-0"><code>{{mod.name}}</code> {{integration_badge(mod.integration_provider, mod.integration_label)}}</p>
+        </div>
+        <a class="btn btn-secondary" href="{{url_for('asite.modversion', id=mod.id)}}">Back to versions</a>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Stored version metadata</h5>
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5">Database ID</dt><dd class="col-sm-7">{{version.id}}</dd>
+                        <dt class="col-sm-5">Version</dt><dd class="col-sm-7">{{version.version}}</dd>
+                        <dt class="col-sm-5">Minecraft versions</dt><dd class="col-sm-7">{{version.mcversion_display or 'All'}}</dd>
+                        <dt class="col-sm-5">Modloaders</dt><dd class="col-sm-7">{{version.modloader or 'All'}}</dd>
+                        <dt class="col-sm-5">Provider</dt><dd class="col-sm-7">{{mod.integration_label or mod.integration_provider or 'Solder'}}</dd>
+                        <dt class="col-sm-5">Project ID</dt><dd class="col-sm-7 text-break">{{mod.integration_project_id or '—'}}</dd>
+                        <dt class="col-sm-5">Provider version ID</dt><dd class="col-sm-7 text-break">{{version.integration_version_id or '—'}}</dd>
+                        <dt class="col-sm-5">Created</dt><dd class="col-sm-7">{{version.created_at or '—'}}</dd>
+                        <dt class="col-sm-5">Updated</dt><dd class="col-sm-7">{{version.updated_at or '—'}}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Stored artifacts</h5>
+                    <p class="mb-1"><strong>Technic ZIP:</strong> <a href="{{mirror_url}}{{mod.name}}/{{mod.name}}-{{version.version}}.zip">download</a></p>
+                    <p class="small text-break"><strong>ZIP MD5:</strong> <code>{{version.md5}}</code><br><strong>ZIP size:</strong> {{version.filesize}} bytes</p>
+                    {%if jar_ready%}
+                    <p class="mb-1"><strong>Raw JAR:</strong> <a href="{{mirror_url}}{{mod.name}}/{{mod.name}}-{{version.version}}.jar">download</a></p>
+                    <p class="small text-break mb-1"><strong>JAR MD5:</strong> <code>{{version.jarmd5}}</code></p>
+                    <p class="small mb-3"><strong>JAR filesize:</strong> {%if version.jarfilesize%}{{version.jarfilesize}} bytes{%else%}Not recorded{%endif%}</p>
+                    {%else%}
+                    <p class="text-muted mb-3">No verified raw JAR is stored for this version.</p>
+                    {%endif%}
+                    <div class="d-flex flex-wrap gap-2">
+                        <form method="post">
+                            <button class="btn btn-primary" type="submit" name="verify_zip_submit" value="1">Verify ZIP</button>
+                        </form>
+                        {%if mod.modtype in ['MOD', 'LAUNCHER']%}
+                        <form method="post">
+                            <button class="btn btn-info" type="submit" name="jar_action_submit" value="1">{%if jar_ready%}Verify JAR{%else%}Create JAR{%endif%}</button>
+                        </form>
+                        {%endif%}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+            <div class="card-body">
+            <h5 class="card-title">SolderPy Loader JAR source override</h5>
+            <p class="text-muted">This HTTPS URL has the highest priority. A native Maven or Modrinth URL is tried next when available, followed by the Solder-hosted JAR. Before saving, solder.py downloads the override and requires it to match the stored JAR MD5.</p>
+            <form method="post">
+                <label class="form-label" for="jar_url_override">Override JAR URL</label>
+                <input class="form-control" type="url" name="jar_url_override" id="jar_url_override" maxlength="2048" placeholder="https://downloads.example/mod.jar" value="{{version.jar_url_override or ''}}">
+                <div class="form-text">Leave empty to remove the override. The filename does not need to match the Solder filename.</div>
+                <button class="btn btn-success mt-3" type="submit">Save override</button>
+            </form>
+            {%if mod.integration_provider == 'MAVEN' and maven_artifact%}
+            <hr>
+            <p class="mb-0"><strong>Maven direct source:</strong> {%if maven_artifact.solderpy_loader_direct%}<span class="text-success">enabled</span>{%else%}<span class="text-muted">disabled</span> — enable it from the Maven artifact page{%endif%}</p>
+            {%endif%}
+        </div>
+    </div>
+
+    <h4>Used by builds</h4>
+    {%if builds%}
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+            <thead><tr><th>Modpack</th><th>Build</th><th>Delivery state</th><th>Published</th><th></th></tr></thead>
+            <tbody>
+            {%for build in builds%}
+                <tr>
+                    <td>{{build.modpack_name}} <span class="text-muted">({{build.modpack_slug}})</span></td>
+                    <td>{{build.build_version}}</td>
+                    <td>{%if build.optional == 0%}Required{%elif build.optional == 1%}Optional{%else%}Excluded{%endif%}</td>
+                    <td>{%if build.is_published%}Yes{%else%}No{%endif%}</td>
+                    <td><a class="btn btn-sm btn-secondary" href="{{url_for('asite.modpackbuild', id=build.build_id)}}">Manage build</a></td>
+                </tr>
+            {%endfor%}
+            </tbody>
+        </table>
+    </div>
+    {%else%}
+    <p class="text-muted">This version is not used by a build.</p>
+    {%endif%}
+</div>
+{%endblock%}

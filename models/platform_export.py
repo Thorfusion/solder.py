@@ -63,6 +63,7 @@ class NativeModrinthFile:
     sha1: str
     sha512: str
     size: int
+    version_number: str | None = None
 
 
 @dataclass(frozen=True)
@@ -159,6 +160,8 @@ class CurseForgeFile:
     filename: str
     game_versions: tuple[str, ...]
     published: str
+    sha1: str | None = None
+    size: int | None = None
 
 
 class CurseForgeDownloaderAPI:
@@ -234,6 +237,30 @@ class CurseForgeDownloaderAPI:
         normalized_game_versions = {
             value.replace(" ", "").upper() for value in game_versions
         }
+        sha1 = None
+        hashes = payload.get("hashes") or ()
+        if isinstance(hashes, list):
+            for file_hash in hashes:
+                if not isinstance(file_hash, dict):
+                    continue
+                try:
+                    algorithm = int(file_hash.get("algo"))
+                except (TypeError, ValueError):
+                    continue
+                value = str(file_hash.get("value") or "").strip().lower()
+                if algorithm == 1 and _SHA1_RE.fullmatch(value):
+                    sha1 = value
+                    break
+        try:
+            size = (
+                int(payload["fileLength"])
+                if payload.get("fileLength") is not None
+                else None
+            )
+        except (TypeError, ValueError):
+            size = None
+        if size is not None and size < 0:
+            size = None
         loader_supported = (
             not normalized_loader
             or normalized_loader == "VANILLA"
@@ -257,6 +284,8 @@ class CurseForgeDownloaderAPI:
             filename=filename,
             game_versions=game_versions,
             published=str(payload.get("fileDate") or ""),
+            sha1=sha1,
+            size=size,
         )
 
     def list_files(self, project_id, minecraft, modloader=None):
@@ -403,6 +432,7 @@ class PlatformPackExport:
             sha1=version.hashes.get("sha1"),
             sha512=version.hashes.get("sha512"),
             size=version.size,
+            version_number=version.version_number,
         )
         cls._validate_native_file(native_file)
         return DownloaderRelease(
@@ -859,7 +889,14 @@ class PlatformPackExport:
 
     @staticmethod
     def solderpy_loader_config(
-        build, application_url, selector="build", *, modpack_slug=None
+        build,
+        application_url,
+        selector="build",
+        *,
+        modpack_slug=None,
+        target="auto",
+        source_mode="hybrid",
+        platform=None,
     ):
         """Create the launch-time bootstrap API pointer for SolderPy Loader."""
         if not build.is_published or build.private:
@@ -871,13 +908,25 @@ class PlatformPackExport:
         DistributionExport._validate_slug(slug, "modpack slug")
         selector = PlatformPackExport.hosted_selector(build, selector)
         DistributionExport._validate_component(selector, "build selector")
+        target = str(target or "auto").strip().lower()
+        if target not in {"auto", "client", "server"}:
+            raise PlatformExportError("Unknown SolderPy Loader target.")
+        source_mode = PlatformPackExport.source_mode(
+            source_mode, default="hybrid"
+        )
+        platform = str(platform or "").strip().casefold() or None
+        if platform not in {None, "modrinth", "curseforge", "prism"}:
+            raise PlatformExportError("Unknown SolderPy Loader platform.")
         config = {
             "enabled": True,
             "api": f"{base}/api/",
             "modpack": str(slug),
             "build": selector,
-            "target": "auto",
+            "target": target,
+            "source": source_mode,
         }
+        if platform is not None:
+            config["platform"] = platform
         return (json.dumps(config, indent=2) + "\n").encode("utf-8")
 
     @staticmethod
@@ -908,10 +957,10 @@ class PlatformPackExport:
         ).encode("utf-8")
 
     @classmethod
-    def render_solderpy_loader_archive(
-        cls, selected, config, *, relauncher_config=None, http=None
+    def _write_solderpy_loader_jars(
+        cls, target, selected, *, archive_root="mods", http=None
     ):
-        """Bundle one verified SolderPy Loader release and its runtime."""
+        """Write one verified Loader/Relauncher pair into an archive."""
         if getattr(selected, "key", None) != "solderpyloader":
             raise PlatformExportError("Select a SolderPy Loader release.")
         native_files = (
@@ -922,26 +971,182 @@ class PlatformPackExport:
             raise PlatformExportError(
                 "The selected SolderPy Loader release has no Modrinth file."
             )
+        if len(native_files) < 2 or native_files[1] is None:
+            raise PlatformExportError(
+                "The selected SolderPy Loader release has no compatible "
+                "Relauncher dependency."
+            )
 
+        archive_root = str(archive_root or "").strip("/")
+        for index, native_file in enumerate(native_files):
+            filename = (
+                "!solderpy-loader.jar"
+                if index == 0
+                else (
+                    "!relauncher.jar"
+                    if index == 1
+                    else f"!solderpy-loader-dependency-{index}.jar"
+                )
+            )
+            destination = (
+                f"{archive_root}/{filename}" if archive_root else filename
+            )
+            cls._write_native_file(
+                target, native_file, destination, http=http
+            )
+
+    @classmethod
+    def render_solderpy_loader_archive(
+        cls, selected, config, *, relauncher_config=None, http=None
+    ):
+        """Bundle one verified SolderPy Loader release and its runtime."""
         with cls._zip_archive() as (archive, target):
-            for index, native_file in enumerate(native_files):
-                destination = (
-                    "mods/!solderpy-loader.jar"
-                    if index == 0
-                    else (
-                        "mods/!relauncher.jar"
-                        if index == 1
-                        else f"mods/!solderpy-loader-dependency-{index}.jar"
-                    )
-                )
-                cls._write_native_file(
-                    target, native_file, destination, http=http
-                )
+            cls._write_solderpy_loader_jars(
+                target, selected, http=http
+            )
             target.writestr("config/solderpy-loader.json", config)
             if relauncher_config is not None:
                 target.writestr(
                     "config/relauncher/config.cfg", relauncher_config
                 )
+        return archive
+
+    @classmethod
+    def _server_launcher(cls, build, packages):
+        launchers = []
+        try:
+            for package in packages:
+                if (
+                    str(package.modtype or "").upper() == "LAUNCHER"
+                    and MCInstanceExport._side(package.side) == "SERVER"
+                    and cls._optional_state(package) != 2
+                ):
+                    launchers.append(package)
+        except MCInstanceExportError as error:
+            raise PlatformExportError(str(error)) from error
+        if not launchers:
+            raise PlatformExportError(
+                "Server export requires one server-side LAUNCHER (modloader) "
+                "package with a verified raw JAR."
+            )
+        if len(launchers) != 1:
+            raise PlatformExportError(
+                "Server export requires exactly one server-side LAUNCHER "
+                "(modloader) package."
+            )
+
+        launcher = launchers[0]
+        if cls._optional_state(launcher) != 0:
+            raise PlatformExportError(
+                "The server-side LAUNCHER package must be required."
+            )
+        if not version_is_compatible(
+            getattr(launcher, "minecraft", None),
+            getattr(launcher, "modloader", None),
+            build.minecraft,
+            build.modloader,
+            getattr(launcher, "minecraft_versions", None),
+        ):
+            raise PlatformExportError(
+                f'The server launcher "{launcher.pretty_name}" is not '
+                "compatible with the build's modloader."
+            )
+        try:
+            jar_md5 = MCInstanceExport._normal_hash(launcher.jarmd5)
+        except MCInstanceExportError as error:
+            raise PlatformExportError(str(error)) from error
+        if jar_md5 is None:
+            raise PlatformExportError(
+                f'The server launcher "{launcher.pretty_name}" needs a '
+                "verified raw JAR before this build can be exported."
+            )
+        return launcher, jar_md5
+
+    @classmethod
+    def _write_server_launcher(
+        cls,
+        target,
+        launcher,
+        expected_md5,
+        public_repo_url,
+        local_repo_root,
+    ):
+        try:
+            MCInstanceExport._validate_artifact_component(
+                launcher.name, "mod slug"
+            )
+            MCInstanceExport._validate_artifact_component(
+                launcher.version, "mod version"
+            )
+            filename = launcher.jar_filename
+            with MCInstanceExport._package_file(
+                local_repo_root,
+                public_repo_url,
+                launcher.name,
+                filename,
+            ) as source:
+                if MCInstanceExport._file_md5(source) != expected_md5:
+                    raise PlatformExportError(
+                        f'The stored JAR for "{launcher.pretty_name}" does '
+                        "not match its MD5."
+                    )
+                with target.open(filename, "w") as output:
+                    shutil.copyfileobj(source, output, 1024 * 1024)
+        except PlatformExportError:
+            raise
+        except MCInstanceExportError as error:
+            raise PlatformExportError(str(error)) from error
+
+    @classmethod
+    def render_server(
+        cls,
+        build,
+        packages,
+        downloader,
+        public_repo_url,
+        local_repo_root,
+        application_url,
+        *,
+        selector="build",
+        http=None,
+    ):
+        """Create a small dedicated-server bootstrap archive."""
+        launcher, launcher_md5 = cls._server_launcher(build, packages)
+        selected = cls.resolve_downloader(
+            downloader,
+            build,
+            "modrinth",
+            required=True,
+            http=http,
+        )
+        if selected.key != "solderpyloader":
+            raise PlatformExportError(
+                "Server export requires a SolderPy Loader release."
+            )
+        config = cls.solderpy_loader_config(
+            build,
+            application_url,
+            selector,
+            target="server",
+        )
+        relauncher_config = cls.relauncher_java_config(build)
+
+        with cls._zip_archive() as (archive, target):
+            cls._write_solderpy_loader_jars(
+                target, selected, http=http
+            )
+            target.writestr("config/solderpy-loader.json", config)
+            if relauncher_config is not None:
+                target.writestr(
+                    "config/relauncher/config.cfg", relauncher_config
+                )
+            cls._write_server_launcher(
+                target,
+                launcher,
+                launcher_md5,
+                public_repo_url,
+                local_repo_root,
+            )
         return archive
 
     @classmethod
@@ -1062,6 +1267,7 @@ class PlatformPackExport:
         native_files=None,
         optional_groups=(),
         archive_root="overrides",
+        platform=None,
     ):
         source_mode = cls.source_mode(source_mode)
         delivery = cls.config_delivery(spec, delivery)
@@ -1076,14 +1282,14 @@ class PlatformPackExport:
             )
 
         if spec.key == "solderpyloader":
-            if source_mode != "solder":
-                raise PlatformExportError(
-                    "SolderPy Loader requires the Solder-only download source."
-                )
             target.writestr(
                 archive_path("config/solderpy-loader.json"),
                 cls.solderpy_loader_config(
-                    build, application_url, selector
+                    build,
+                    application_url,
+                    selector,
+                    source_mode=source_mode,
+                    platform=platform,
                 ),
             )
             relauncher_config = cls.relauncher_java_config(build)
@@ -1237,16 +1443,69 @@ class PlatformPackExport:
         )
 
     @classmethod
-    def _modrinth_override_files(cls, build, overrides, *, http=None):
-        """Resolve the newest compatible Modrinth file for every override."""
+    def _override_modrinth_versions(
+        cls, build, overrides, packages, *, http=None
+    ):
+        """Resolve the selected Modrinth release for each manual project map."""
         if not overrides:
             return ()
         provider = ModrinthProvider(http=http)
+        overrides = tuple(overrides)
+        mapped_projects = {
+            str(override.modrinth_project_id): override
+            for override in overrides
+        }
+        selected_packages = {}
+        for package in cls._actual_packages(packages):
+            if str(package.integration_provider or "").upper() != "MODRINTH":
+                continue
+            project_id = str(package.integration_project_id or "")
+            if project_id not in mapped_projects:
+                continue
+            if project_id in selected_packages:
+                raise PlatformExportError(
+                    f'{mapped_projects[project_id].name} is assigned to more '
+                    "than one package in this build."
+                )
+            if not package.integration_version_id:
+                raise PlatformExportError(
+                    f'{mapped_projects[project_id].name} has no selected '
+                    "Modrinth version."
+                )
+            selected_packages[project_id] = package
+
+        exact_versions = {}
+        if selected_packages:
+            try:
+                exact_versions = provider.get_versions(
+                    [
+                        (project_id, package.integration_version_id)
+                        for project_id, package in selected_packages.items()
+                    ],
+                    build.minecraft,
+                    build.modloader,
+                )
+            except IntegrationError as error:
+                raise PlatformExportError(
+                    "The selected Modrinth versions for CurseForge sync "
+                    "could not be verified."
+                ) from error
+
         resolved = []
         for override in overrides:
+            project_id = str(override.modrinth_project_id)
+            selected_package = selected_packages.get(project_id)
+            if selected_package is not None:
+                resolved.append(
+                    (
+                        override,
+                        exact_versions[selected_package.integration_version_id],
+                    )
+                )
+                continue
             try:
                 versions = provider.list_versions(
-                    override.modrinth_project_id,
+                    project_id,
                     build.minecraft,
                     build.modloader,
                 )
@@ -1258,26 +1517,104 @@ class PlatformPackExport:
                 raise PlatformExportError(
                     f'{override.name} has no compatible Modrinth version.'
                 )
-            resolved.append(
-                (override, cls._modrinth_release(versions[0]).modrinth)
-            )
+            resolved.append((override, versions[0]))
         return tuple(resolved)
+
+    @classmethod
+    def _modrinth_override_files(cls, override_versions):
+        return tuple(
+            (override, cls._modrinth_release(version).modrinth)
+            for override, version in override_versions
+        )
+
+    @staticmethod
+    def _version_number_in_name(version_number, name):
+        version_number = str(version_number or "").strip()
+        name = str(name or "")
+        if not version_number or not name:
+            return False
+        optional_v = "" if version_number.lower().startswith("v") else "v?"
+        pattern = re.compile(
+            rf"(?<![A-Za-z0-9]){optional_v}{re.escape(version_number)}"
+            rf"(?![A-Za-z0-9]|[._+\-]\d)",
+            re.IGNORECASE,
+        )
+        return pattern.search(name) is not None
+
+    @classmethod
+    def _matching_curseforge_file(cls, override, version, files):
+        """Match one in-memory CurseForge response to a Modrinth release."""
+        files = tuple(files)
+        modrinth_sha1 = str(version.hashes.get("sha1") or "").lower()
+        if _SHA1_RE.fullmatch(modrinth_sha1):
+            hash_matches = tuple(
+                file
+                for file in files
+                if file.sha1 and file.sha1.lower() == modrinth_sha1
+            )
+            if hash_matches:
+                # Duplicate CurseForge records with the same SHA-1 contain the
+                # same bytes. The API already sorts the newest record first.
+                return hash_matches[0]
+
+        filename = str(version.filename or "").casefold()
+        try:
+            filesize = int(version.size)
+        except (TypeError, ValueError):
+            filesize = 0
+        filename_matches = tuple(
+            file
+            for file in files
+            if filename
+            and filesize > 0
+            and file.filename.casefold() == filename
+            and file.size == filesize
+        )
+        if len(filename_matches) == 1:
+            return filename_matches[0]
+        if len(filename_matches) > 1:
+            raise PlatformExportError(
+                f'{override.name} matched multiple CurseForge files by '
+                "filename and filesize."
+            )
+
+        version_matches = tuple(
+            file
+            for file in files
+            if cls._version_number_in_name(
+                version.version_number, file.filename
+            )
+            or cls._version_number_in_name(
+                version.version_number, file.display_name
+            )
+        )
+        if len(version_matches) == 1:
+            return version_matches[0]
+        if len(version_matches) > 1:
+            raise PlatformExportError(
+                f'{override.name} matched multiple CurseForge files by '
+                "Modrinth version number."
+            )
+        raise PlatformExportError(
+            f'{override.name} has no CurseForge file matching Modrinth '
+            f'version {version.version_number}.'
+        )
 
     @classmethod
     def _curseforge_override_files(
         cls,
         build,
-        overrides,
+        override_versions,
         *,
         http=None,
         curseforge_api_key=None,
     ):
-        """Resolve the newest compatible CurseForge file for every override."""
-        if not overrides:
+        """Match CurseForge files during export without persisting metadata."""
+        if not override_versions:
             return ()
         provider = CurseForgeDownloaderAPI(curseforge_api_key, http=http)
         resolved = []
-        for override in overrides:
+        for override, version in override_versions:
             files = provider.list_files(
                 override.curseforge_project_id,
                 build.minecraft,
@@ -1287,17 +1624,87 @@ class PlatformPackExport:
                 raise PlatformExportError(
                     f'{override.name} has no compatible CurseForge file.'
                 )
-            resolved.append((override, files[0]))
+            resolved.append(
+                (
+                    override,
+                    cls._matching_curseforge_file(
+                        override, version, files
+                    ),
+                )
+            )
         return tuple(resolved)
 
     @classmethod
     def native_modrinth_files(cls, build, packages, *, http=None):
+        """Resolve exact Modrinth files, preferring metadata saved at import."""
+        return cls._native_modrinth_files(
+            build, packages, http=http, allow_network=True
+        )
+
+    @classmethod
+    def stored_native_modrinth_files(cls, build, packages):
+        """Resolve hybrid files without outbound requests on public routes."""
+        return cls._native_modrinth_files(
+            build, packages, allow_network=False
+        )
+
+    @classmethod
+    def _stored_native_modrinth_file(cls, package):
+        provider = str(
+            getattr(package, "download_source_provider", "") or ""
+        ).upper()
+        if provider != "MODRINTH":
+            return None
+        source = NativeModrinthFile(
+            project_id=str(package.integration_project_id),
+            version_id=str(package.integration_version_id),
+            filename=str(
+                getattr(package, "download_source_filename", "") or ""
+            ),
+            download_url=str(
+                getattr(package, "download_source_url", "") or ""
+            ),
+            sha1=str(
+                getattr(package, "download_source_sha1", "") or ""
+            ).lower(),
+            sha512=str(
+                getattr(package, "download_source_sha512", "") or ""
+            ).lower(),
+            size=getattr(package, "download_source_filesize", None),
+            version_number=str(getattr(package, "version", "") or "") or None,
+        )
+        try:
+            cls._validate_native_file(source)
+        except PlatformExportError:
+            return None
+        return source
+
+    @classmethod
+    def _native_modrinth_files(
+        cls, build, packages, *, http=None, allow_network=True
+    ):
         """Resolve and validate exact Modrinth files for hybrid exports."""
         native_packages = [
             package for package in packages if package.is_native_modrinth
         ]
         if not native_packages:
             return {}
+
+        native_files = {}
+        missing_packages = []
+        for package in native_packages:
+            native_file = cls._stored_native_modrinth_file(package)
+            if native_file is None:
+                missing_packages.append(package)
+                continue
+            if package.integration_version_id in native_files:
+                raise PlatformExportError(
+                    "A Modrinth version is assigned to more than one package."
+                )
+            native_files[package.integration_version_id] = native_file
+
+        if not missing_packages or not allow_network:
+            return native_files
 
         provider = ModrinthProvider(http=http)
         try:
@@ -1307,7 +1714,7 @@ class PlatformPackExport:
                         package.integration_project_id,
                         package.integration_version_id,
                     )
-                    for package in native_packages
+                    for package in missing_packages
                 ],
                 build.minecraft,
                 build.modloader,
@@ -1317,8 +1724,7 @@ class PlatformPackExport:
                 "The selected Modrinth files could not be verified."
             ) from error
 
-        native_files = {}
-        for package in native_packages:
+        for package in missing_packages:
             version = versions[package.integration_version_id]
             native_file = NativeModrinthFile(
                 project_id=version.project_id,
@@ -1328,6 +1734,7 @@ class PlatformPackExport:
                 sha1=version.hashes.get("sha1"),
                 sha512=version.hashes.get("sha512"),
                 size=version.size,
+                version_number=version.version_number,
             )
             cls._validate_native_file(native_file)
             if package.integration_version_id in native_files:
@@ -1396,6 +1803,7 @@ class PlatformPackExport:
                 getattr(package, "modloader", None),
                 build.minecraft,
                 build.modloader,
+                getattr(package, "minecraft_versions", None),
             ):
                 raise PlatformExportError(
                     f'Package "{package.pretty_name}" is not compatible '
@@ -1526,6 +1934,7 @@ class PlatformPackExport:
                         native_files=plan.native_files,
                         optional_groups=optional_groups,
                         archive_root=".minecraft",
+                        platform="prism",
                     )
         except MCInstanceExportError as error:
             raise PlatformExportError(str(error)) from error
@@ -1692,8 +2101,11 @@ class PlatformPackExport:
         export_overrides = cls._active_export_overrides(
             export_overrides, source_mode
         )
+        override_versions = cls._override_modrinth_versions(
+            build, export_overrides, packages, http=http
+        )
         override_files = cls._modrinth_override_files(
-            build, tuple(export_overrides), http=http
+            override_versions
         )
         plan = cls._package_plan(
             build,
@@ -1770,6 +2182,7 @@ class PlatformPackExport:
                     selector=selector,
                     native_files=plan.native_files,
                     optional_groups=optional_groups,
+                    platform="modrinth",
                 )
         return archive
 
@@ -1795,9 +2208,12 @@ class PlatformPackExport:
         export_overrides = cls._active_export_overrides(
             export_overrides, source_mode
         )
+        override_versions = cls._override_modrinth_versions(
+            build, export_overrides, packages, http=http
+        )
         override_files = cls._curseforge_override_files(
             build,
-            export_overrides,
+            override_versions,
             http=http,
             curseforge_api_key=curseforge_api_key,
         )
@@ -1914,5 +2330,6 @@ class PlatformPackExport:
                 selector=selector,
                 native_files=plan.native_files,
                 optional_groups=optional_groups,
+                platform="curseforge",
             )
         return archive

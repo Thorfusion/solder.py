@@ -158,7 +158,8 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
             private=0,
         )
         modpack = SimpleNamespace(
-            slug="example-pack", hidden=0, private=0
+            id=3, slug="example-pack", hidden=0, private=0,
+            enable_optionals=1,
         )
         connection = Mock()
         cursor = connection.cursor.return_value
@@ -189,8 +190,16 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
 
         self.assertIs(result, stored)
         self.assertEqual(len(artifacts), 1)
-        self.assertIn(
-            "technic_solderpy_loader_builds", cursor.execute.call_args.args[0]
+        statements = [call.args for call in cursor.execute.call_args_list]
+        self.assertTrue(
+            any("technic_solderpy_loader_builds" in args[0] for args in statements)
+        )
+        self.assertTrue(
+            any(
+                "SET modpacks.enable_optionals = 0" in args[0]
+                and args[1] == (7,)
+                for args in statements
+            )
         )
         connection.commit.assert_called_once_with()
         connection.rollback.assert_not_called()

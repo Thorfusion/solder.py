@@ -4,8 +4,8 @@
 }
 
 .help-document pre {
-    background: #f1f3f5;
-    border: 1px solid #dee2e6;
+    background: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
     border-radius: 0.25rem;
     padding: 1rem;
     overflow-x: auto;

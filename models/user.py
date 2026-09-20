@@ -9,7 +9,7 @@ from .passhasher import Passhasher
 
 
 class User:
-    def __init__(self, id, username, email, hash, created_ip, last_ip, created_at, updated_at, updated_by_ip, created_by_user_id, updated_by_user_id):
+    def __init__(self, id, username, email, hash, created_ip, last_ip, created_at, updated_at, updated_by_ip, created_by_user_id, updated_by_user_id, night_mode=False):
         self.id = id
         self.username = username
         self.email = email
@@ -21,6 +21,24 @@ class User:
         self.updated_by_ip = updated_by_ip
         self.created_by_user_id = created_by_user_id
         self.updated_by_user_id = updated_by_user_id
+        self.night_mode = bool(night_mode)
+
+    @classmethod
+    def _from_row(cls, row):
+        return cls(
+            row["id"],
+            row["username"],
+            row["email"],
+            row["password"],
+            row["created_ip"],
+            row["last_ip"],
+            row["created_at"],
+            row["updated_at"],
+            row["updated_by_ip"],
+            row["created_by_user_id"],
+            row["updated_by_user_id"],
+            row.get("night_mode", 0),
+        )
 
     @classmethod
     def new(cls, username, email, hash1, ip, creator_id, setup=False):
@@ -45,7 +63,7 @@ class User:
         finally:
             cur.close()
             conn.close()
-        return cls(id, username, email, password, ip, ip, now, now, ip, creator_id, creator_id)
+        return cls(id, username, email, password, ip, ip, now, now, ip, creator_id, creator_id, False)
 
     @staticmethod
     def change(userid, hash1, ip, creator_id):
@@ -64,10 +82,48 @@ class User:
         return None
 
     @staticmethod
+    def set_night_mode(userid, enabled, ip, creator_id):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            now = datetime.datetime.now()
+            cur.execute(
+                """UPDATE users
+                   SET night_mode = %s, updated_by_ip = %s,
+                       updated_by_user_id = %s, updated_at = %s
+                   WHERE id = %s""",
+                (1 if enabled else 0, ip, creator_id, now, userid),
+            )
+            conn.commit()
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
     def delete(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
+            cur.execute(
+                """DELETE runs FROM modpack_publication_runs runs
+                   INNER JOIN modpack_publication_targets targets
+                       ON targets.id = runs.target_id
+                   INNER JOIN publishing_provider_accounts accounts
+                       ON accounts.id = targets.provider_account_id
+                   WHERE accounts.user_id = %s""",
+                (id,),
+            )
+            cur.execute(
+                """DELETE targets FROM modpack_publication_targets targets
+                   INNER JOIN publishing_provider_accounts accounts
+                       ON accounts.id = targets.provider_account_id
+                   WHERE accounts.user_id = %s""",
+                (id,),
+            )
+            cur.execute(
+                "DELETE FROM publishing_provider_accounts WHERE user_id = %s",
+                (id,),
+            )
             cur.execute("DELETE FROM users WHERE id=%s", (id,))
             cur.execute("DELETE FROM user_permissions WHERE user_id=%s", (id,))
             cur.execute(
@@ -89,8 +145,20 @@ class User:
             cur.execute("SELECT * FROM users WHERE username = %s", (username,))
             row = cur.fetchone()
             if row:
-                return cls(row["id"], row["username"], row["email"], row["password"], row["created_ip"], row["last_ip"], row["created_at"], row["updated_at"], row["updated_by_ip"], row["created_by_user_id"], row["updated_by_user_id"])
+                return cls._from_row(row)
             return None
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def get_by_id(cls, userid):
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute("SELECT * FROM users WHERE id = %s", (userid,))
+            row = cur.fetchone()
+            return cls._from_row(row) if row else None
         finally:
             cur.close()
             conn.close()
@@ -155,7 +223,7 @@ class User:
         cur = conn.cursor(dictionary=True)
         try:
             cur.execute("SELECT * FROM users")
-            return [User(row["id"], row["username"], row["email"], row["password"], row["created_ip"], row["last_ip"], row["created_at"], row["updated_at"], row["updated_by_ip"], row["created_by_user_id"], row["updated_by_user_id"]) for row in cur.fetchall()]
+            return [User._from_row(row) for row in cur.fetchall()]
         finally:
             cur.close()
             conn.close()

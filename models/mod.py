@@ -179,6 +179,33 @@ class Mod:
             (id,),
         )
         cur.execute("DELETE FROM maven_artifacts WHERE mod_id = %s", (id,))
+        cur.execute(
+            """DELETE modversion_download_overrides
+               FROM modversion_download_overrides
+               INNER JOIN modversions
+                   ON modversions.id =
+                      modversion_download_overrides.modversion_id
+               WHERE modversions.mod_id = %s""",
+            (id,),
+        )
+        cur.execute(
+            """DELETE modversion_download_sources
+               FROM modversion_download_sources
+               INNER JOIN modversions
+                   ON modversions.id =
+                      modversion_download_sources.modversion_id
+               WHERE modversions.mod_id = %s""",
+            (id,),
+        )
+        cur.execute(
+            """DELETE modversion_minecraft_versions
+               FROM modversion_minecraft_versions
+               INNER JOIN modversions
+                   ON modversions.id =
+                      modversion_minecraft_versions.modversion_id
+               WHERE modversions.mod_id = %s""",
+            (id,),
+        )
         cur.execute("DELETE FROM modversions WHERE mod_id = %s", (id,))
         cur.execute("DELETE FROM mods WHERE id=%s", (id,))
         conn.commit()
@@ -392,8 +419,26 @@ class Mod:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
-            cur.execute("SELECT id, mod_id, version, mcversion, modloader, md5, jarmd5, filesize FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
-            return cur.fetchall() or []
+            cur.execute(
+                """SELECT id, mod_id, version, mcversion, modloader,
+                          integration_version_id, md5, jarmd5, jarfilesize,
+                          filesize, created_at, updated_at,
+                          (SELECT GROUP_CONCAT(
+                                      compatibility.minecraft_version
+                                      ORDER BY compatibility.minecraft_version
+                                      SEPARATOR ',')
+                             FROM modversion_minecraft_versions compatibility
+                            WHERE compatibility.modversion_id = modversions.id)
+                              AS minecraft_versions_csv
+                   FROM modversions
+                   WHERE mod_id = %s
+                   ORDER BY id DESC""",
+                (self.id,),
+            )
+            return [
+                Modversion.hydrate_minecraft_row(row)
+                for row in (cur.fetchall() or [])
+            ]
         finally:
             cur.close()
             conn.close()
@@ -412,10 +457,31 @@ class Mod:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
-            cur.execute("SELECT * FROM modversions WHERE mod_id = %s AND version = %s", (self.id, version))
+            cur.execute(
+                """SELECT modversions.*,
+                          (SELECT GROUP_CONCAT(
+                                      compatibility.minecraft_version
+                                      ORDER BY compatibility.minecraft_version
+                                      SEPARATOR ',')
+                             FROM modversion_minecraft_versions compatibility
+                            WHERE compatibility.modversion_id = modversions.id)
+                              AS minecraft_versions_csv
+                   FROM modversions
+                   WHERE mod_id = %s AND version = %s""",
+                (self.id, version),
+            )
             row = cur.fetchone()
             if row:
-                return Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"), jarmd5=row.get("jarmd5"), jarfilesize=row.get("jarfilesize"))
+                return Modversion(
+                    row["id"], row["mod_id"], row["version"],
+                    row["mcversion"], row["md5"], row["created_at"],
+                    row["updated_at"], row["filesize"],
+                    modloader=row.get("modloader"),
+                    integration_version_id=row.get("integration_version_id"),
+                    jarmd5=row.get("jarmd5"),
+                    jarfilesize=row.get("jarfilesize"),
+                    minecraft_versions=row.get("minecraft_versions_csv"),
+                )
             return None
         finally:
             cur.close()
@@ -446,13 +512,16 @@ class Mod:
         output_name=None,
         expected_md5=None,
         require_only_jar=False,
+        allow_any_jar=False,
     ):
-        """Extract the single mods/*.jar entry and optionally verify its MD5.
+        """Extract one package JAR and optionally verify its MD5.
 
         ``require_only_jar`` is used by the legacy package maintenance scan. In
         that mode directory entries are ignored, but the JAR must be the only
         file payload in the ZIP. Normal uploads deliberately retain the older
         behaviour which permits configuration files beside the mod JAR.
+        ``allow_any_jar`` supports LAUNCHER packages, whose executable JAR is
+        normally at the archive root or under ``bin/`` rather than ``mods/``.
         """
         base_dir = Path(zip_paths).parent
         try:
@@ -466,16 +535,21 @@ class Mod:
                     path = PurePosixPath(normalized)
                     if (
                         not info.is_dir()
-                        and len(path.parts) >= 2
-                        and path.parts[0] == "mods"
                         and path.suffix.lower() == ".jar"
                         and ".." not in path.parts
+                        and (
+                            allow_any_jar
+                            or (
+                                len(path.parts) >= 2
+                                and path.parts[0] == "mods"
+                            )
+                        )
                     ):
                         jar_files.append(info)
 
                 if len(jar_files) != 1:
                     raise UploadVerificationError(
-                        "A JAR upload must contain exactly one JAR inside the mods folder."
+                        "A JAR upload must contain exactly one eligible JAR."
                     )
                 if require_only_jar and payload_files != jar_files:
                     raise UploadVerificationError(

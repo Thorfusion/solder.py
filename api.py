@@ -22,10 +22,13 @@ from models.bootstrap_manifest import (
 )
 from models.key import Key
 from models.mod import Mod
+from models.modversion import Modversion
 from models.mod_dependency import ModDependency
 from models.modpack import Modpack
 from models.advanced_optional import AdvancedOptional
 from models.integration import IntegrationError, ModrinthProvider
+from models.maven import MavenArtifact, MavenError
+from models.platform_export_override import PlatformExportOverride
 from models.technic_solderpy_loader import TechnicSolderPyLoader
 
 api = Blueprint("api", __name__)
@@ -47,31 +50,97 @@ def clear_api_caches():
         cache.clear()
 
 
-@_api_cached(
-    key=lambda references, minecraft, modloader: (
-        references,
-        minecraft,
-        modloader,
-    )
-)
-def _bootstrap_modrinth_downloads(references, minecraft, modloader):
-    """Resolve exact Modrinth files without depending on their availability."""
+@_api_cached(key=lambda references: references)
+def _bootstrap_maven_downloads(references):
+    """Resolve Maven JARs only for artifacts that explicitly opt in."""
     if not references:
         return {}
+    try:
+        return MavenArtifact.solderpy_loader_downloads(references)
+    except MavenError:
+        logger.warning(
+            "Could not resolve Maven bootstrap sources; using Solder JARs.",
+            exc_info=True,
+        )
+        return {}
+
+
+def _backfill_bootstrap_modrinth_downloads(packages, minecraft, modloader):
+    """Persist native metadata once for Modrinth versions imported previously."""
+    missing = [
+        package
+        for package in packages
+        if str(getattr(package, "integration_provider", "") or "").upper()
+        == "MODRINTH"
+        and getattr(package, "integration_project_id", None)
+        and getattr(package, "integration_version_id", None)
+        and not getattr(package, "download_source_url", None)
+        and str(getattr(package, "modtype", "") or "").upper() == "MOD"
+        and Modversion.JAR_MD5_PATTERN.fullmatch(
+            str(getattr(package, "jarmd5", "") or "").strip()
+        )
+    ]
+    if not missing:
+        return
+
+    references = tuple(
+        sorted(
+            {
+                (
+                    str(package.integration_project_id),
+                    str(package.integration_version_id),
+                )
+                for package in missing
+            }
+        )
+    )
     provider = ModrinthProvider()
     try:
         versions = provider.get_versions(references, minecraft, modloader)
-        resolved = {}
-        for project_id, version_id in references:
-            version = versions[version_id]
-            provider._validate_download_url(version.download_url)
-            resolved[(project_id, version_id)] = version.download_url
-        return resolved
     except (IntegrationError, KeyError):
         logger.warning(
-            "Could not resolve Modrinth bootstrap sources; using Solder JARs."
+            "Could not backfill Modrinth bootstrap sources; using Solder JARs."
         )
-        return {}
+        return
+
+    for package in missing:
+        version = versions.get(str(package.integration_version_id))
+        if version is None:
+            continue
+        try:
+            provider._validate_download_url(version.download_url)
+            source = Modversion.normalize_download_source(
+                {
+                    "provider": "MODRINTH",
+                    "url": version.download_url,
+                    "filename": version.filename,
+                    "md5": package.jarmd5,
+                    "sha1": version.hashes.get("sha1"),
+                    "sha512": version.hashes.get("sha512"),
+                    "filesize": package.jarfilesize or version.size,
+                }
+            )
+        except (IntegrationError, ValueError):
+            logger.warning(
+                "Modrinth returned invalid bootstrap source metadata; using "
+                "the Solder JAR."
+            )
+            continue
+        try:
+            Modversion.store_download_source(package.id, source)
+        except Exception:
+            logger.warning(
+                "Could not persist a Modrinth bootstrap source; using the "
+                "resolved URL for this response.",
+                exc_info=True,
+            )
+        package.download_source_provider = source["provider"]
+        package.download_source_url = source["url"]
+        package.download_source_filename = source["filename"]
+        package.download_source_md5 = source["md5"]
+        package.download_source_sha1 = source["sha1"]
+        package.download_source_sha512 = source["sha512"]
+        package.download_source_filesize = source["filesize"]
 
 
 def _cache_key(*path_parts):
@@ -239,7 +308,8 @@ def _mod_manifest_entry(
                     getattr(modversion, "modloader", None)
                 ),
                 "minecraft_versions": list(
-                    compatibility_values(
+                    getattr(modversion, "minecraft_versions", ())
+                    or compatibility_values(
                         getattr(modversion, "mcversion", None)
                     )
                 ),
@@ -575,7 +645,13 @@ def modpack_bootstrap(slugstring: str, buildstring: str):
         return jsonify({"error": "Build does not exist"}), 404
 
     target = (request.args.get("target") or "client").casefold()
-    if target not in {"client", "server"}:
+    source_mode = (request.args.get("source") or "hybrid").casefold()
+    platform = (request.args.get("platform") or "").casefold()
+    if (
+        target not in {"client", "server"}
+        or source_mode not in {"hybrid", "solder"}
+        or platform not in {"", "modrinth", "curseforge", "prism"}
+    ):
         return jsonify({"error": "Invalid bootstrap options"}), 400
     if target == "server" and not current_modpack.enable_server:
         return jsonify({"error": "Server manifests are not enabled"}), 404
@@ -585,32 +661,78 @@ def modpack_bootstrap(slugstring: str, buildstring: str):
             target=target,
             include_optional=True,
             include_excluded=True,
+            include_download_overrides=True,
+            include_download_sources=True,
         )
-        modrinth_references = tuple(
-            sorted(
-                {
-                    (
-                        str(package.integration_project_id),
-                        str(package.integration_version_id),
-                    )
-                    for package in packages
-                    if str(
-                        getattr(package, "integration_provider", "") or ""
-                    ).upper()
+        if source_mode == "hybrid" and platform == "modrinth":
+            packages = [
+                package
+                for package in packages
+                if not (
+                    str(package.integration_provider or "").upper()
                     == "MODRINTH"
-                    and getattr(package, "integration_project_id", None)
-                    and getattr(package, "integration_version_id", None)
-                    and str(getattr(package, "modtype", "") or "").upper()
-                    == "MOD"
-                    and getattr(package, "jarmd5", None)
-                }
+                    and package.integration_project_id
+                    and package.integration_version_id
+                    and int(getattr(package, "optional", 0) or 0) != 2
+                )
+            ]
+        elif source_mode == "hybrid" and platform == "curseforge":
+            native_projects = {
+                str(override.modrinth_project_id)
+                for override in PlatformExportOverride.get_enabled()
+            }
+            packages = [
+                package
+                for package in packages
+                if not (
+                    str(package.integration_provider or "").upper()
+                    == "MODRINTH"
+                    and str(package.integration_project_id or "")
+                    in native_projects
+                )
+            ]
+        if source_mode == "hybrid":
+            _backfill_bootstrap_modrinth_downloads(
+                packages,
+                str(selected_build.minecraft),
+                getattr(selected_build, "modloader", None),
             )
+        def integration_references(provider):
+            return tuple(
+                sorted(
+                    {
+                        (
+                            str(package.integration_project_id),
+                            str(package.integration_version_id),
+                        )
+                        for package in packages
+                        if str(
+                            getattr(package, "integration_provider", "") or ""
+                        ).upper()
+                        == provider
+                        and getattr(package, "integration_project_id", None)
+                        and getattr(package, "integration_version_id", None)
+                        and str(
+                            getattr(package, "modtype", "") or ""
+                        ).upper()
+                        == "MOD"
+                        and Modversion.JAR_MD5_PATTERN.fullmatch(
+                            str(getattr(package, "jarmd5", "") or "").strip()
+                        )
+                    }
+                )
+            )
+
+        maven_references = (
+            integration_references("MAVEN")
+            if source_mode == "hybrid"
+            else ()
         )
-        modrinth_downloads = _bootstrap_modrinth_downloads(
-            modrinth_references,
-            str(selected_build.minecraft),
-            getattr(selected_build, "modloader", None),
-        )
+        maven_downloads = _bootstrap_maven_downloads(maven_references)
+        native_downloads = {
+            ("MAVEN", project_id, version_id): url
+            for (project_id, version_id), url in maven_downloads.items()
+        }
         return BootstrapManifest.render(
             current_modpack,
             selected_build,
@@ -619,7 +741,8 @@ def modpack_bootstrap(slugstring: str, buildstring: str):
             public_repo_url,
             ModDependency.get_for_build_api(selected_build.id),
             target=target,
-            modrinth_downloads=modrinth_downloads,
+            native_downloads=native_downloads,
+            source_mode=source_mode,
         )
 
     try:

@@ -111,6 +111,7 @@ class Build_modversion:
             cur.execute(
                 """SELECT build_modversion.id, build_modversion.optional,
                           modversions.version, modversions.id AS modverid,
+                          modversions.integration_version_id,
                           mods.name, mods.pretty_name, mods.id AS modid,
                           mods.modtype, mods.integration_provider,
                           EXISTS (
@@ -169,13 +170,27 @@ class Build_modversion:
                        ON maven_artifacts.mod_id = mods.id
                    LEFT JOIN maven_repositories
                        ON maven_artifacts.repository_id = maven_repositories.id
-                   WHERE (FIND_IN_SET(%s, modversions.mcversion) > 0
-                          OR modversions.mcversion IS NULL)
+                   WHERE (
+                          modversions.mcversion IS NULL
+                          OR modversions.mcversion = %s
+                          OR FIND_IN_SET(%s, modversions.mcversion) > 0
+                          OR (
+                              modversions.mcversion = 'MULTI'
+                              AND EXISTS (
+                                  SELECT 1
+                                  FROM modversion_minecraft_versions compatibility
+                                  WHERE compatibility.modversion_id = modversions.id
+                                    AND compatibility.minecraft_version = %s
+                              )
+                          )
+                   )
                      AND (%s IS NULL
                           OR FIND_IN_SET(%s, modversions.modloader) > 0
                           OR modversions.modloader IS NULL)
                    ORDER BY modversions.mod_id, modversions.id DESC""",
                 (
+                    packbuild.minecraft,
+                    packbuild.minecraft,
                     packbuild.minecraft,
                     packbuild.modloader,
                     packbuild.modloader,
@@ -260,9 +275,21 @@ class Build_modversion:
                    INNER JOIN builds ON build_modversion.build_id = builds.id
                    INNER JOIN modversions AS candidate
                        ON candidate.mod_id = current.mod_id
-                      AND (FIND_IN_SET(builds.minecraft,
-                                      candidate.mcversion) > 0
-                           OR candidate.mcversion IS NULL)
+                      AND (
+                           candidate.mcversion IS NULL
+                           OR candidate.mcversion = builds.minecraft
+                           OR FIND_IN_SET(builds.minecraft,
+                                          candidate.mcversion) > 0
+                           OR (
+                               candidate.mcversion = 'MULTI'
+                               AND EXISTS (
+                                   SELECT 1
+                                   FROM modversion_minecraft_versions compatibility
+                                   WHERE compatibility.modversion_id = candidate.id
+                                     AND compatibility.minecraft_version = builds.minecraft
+                               )
+                           )
+                      )
                       AND (builds.modloader IS NULL
                            OR FIND_IN_SET(builds.modloader,
                                           candidate.modloader) > 0

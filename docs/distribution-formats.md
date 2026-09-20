@@ -12,6 +12,7 @@ format receives.
 | --- | --- | --- |
 | CSV | Auditing a build or moving a simple mod list into another tool | Downloaded CSV |
 | SolderPy Loader | Runtime installation from the dedicated bootstrap API, including interactive basic and advanced optionals | Dedicated configuration ZIP, or Loader delivery through Modrinth, CurseForge, Prism, or Technic |
+| Dedicated server | A small, updateable server installation backed by SolderPy Loader | Downloaded ZIP containing the bootstrap JARs and the build's server launcher JAR |
 | MCInstance Loader (MCIL) | A self-contained MCIL pack with downloadable mods and bundled overrides | Downloaded `.mcinstance` archive |
 | FileDirector | Installing individual files or Solder ZIPs with optional and side metadata | Downloaded config ZIP or hosted config |
 | Modpack Director | Runtime installation using a FileDirector-compatible bundle plus pack/update metadata | Downloaded config ZIP or hosted config |
@@ -59,6 +60,37 @@ and can serve Packwiz, FileDirector, and Modpack Director files without
 exposing the management interface. Disabling a format does not remove raw-JAR hashes, integration
 mappings, or other build data.
 
+### Publish updates directly
+
+Open **Settings > Publishing** and add either a Modrinth personal access token
+with version-create permission or a CurseForge author API token. Tokens are
+stored directly in MySQL, like the existing Technic credentials, and are never
+displayed again. Protect database access and backups accordingly. Then map a
+local modpack to an existing remote project ID or slug.
+
+Publishing credentials and target mappings are scoped to the logged-in
+solder.py user. Users who share management access to a modpack cannot see or
+use each other's tokens; each user configures their own provider account and
+target mapping.
+
+An enabled mapping adds a **Publish** action to that modpack's Export window.
+Choose the normal source, delivery, downloader, and Forge-version options,
+then select a release type and enter a changelog. Publishing uses exactly the
+same `.mrpack` or CurseForge ZIP renderer as the corresponding download button.
+Successful and failed attempts are recorded. Because a Solder build can remain
+live after publication, another upload of the same build becomes **Send patch**.
+The generated archive and remote release use the next version in sequence, for
+example `2.9.9-Patch-1` followed by `2.9.9-Patch-2`.
+
+If the connection ends before the provider confirms the result, solder.py marks
+the attempt **UNKNOWN** and keeps the duplicate lock. Check the remote project
+first; the user who owns the publishing account can then use **Allow retry**
+on the Publishing page if the version was not created.
+
+`CURSEFORGE_API_KEY` remains separate: it reads public CurseForge file metadata
+needed while building an archive. The stored CurseForge author token is used
+only by an explicit upload action.
+
 ### Modrinth-CurseForge sync
 
 Some bootstrap mods must be installed by the target launcher instead of being
@@ -69,13 +101,19 @@ on both sides.
 
 An enabled mapping is native in hybrid Modrinth and CurseForge archives:
 
-- the newest release compatible with the build's exact Minecraft version and
-  modloader is resolved when the archive is exported;
+- when the build contains the mapped Modrinth project, its exact selected
+  Modrinth version is resolved; a standalone mapping uses the newest compatible
+  Modrinth release;
 - a Modrinth export adds the verified project file to `modrinth.index.json`;
-- a CurseForge export adds the matching project and file IDs to
-  `manifest.json`;
-- **Override Solder-only** may be enabled for a mapping that must remain native
-  even when **Solder only** is selected; otherwise that source mode does not
+- a CurseForge export queries compatible files at export time and matches the
+  Modrinth release by SHA-1, then filename plus filesize, then the Modrinth
+  version number in the CurseForge filename or display name;
+- only the manually entered project mapping is stored. CurseForge file metadata
+  and the matched file ID are not persisted;
+- an export fails instead of silently using the newest CurseForge file when no
+  match is found or a weaker match is ambiguous;
+- **Override Solder API only** may be enabled for a mapping that must remain native
+  even when **Solder API only** is selected; otherwise that source mode does not
   apply the mapping; and
 - an existing Modrinth-integrated build package with the same project ID is
   removed from the fallback downloader list so it is not installed twice.
@@ -137,6 +175,12 @@ optional selection rules as other SolderPy Loader exports. Disabling SolderPy
 Loader exports, or making the build or modpack private, automatically restores
 normal Technic Solder delivery.
 
+Activating this delivery always disables the modpack's legacy Technic optional
+shadow build (`enable_optionals = 0`). Both mechanisms otherwise advertise the
+same optional content differently. Disabling Loader delivery does not turn the
+legacy shadow build back on automatically; enable it manually if it is needed
+again.
+
 ### Prepare the build
 
 Before exporting:
@@ -153,12 +197,16 @@ Before exporting:
    user's normal modpack permissions.
 
 Raw JARs give the best result. New JAR uploads store both the Solder ZIP MD5 and
-the raw JAR MD5. For a legacy or imported Technic version, use **Create MCIL
-JAR** on the mod version page. solder.py verifies the existing ZIP, extracts
+the raw JAR MD5. For a legacy or imported Technic version, open its management
+page and use **Create JAR**. Once a raw JAR hash is stored, the action becomes
+**Verify JAR**. solder.py checks an existing raw JAR and records its missing
+size, or verifies the existing ZIP and extracts
 the single JAR under `mods/`, stores it under its canonical
 `<slug>-<version>.jar` name, and records its MD5. It reads from the local
 repository first and then falls back to `MD5_REPO_LOCATION`; configured S3 or
-R2 storage is updated as well.
+R2 storage is updated as well. For a `LAUNCHER` package, the one JAR may
+instead be at the archive root or under `bin/`; the package remains a
+`LAUNCHER` after extraction.
 
 ## Export a build
 
@@ -170,12 +218,13 @@ CurseForge.
 
 The window contains a shared group of settings:
 
-- **Download source — Solder only** uses `PUBLIC_REPO_LOCATION` for all build
+- **Download source — Solder API only** uses `PUBLIC_REPO_LOCATION` for all build
   packages.
-- **Download source — Hybrid** uses the exact Modrinth CDN file for a
-  Modrinth-mapped version and Solder for manual, Maven, legacy, configuration,
-  and resource packages.
-- **Forge version** temporarily overrides the exported modloader version. It
+- **Download source — Hybrid** uses an exact native Modrinth or CurseForge file
+  when the version has a verified platform mapping, and Solder for manual,
+  Maven, legacy, configuration, and resource packages.
+- **Modloader version** temporarily overrides the exported Forge, NeoForge, or
+  other loader version. It
   does not change the saved build.
 - **Build export delivery — Include configuration and metadata in the archive**
   puts generated files in the downloaded ZIP.
@@ -192,10 +241,12 @@ FileDirector is selected, and still uses a temporary modloader-version
 override when one is entered. Modrinth and CurseForge also show a compatible
 fallback downloader selector.
 
-Hybrid generation resolves the stored exact Modrinth project and version
-mapping when the export is made. The upstream filename, URL, SHA-1, SHA-512,
-and file size are validated at that time and are not duplicated in
-`modversions`.
+Hybrid generation resolves exact platform mappings when the export is made.
+The upstream filename, URL, hashes, and file size are validated at that time
+and are not duplicated in `modversions`. If a native platform build was already
+published and the Solder build changes, publishing sends the next numbered
+patch. A Solder API only, web-hosted SolderPy Loader export follows the selected
+build channel automatically instead.
 
 ## CSV
 
@@ -231,7 +282,7 @@ exact build, `latest`, or `recommended` channel. Its target is `auto`, so
 Relauncher selects the client or dedicated-server manifest at launch. Extract
 the ZIP into an instance where SolderPy Loader and Relauncher are already
 installed. The build must be published and non-private. The bootstrap API owns
-the complete Solder-only package plan, so hybrid downloads are not used by
+the complete Solder API only package plan, so hybrid downloads are not used by
 this format.
 
 When the build has a **Minimum Java Version**, solder.py also writes a
@@ -245,6 +296,33 @@ when its major already matches. It therefore cannot yet prefer an installed
 8u422 over a Mojang 8u51 runtime; that same-major upgrade requires Relauncher
 to add a minimum patch and prefer-newest policy. solder.py does not emit
 unsupported Relauncher keys because 1.1.x would treat them as JVM arguments.
+
+### Dedicated server export
+
+**Export Server** creates a small server archive instead of copying every mod
+and configuration ZIP into the download. Choose the SolderPy Loader version in
+the export window. The resulting archive contains:
+
+```text
+mods/!solderpy-loader.jar
+mods/!relauncher.jar
+config/solderpy-loader.json
+config/relauncher/config.cfg  (when Minimum Java Version is set)
+<launcher-slug>-<launcher-version>.jar
+```
+
+The loader configuration pins `target` to `server`, so it installs only the
+build's `SERVER` and `BOTH` packages from the bootstrap API and never opens the
+client optional-selection screen. The root JAR is the server software that is
+started normally, such as Crucible; it is not downloaded again by SolderPy
+Loader.
+
+The build must contain exactly one required mod version whose type is
+`LAUNCHER (MODLOADER)` and whose side is `SERVER`. Its Solder package must have
+a verified raw JAR and JAR MD5. The export verifies that artifact again before
+putting it at the archive root. Client or `BOTH` launcher packages are not
+substituted automatically, which prevents a Technic `modpack.jar` from being
+mistaken for executable server software.
 
 ## MCInstance Loader
 
@@ -432,8 +510,9 @@ format. The generated index therefore includes only `MOD` packages with a
 stored raw JAR MD5. `CONFIG`, `RES`, `NONE`, legacy mods without a raw JAR,
 `BOOTSTRAP`, and `LAUNCHER` remain in the Technic build but are omitted from the
 Packwiz view. Public responses report the omitted count in
-`X-Solder-Excluded-Packages`. Convert an eligible legacy mod with **Create MCIL
-JAR**; maintain configuration overrides in the Packwiz pack separately.
+`X-Solder-Excluded-Packages`. Convert an eligible legacy mod from its management
+page with **Create JAR**; maintain configuration overrides in the Packwiz pack
+separately.
 
 See the upstream [Packwiz pack format reference](https://packwiz.infra.link/reference/pack-format/pack-toml/)
 and [packwiz-installer guide](https://packwiz.infra.link/tutorials/installing/packwiz-installer/)
@@ -452,7 +531,7 @@ or FileDirector fallback. Maven repository URLs are never placed directly in
 the pack. A no-downloader export is allowed only when every actual package is
 an exact compatible Modrinth version.
 
-In Solder-only mode, the MRPack bootstraps the selected downloader and all
+In Solder API only mode, the MRPack bootstraps the selected downloader and all
 actual packages use the Solder repository.
 
 The downloader selector queries Modrinth for SolderPy Loader, MCInstance
@@ -463,7 +542,9 @@ export. The downloader is not created as a Solder mod and its JAR is not stored
 in the Solder repository. Its corresponding distribution switch must be
 enabled before it appears as a choice.
 
-SolderPy Loader always uses its API pointer and requires Solder-only mode.
+SolderPy Loader always uses its API pointer and supports both source modes. In
+hybrid mode the bootstrap API omits files already owned by the MRPack, so they
+are not installed twice.
 FileDirector may use a bundled config or a hosted pointer. Hosted delivery
 requires a published, non-private build and can follow this build, `latest`, or
 `recommended`. MCIL configuration is always bundled.
@@ -481,7 +562,7 @@ export, solder.py verifies that the selected file still belongs to the expected
 project and supports the build's Minecraft version. The API key is sent only
 to `https://api.curseforge.com/v1` and is never written into the archive.
 
-In Solder-only mode, the downloader installs every actual build package from
+In Solder API only mode, the downloader installs every actual build package from
 Solder. In hybrid mode, exact Modrinth-mapped versions use their validated
 Modrinth CDN URLs inside the selected downloader configuration, while manual,
 Maven, legacy, configuration, and resource packages continue to use Solder.
@@ -489,7 +570,9 @@ Ordinary Modrinth project mappings are not guessed or translated into
 CurseForge IDs. Only explicit mappings under **Settings > Modrinth-CurseForge sync**
 are installed natively on both platforms.
 
-SolderPy Loader always uses its API pointer and requires Solder-only mode.
+SolderPy Loader always uses its API pointer and supports both source modes. In
+hybrid mode the bootstrap API omits enabled native CurseForge sync mappings,
+so they are not installed twice.
 FileDirector and Modpack Director configuration can be included in the archive
 or hosted by solder.py and pinned to this build, `latest`, or `recommended`.
 MCIL configuration is always included. Modpack Director is resolved from its
@@ -525,7 +608,9 @@ install the bootstrap after it has been generated. Required bootstrap
 dependencies such as Relauncher are resolved, verified, and included too.
 
 SolderPy Loader receives `config/solderpy-loader.json`, uses the dedicated
-bootstrap API, and requires Solder-only mode. MCIL receives its normal
+bootstrap API, and supports Solder API only or hybrid delivery. Prism itself
+does not own the mod files, so SolderPy Loader manages the complete selected
+build in either mode. MCIL receives its normal
 `pack.mcinstance` beneath
 `.minecraft/config/mcinstanceloader/`. Its configuration is always included
 and can preserve MCIL advanced optional menus. Required legacy/configuration
@@ -537,7 +622,7 @@ requires a published, non-private build and can pin this build or follow the
 `latest` or `recommended` channel. FileDirector keeps the Prism archive small
 because package ZIPs and JARs are downloaded after the instance starts.
 
-MCIL and FileDirector support **Solder only** and **Hybrid**. Hybrid uses validated
+MCIL and FileDirector support **Solder API only** and **Hybrid**. Hybrid uses validated
 Modrinth CDN URLs for exact mapped versions and Solder URLs for everything
 else. The selectors only offer downloader families enabled in Settings and
 versions compatible with the build. The built-in MCIL and FileDirector
@@ -600,8 +685,9 @@ content, not package artifacts.
   repository URL; keep local paths in `MD5_REPO_LOCATION` only.
 - **A SolderPy Loader or Director pointer has the wrong hostname:** set
   `APP_URL` to the public solder.py URL.
-- **A mod is absent from Packwiz:** it needs a stored raw JAR MD5. Use **Create
-  MCIL JAR** for a compatible legacy Solder ZIP.
+- **A mod is absent from Packwiz:** it needs a stored raw JAR MD5. Open the mod
+  version's management page and use **Create JAR** for a compatible legacy
+  Solder ZIP.
 - **An MCIL optional fails:** optional entries must be raw JARs, and MCIL 2.7
   cannot represent a server-only optional choice.
 - **No MRPack or CurseForge downloader versions appear:** enable at least one

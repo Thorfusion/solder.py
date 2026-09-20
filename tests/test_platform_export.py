@@ -175,7 +175,7 @@ def overridden_package():
         optional=True,
         integration_provider="MODRINTH",
         integration_project_id="eh8us8FY",
-        integration_version_id="old-tx-version",
+        integration_version_id="tx-version",
     )
 
 
@@ -266,6 +266,11 @@ class PlatformPackExportTests(unittest.TestCase):
                         "displayName": "1.7.10 - 2.7",
                         "fileName": "mcinstanceloader-2.7.jar",
                         "fileDate": "2023-12-02T00:00:00Z",
+                        "fileLength": 4321,
+                        "hashes": [
+                            {"algo": 2, "value": "a" * 32},
+                            {"algo": 1, "value": SHA1},
+                        ],
                         "gameVersions": ["1.7.10", "Forge"],
                     }
                 ],
@@ -279,6 +284,8 @@ class PlatformPackExportTests(unittest.TestCase):
         )
 
         self.assertEqual([file.file_id for file in files], [4920730])
+        self.assertEqual(files[0].sha1, SHA1)
+        self.assertEqual(files[0].size, 4321)
         url, request_data = http.calls[0]
         self.assertEqual(
             url, "https://api.curseforge.com/v1/mods/576287/files"
@@ -287,6 +294,83 @@ class PlatformPackExportTests(unittest.TestCase):
         self.assertEqual(request_data["params"]["gameVersion"], "1.7.10")
         self.assertFalse(request_data["allow_redirects"])
         self.assertTrue(response.closed)
+
+    def test_curseforge_sync_prefers_an_exact_sha1_match(self):
+        hash_match = CurseForgeFile(
+            project_id=706505,
+            file_id=10,
+            display_name="Unrelated display name",
+            filename="different.jar",
+            game_versions=("1.7.10", "Forge"),
+            published="2025-01-01T00:00:00Z",
+            sha1=SHA1,
+            size=999,
+        )
+        filename_match = replace(
+            hash_match,
+            file_id=11,
+            filename=override_version().filename,
+            sha1=None,
+            size=override_version().size,
+        )
+
+        matched = PlatformPackExport._matching_curseforge_file(
+            export_override(),
+            override_version(),
+            (filename_match, hash_match),
+        )
+
+        self.assertEqual(matched.file_id, 10)
+
+    def test_curseforge_sync_matches_filename_and_filesize(self):
+        matching = CurseForgeFile(
+            project_id=706505,
+            file_id=12,
+            display_name="Unrelated display name",
+            filename=override_version().filename.upper(),
+            game_versions=("1.7.10", "Forge"),
+            published="2025-01-01T00:00:00Z",
+            size=override_version().size,
+        )
+
+        matched = PlatformPackExport._matching_curseforge_file(
+            export_override(), override_version(), (matching,)
+        )
+
+        self.assertEqual(matched.file_id, 12)
+
+    def test_curseforge_sync_matches_modrinth_version_number(self):
+        matching = CurseForgeFile(
+            project_id=706505,
+            file_id=13,
+            display_name="TX Loader v1.0 for legacy Minecraft",
+            filename="tx-loader-release.jar",
+            game_versions=("1.7.10", "Forge"),
+            published="2025-01-01T00:00:00Z",
+        )
+
+        matched = PlatformPackExport._matching_curseforge_file(
+            export_override(), override_version(), (matching,)
+        )
+
+        self.assertEqual(matched.file_id, 13)
+
+    def test_curseforge_sync_does_not_match_a_longer_version_number(self):
+        wrong_version = CurseForgeFile(
+            project_id=706505,
+            file_id=14,
+            display_name="TX Loader 1.0.1",
+            filename="tx-loader-1.0.1.jar",
+            game_versions=("1.7.10", "Forge"),
+            published="2025-01-01T00:00:00Z",
+        )
+
+        with self.assertRaisesRegex(
+            PlatformExportError, "no CurseForge file matching"
+        ):
+            PlatformPackExport._matching_curseforge_file(
+                export_override(), override_version(), (wrong_version,)
+            )
 
     def test_curseforge_api_rejects_files_for_another_modloader(self):
         response = FakeResponse(
@@ -354,6 +438,137 @@ class PlatformPackExportTests(unittest.TestCase):
         ):
             PlatformPackExport.render_solderpy_loader(
                 replace(build(), min_java="newest"), APPLICATION
+            )
+
+    def test_server_export_bundles_loader_relauncher_and_server_launcher(self):
+        loader_body = b"verified solderpy loader"
+        relauncher_body = b"verified relauncher"
+        launcher_body = b"verified crucible server"
+
+        def native(project_id, version_id, filename, body):
+            return NativeModrinthFile(
+                project_id=project_id,
+                version_id=version_id,
+                filename=filename,
+                download_url=(
+                    f"https://cdn.modrinth.com/data/{project_id}/versions/"
+                    f"{version_id}/{filename}"
+                ),
+                sha1=hashlib.sha1(body, usedforsecurity=False).hexdigest(),
+                sha512=hashlib.sha512(body).hexdigest(),
+                size=len(body),
+            )
+
+        selected = SimpleNamespace(
+            key="solderpyloader",
+            modrinth=native(
+                "5LpwENAj",
+                "loader-version",
+                "solderpy-loader.jar",
+                loader_body,
+            ),
+            modrinth_dependencies=(
+                native(
+                    "zCFNaupz",
+                    "relauncher-version",
+                    "relauncher.jar",
+                    relauncher_body,
+                ),
+            ),
+        )
+        launcher = package(
+            "crucible",
+            modtype="LAUNCHER",
+            side="SERVER",
+            version="1.7.10-5.4",
+            jarmd5=hashlib.md5(
+                launcher_body, usedforsecurity=False
+            ).hexdigest(),
+        )
+
+        with tempfile.TemporaryDirectory() as repository:
+            launcher_path = Path(repository, "crucible")
+            launcher_path.mkdir()
+            Path(launcher_path, launcher.jar_filename).write_bytes(
+                launcher_body
+            )
+            with patch.object(
+                PlatformPackExport,
+                "resolve_downloader",
+                return_value=selected,
+            ):
+                archive = PlatformPackExport.render_server(
+                    replace(build(), min_java="1.8.0_422"),
+                    [package(), launcher],
+                    "solderpyloader:loader-version",
+                    REPOSITORY,
+                    repository,
+                    APPLICATION,
+                    selector="recommended",
+                    http=FakeHTTP(
+                        [
+                            FakeResponse({}, body=loader_body),
+                            FakeResponse({}, body=relauncher_body),
+                        ]
+                    ),
+                )
+
+            with archive, zipfile.ZipFile(archive) as result:
+                self.assertEqual(
+                    set(result.namelist()),
+                    {
+                        "mods/!solderpy-loader.jar",
+                        "mods/!relauncher.jar",
+                        "config/solderpy-loader.json",
+                        "config/relauncher/config.cfg",
+                        launcher.jar_filename,
+                    },
+                )
+                config = json.loads(
+                    result.read("config/solderpy-loader.json")
+                )
+                self.assertEqual(
+                    result.read("mods/!solderpy-loader.jar"), loader_body
+                )
+                self.assertEqual(
+                    result.read("mods/!relauncher.jar"), relauncher_body
+                )
+                self.assertEqual(
+                    result.read(launcher.jar_filename), launcher_body
+                )
+
+        self.assertEqual(config["target"], "server")
+        self.assertEqual(config["build"], "recommended")
+
+    def test_server_export_requires_one_server_side_launcher(self):
+        with self.assertRaisesRegex(
+            PlatformExportError, "server-side LAUNCHER"
+        ):
+            PlatformPackExport.render_server(
+                build(),
+                [package(modtype="LAUNCHER", side="BOTH")],
+                "solderpyloader:loader-version",
+                REPOSITORY,
+                "./mods/",
+                APPLICATION,
+            )
+
+    def test_server_export_requires_a_verified_launcher_jar(self):
+        with self.assertRaisesRegex(PlatformExportError, "verified raw JAR"):
+            PlatformPackExport.render_server(
+                build(),
+                [
+                    package(
+                        "crucible",
+                        modtype="LAUNCHER",
+                        side="SERVER",
+                        jarmd5="0",
+                    )
+                ],
+                "solderpyloader:loader-version",
+                REPOSITORY,
+                "./mods/",
+                APPLICATION,
             )
 
     def test_mrpack_routes_native_modrinth_and_solder_fallback_separately(self):
@@ -446,27 +661,35 @@ class PlatformPackExportTests(unittest.TestCase):
                 "modpack": "example-pack",
                 "build": "recommended",
                 "target": "auto",
+                "source": "solder",
+                "platform": "modrinth",
             },
         )
         self.assertIn("java.versions = 8\n", relauncher)
 
-    def test_solderpy_loader_rejects_hybrid_source(self):
+    def test_solderpy_loader_supports_hybrid_source(self):
         with patch(
             "models.platform_export.ModrinthProvider.list_versions",
             return_value=[
                 downloader_version("zCFNaupz", "relauncher-version")
             ],
         ):
-            with self.assertRaisesRegex(PlatformExportError, "Solder-only"):
-                PlatformPackExport.render_mrpack(
-                    build(),
-                    [package()],
-                    "solderpyloader:loader-version",
-                    REPOSITORY,
-                    "./mods/",
-                    APPLICATION,
-                    source_mode="hybrid",
-                )
+            archive = PlatformPackExport.render_mrpack(
+                build(),
+                [package()],
+                "solderpyloader:loader-version",
+                REPOSITORY,
+                "./mods/",
+                APPLICATION,
+                source_mode="hybrid",
+            )
+
+        with archive, zipfile.ZipFile(archive) as result:
+            config = json.loads(
+                result.read("overrides/config/solderpy-loader.json")
+            )
+        self.assertEqual(config["source"], "hybrid")
+        self.assertEqual(config["platform"], "modrinth")
 
     def test_curseforge_manifest_contains_only_the_downloader(self):
         archive = PlatformPackExport.render_curseforge(
@@ -578,8 +801,8 @@ class PlatformPackExportTests(unittest.TestCase):
 
     def test_mrpack_always_installs_enabled_override_natively(self):
         with patch(
-            "models.platform_export.ModrinthProvider.list_versions",
-            return_value=[override_version()],
+            "models.platform_export.ModrinthProvider.get_versions",
+            return_value={"tx-version": override_version()},
         ) as versions:
             archive = PlatformPackExport.render_mrpack(
                 build(),
@@ -603,7 +826,9 @@ class PlatformPackExportTests(unittest.TestCase):
             index["files"][0]["env"],
             {"client": "required", "server": "unsupported"},
         )
-        versions.assert_called_once_with("eh8us8FY", "1.7.10", "FORGE")
+        versions.assert_called_once_with(
+            [("eh8us8FY", "tx-version")], "1.7.10", "FORGE"
+        )
 
     def test_curseforge_always_installs_enabled_override_natively(self):
         tx_file = CurseForgeFile(
@@ -614,10 +839,16 @@ class PlatformPackExportTests(unittest.TestCase):
             game_versions=("1.7.10", "Forge"),
             published="2025-01-01T00:00:00Z",
         )
-        with patch(
-            "models.platform_export.CurseForgeDownloaderAPI.list_files",
-            return_value=(tx_file,),
-        ) as files:
+        with (
+            patch(
+                "models.platform_export.ModrinthProvider.get_versions",
+                return_value={"tx-version": override_version()},
+            ),
+            patch(
+                "models.platform_export.CurseForgeDownloaderAPI.list_files",
+                return_value=(tx_file,),
+            ) as files,
+        ):
             archive = PlatformPackExport.render_curseforge(
                 build(),
                 [overridden_package()],

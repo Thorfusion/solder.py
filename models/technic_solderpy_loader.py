@@ -189,6 +189,18 @@ class TechnicSolderPyLoader:
                         bootstrap_size,
                     ),
                 )
+                # The legacy Technic optional shadow build and SolderPy
+                # Loader delivery are two competing representations of the
+                # same optional content. Loader delivery is authoritative, so
+                # always switch the owning modpack's shadow view off in the
+                # same transaction as the bootstrap configuration.
+                cursor.execute(
+                    """UPDATE modpacks
+                       INNER JOIN builds ON builds.modpack_id = modpacks.id
+                       SET modpacks.enable_optionals = 0
+                       WHERE builds.id = %s""",
+                    (build.id,),
+                )
                 conn.commit()
             except Exception:
                 conn.rollback()

@@ -55,6 +55,16 @@
 </div>
 {%endblock%}
 {%block aside%}
+<h5>SolderPy Loader</h5>
+<form method="post" class="mb-3">
+    <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="solderpy_loader_direct" value="1" id="solderpy_loader_direct" {%if artifact.solderpy_loader_direct%}checked{%endif%}>
+        <label class="form-check-label" for="solderpy_loader_direct">Use the Maven JAR URL directly</label>
+    </div>
+    <p class="form-text">Requires a public HTTPS repository. SolderPy Loader verifies the stored JAR MD5 and falls back to the Solder-hosted JAR.</p>
+    <button class="btn btn-success" name="save_direct_downloads" value="1">Save download setting</button>
+</form>
+<hr>
 <h5>Version mapping rule</h5>
 <form method="post">
     <div class="mb-3">

@@ -64,6 +64,12 @@ def package(
     integration_provider=None,
     integration_project_id=None,
     integration_version_id=None,
+    download_source_provider=None,
+    download_source_url=None,
+    download_source_filename=None,
+    download_source_sha1=None,
+    download_source_sha512=None,
+    download_source_filesize=None,
     optional_state=None,
     membership_id=None,
 ):
@@ -85,10 +91,41 @@ def package(
         integration_provider=integration_provider,
         integration_project_id=integration_project_id,
         integration_version_id=integration_version_id,
+        download_source_provider=download_source_provider,
+        download_source_url=download_source_url,
+        download_source_filename=download_source_filename,
+        download_source_sha1=download_source_sha1,
+        download_source_sha512=download_source_sha512,
+        download_source_filesize=download_source_filesize,
     )
 
 
 class DistributionRendererTests(unittest.TestCase):
+    def test_hybrid_resolution_reuses_saved_modrinth_metadata(self):
+        selected = package(
+            integration_provider="MODRINTH",
+            integration_project_id="project",
+            integration_version_id="version",
+            download_source_provider="MODRINTH",
+            download_source_url=(
+                "https://cdn.modrinth.com/data/project/versions/version/mod.jar"
+            ),
+            download_source_filename="mod.jar",
+            download_source_sha1="a" * 40,
+            download_source_sha512="b" * 128,
+            download_source_filesize=123,
+        )
+        with patch(
+            "models.platform_export.ModrinthProvider.get_versions"
+        ) as lookup:
+            resolved = routes.PlatformPackExport.native_modrinth_files(
+                build(), [selected]
+            )
+
+        lookup.assert_not_called()
+        self.assertEqual(resolved["version"].filename, "mod.jar")
+        self.assertEqual(resolved["version"].size, 123)
+
     def test_filedirector_named_group_includes_basic_excluded_choice(self):
         selected = package(optional_state=2, membership_id=44)
         group = AdvancedOptionalGroup(
@@ -786,7 +823,7 @@ class DistributionRouteTests(unittest.TestCase):
             ),
             patch.object(
                 routes.PlatformPackExport,
-                "native_modrinth_files",
+                "stored_native_modrinth_files",
                 return_value={"version": native_file},
             ),
         ):

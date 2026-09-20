@@ -164,6 +164,22 @@ JAR structure. Metadata and download redirects are confined to the configured
 repository origin. Standard timestamped `-SNAPSHOT` filenames are resolved from
 the version-level `maven-metadata.xml`.
 
+Enable **Use the Maven JAR URL directly** on an artifact when its repository is
+publicly reachable over HTTPS. Bootstrap manifests then give SolderPy Loader
+the exact Maven artifact URL followed by the Solder-hosted JAR fallback.
+Timestamped snapshots are resolved from version metadata when the manifest is
+generated. Both sources use the raw-JAR MD5 and size recorded during import.
+
+Every stored raw-JAR version also has an optional management-side HTTPS URL
+override. Open **Manage** beside that version to inspect its provider IDs,
+compatibility, hashes, timestamps, and build assignments or change the
+override. Its source priority is override, native Modrinth or enabled Maven,
+then Solder. The override filename may differ because the checksum covers file
+contents, not its name. Saving an override downloads it once on the server and
+requires its bytes to match the stored raw-JAR MD5; a mismatch leaves the
+previous override unchanged. Successful verification also records the JAR file
+size.
+
 ## Credentials
 
 Modrinth's public read endpoints do not need a key. solder.py does not store a
@@ -175,6 +191,51 @@ because the generated Solder package is publicly distributable.
 The initial Maven implementation supports repositories readable without
 credentials. Do not put a username or token in the repository URL; URLs with
 embedded credentials are rejected.
+
+## CurseForge API terms and data handling
+
+CurseForge API access is governed by the
+[CurseForge third-party API terms](https://support.curseforge.com/support/solutions/articles/9000207405-curse-forge-3rd-party-api-terms-and-conditions).
+The key is issued to a specific developer and external application. Never
+commit it, put it in a generated archive, expose it to a browser or launcher,
+or share one installation's key with another operator. A self-hosted operator
+needs an independently approved key unless CurseForge gives written approval
+for another deployment model.
+
+Treat every value returned by a CurseForge API as request-scoped data. In
+particular, never persist or cache returned project or file metadata, file IDs,
+names, hashes, sizes, download URLs, timestamps, pagination data, or complete
+responses in MySQL, files, queues, logs, browser storage, or an application
+cache. This rule also applies to identifiers returned after an author upload.
+Publication history may retain solder.py's local build ID, archive digest,
+attempt status, and patch number, but not a remote identifier learned from a
+CurseForge response.
+
+The following data is not API-derived and may be stored:
+
+- a project ID manually entered by an administrator;
+- the installation's server-side API key;
+- a user's own author-upload token and manually entered publishing project ID;
+  and
+- local Solder build, package, audit, and archive-digest data.
+
+CurseForge manifest generation must therefore query compatible files at export
+time, match entirely in memory, place the chosen project and file ID only in
+the archive returned by that request, close the response, and discard the
+metadata. Do not retain a server-side copy of the generated manifest. Failed
+or ambiguous matching must stop the export rather than save candidates for
+later selection. solder.py must not download, mirror, proxy, or redistribute a
+CurseForge-hosted mod file; the native manifest leaves delivery to the
+CurseForge-compatible client.
+
+The terms also prohibit concealing API access through a proxy or VPN. Hosting
+the management interface behind a VPN is separate, but outbound CurseForge API
+traffic must not use a VPN or proxy to disguise the server's identity or
+location. Keep access administrator-triggered, honor API errors and quotas,
+and do not add background polling. CurseForge reviews applications for effects
+on author earnings, service load, and author distribution consent; describe
+the exact export-time behavior when
+[applying for a key](https://support.curseforge.com/support/solutions/articles/9000208346-about-the-curseforge-api-and-how-to-apply-for-a-key).
 
 ## Permissions
 

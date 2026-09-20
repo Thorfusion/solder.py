@@ -6,9 +6,24 @@
     <p class="text-muted">
         Match the same downloader project on Modrinth and CurseForge so exported
         packs can install the native file from their target platform. Override
-        Solder-only must also be enabled before a mapping can bypass a Solder-only
+        Solder API only must also be enabled before a mapping can bypass a Solder API only
         export.
     </p>
+    <div class="alert alert-secondary">
+        <h3 class="h6">How CurseForge matching works</h3>
+        <p>
+            The mapping stores only the manually entered Modrinth and CurseForge
+            project IDs. No CurseForge file metadata or matched file ID is saved.
+            When exporting, solder.py resolves the exact Modrinth version selected
+            in the build, asks CurseForge for compatible JARs, and tries these matches
+            in order:
+        </p>
+        <ol class="mb-0">
+            <li>the same SHA-1;</li>
+            <li>the same filename and filesize; then</li>
+            <li>the Modrinth version number in the CurseForge filename or display name.</li>
+        </ol>
+    </div>
     <div class="alert alert-info">
         CurseForge is not used for Technic launcher downloads. Technic continues
         to download the normal Solder packages from the Solder API and repository.
@@ -28,7 +43,7 @@
                     <th>CurseForge</th>
                     <th>Side</th>
                     <th>Enabled</th>
-                    <th>Override Solder-only</th>
+                    <th>Override Solder API only</th>
                     <th>Action</th>
                 </tr>
             </thead>
@@ -46,7 +61,7 @@
                         <input class="form-check-input" type="checkbox" value="" id="override_enabled_{{override.id}}" aria-label="Enable {{override.name}}" onclick="submitecheckedpress('override_id', '{{override.id}}', 'override_enabled', 'override_enabled_{{override.id}}', 'set_override_enabled')" {%if override.enabled%}checked{%endif%}>
                     </td>
                     <td>
-                        <input class="form-check-input" type="checkbox" value="" id="override_solder_only_{{override.id}}" aria-label="Allow {{override.name}} to override Solder-only exports" onclick="submitecheckedpress('override_id', '{{override.id}}', 'override_solder_only', 'override_solder_only_{{override.id}}', 'set_override_solder_only')" {%if override.override_solder_only%}checked{%endif%}>
+                        <input class="form-check-input" type="checkbox" value="" id="override_solder_only_{{override.id}}" aria-label="Allow {{override.name}} to override Solder API only exports" onclick="submitecheckedpress('override_id', '{{override.id}}', 'override_solder_only', 'override_solder_only_{{override.id}}', 'set_override_solder_only')" {%if override.override_solder_only%}checked{%endif%}>
                     </td>
                     <td>
                         {%if not override.built_in%}
@@ -70,7 +85,7 @@
         <input type="text" class="form-control invisible" name="override_solder_only" id="override_solder_only" readonly>
         <input type="text" class="form-control invisible" name="override_id" id="override_id" readonly>
         <input class="btn btn-primary invisible" type="submit" name="set_override_enabled" id="set_override_enabled" value="Save">
-        <input class="btn btn-primary invisible" type="submit" name="set_override_solder_only" id="set_override_solder_only" value="Save Solder-only override">
+        <input class="btn btn-primary invisible" type="submit" name="set_override_solder_only" id="set_override_solder_only" value="Save Solder API only override">
     </form>
 </div>
 {%endblock%}
@@ -83,7 +98,7 @@
     </div>
     <div class="form-check mb-3">
         <input class="form-check-input" type="checkbox" value="1" name="override_solder_only" id="new_override_solder_only">
-        <label class="form-check-label" for="new_override_solder_only">Override Solder-only exports</label>
+        <label class="form-check-label" for="new_override_solder_only">Override Solder API only exports</label>
     </div>
     <div class="mb-3">
         <label class="form-label" for="modrinth_project">Modrinth project</label>

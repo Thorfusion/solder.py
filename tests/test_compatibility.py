@@ -1,6 +1,7 @@
 import unittest
 
 from models.compatibility import (
+    minecraft_version_storage,
     normalize_minecraft_versions,
     normalize_modloaders,
     primary_modloader,
@@ -29,6 +30,28 @@ class CompatibilityTests(unittest.TestCase):
         self.assertFalse(
             version_is_compatible(
                 "1.20.1,1.20.2", "FORGE,NEOFORGE", "1.21.1", "NEOFORGE"
+            )
+        )
+
+    def test_multiple_minecraft_versions_use_related_storage(self):
+        marker, versions = minecraft_version_storage(
+            ["1.20.1", "1.20.2", "1.20.1"]
+        )
+        self.assertEqual(marker, "MULTI")
+        self.assertEqual(versions, ("1.20.1", "1.20.2"))
+        self.assertTrue(
+            version_is_compatible(
+                "MULTI", "FORGE", "1.20.2", "FORGE", versions
+            )
+        )
+        self.assertFalse(
+            version_is_compatible(
+                "MULTI", "FORGE", "1.21.1", "FORGE", versions
+            )
+        )
+        self.assertFalse(
+            version_is_compatible(
+                "MULTI", "FORGE", "1.20.1", "FORGE", None
             )
         )
         self.assertFalse(

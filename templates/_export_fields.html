@@ -2,20 +2,23 @@
 <h6>Export settings</h6>
 <label for="export_source" class="form-label">Download source</label>
 <select class="form-select mb-2" name="source" id="export_source">
-    <option value="hybrid">Hybrid (Modrinth where mapped)</option>
-    <option value="solder">Solder only</option>
+    <option value="hybrid">Hybrid (Modrinth/Curse where mapped)</option>
+    <option value="solder">Solder API only</option>
 </select>
-<label for="export_forge_version" class="form-label">Forge version</label>
+<label for="export_forge_version" class="form-label">Modloader version</label>
 <input class="form-control mb-2" type="text" name="forge_version" id="export_forge_version" value="{{packbuild.forge or ''}}" maxlength="255">
+<div class="form-text mb-2">The version of the build's selected modloader, such as Forge or NeoForge.</div>
 <fieldset class="mb-2">
     <legend class="col-form-label pt-0">Build export delivery</legend>
     <div class="form-check">
-        <input class="form-check-input" type="radio" name="delivery" id="export_delivery_bundled" value="bundled" checked>
-        <label class="form-check-label" for="export_delivery_bundled">Include configuration and metadata in the archive</label>
+        <input class="form-check-input" type="radio" name="delivery" id="export_delivery_hosted" value="hosted" checked>
+        <label class="form-check-label" for="export_delivery_hosted">Web hosted</label>
+        <div class="form-text">The archive contains a small loader pointer; solder.py serves the build metadata and configuration.</div>
     </div>
     <div class="form-check">
-        <input class="form-check-input" type="radio" name="delivery" id="export_delivery_hosted" value="hosted">
-        <label class="form-check-label" for="export_delivery_hosted">Use web-hosted configuration and metadata</label>
+        <input class="form-check-input" type="radio" name="delivery" id="export_delivery_bundled" value="bundled">
+        <label class="form-check-label" for="export_delivery_bundled">Include in archive</label>
+        <div class="form-text">The generated configuration and metadata are stored inside the exported archive.</div>
     </div>
 </fieldset>
 <label for="export_selector" class="form-label">Hosted build</label>
@@ -25,19 +28,25 @@
     <option value="recommended">Follow recommended</option>
 </select>
 <div class="form-text mb-3">
-    Formats use the settings they support. CSV ignores these settings, and
-    MCInstance Loader always includes its configuration in the archive.
-    Prism uses them when a downloader is selected.
+    SolderPy Loader follows this build, latest, or recommended through the
+    bootstrap API. FileDirector, Modpack Director, and Packwiz use the selected
+    hosted pointer. MCInstance Loader stores its configuration in the export,
+    so it ignores this selector. Prism uses it when a downloader is selected.
+</div>
+<div class="alert alert-info py-2" role="note">
+    Hybrid platform exports are snapshots; publishing a changed live build
+    sends the next numbered patch. Solder API only with web-hosted SolderPy Loader
+    synchronizes from the selected build channel automatically.
 </div>
 {%endmacro%}
 
-{%macro downloader_select(id, name, label, downloaders, allow_none=false, none_label='None (hybrid with all files on Modrinth)')%}
+{%macro downloader_select(id, name, label, downloaders, allow_none=false, none_label='None (hybrid with all files from the platform)')%}
 <label for="{{id}}" class="form-label">{{label}}</label>
 <select class="form-select mb-2" name="{{name}}" id="{{id}}">
-    <option value="" selected disabled>Select downloader</option>
+    <option value="" disabled>Select downloader</option>
     {%for downloader in downloaders%}
     {%for release in downloader.releases%}
-    <option value="{{downloader.key}}:{{release.selector}}">{{downloader.label}} {{release.version}}{%if release.default%} (recommended){%endif%}</option>
+    <option value="{{downloader.key}}:{{release.selector}}" {%if downloader.key == 'solderpyloader' and release.default%}selected{%endif%}>{{downloader.label}} {{release.version}}{%if release.default%} (recommended){%endif%}</option>
     {%endfor%}
     {%endfor%}
     {%if allow_none%}<option value="none">{{none_label}}</option>{%endif%}

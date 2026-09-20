@@ -4,6 +4,7 @@ import re
 
 
 _MODLOADER_RE = re.compile(r"^[A-Z][A-Z0-9_-]{0,31}$")
+MULTI_MINECRAFT_VERSION = "MULTI"
 
 
 class InvalidModloaderError(ValueError):
@@ -50,6 +51,24 @@ def normalize_minecraft_versions(value):
     return serialized or None
 
 
+def minecraft_version_storage(value):
+    """Return the legacy-column marker and normalized compatibility values.
+
+    Technic-compatible single-version rows keep their version in
+    ``modversions.mcversion``. Versions supporting more than one Minecraft
+    release use a stable ``MULTI`` marker there and store the actual values in
+    ``modversion_minecraft_versions``. This keeps the legacy column usable for
+    filename/version parsing instead of overloading it with CSV data.
+    """
+    normalized = normalize_minecraft_versions(value)
+    versions = tuple(normalized.split(",")) if normalized else ()
+    if any(version.upper() == MULTI_MINECRAFT_VERSION for version in versions):
+        raise ValueError('"MULTI" is reserved for multi-version storage.')
+    if len(versions) > 1:
+        return MULTI_MINECRAFT_VERSION, versions
+    return (versions[0] if versions else None), versions
+
+
 def normalize_modloaders(value):
     """Store one or more loader identifiers as a canonical CSV string."""
     loaders = []
@@ -80,18 +99,36 @@ def compatibility_values(value, *, modloaders=False):
     return tuple(normalized.split(",")) if normalized else ()
 
 
+def resolved_minecraft_versions(stored_value, related_values=None):
+    """Expose Minecraft compatibility from new or legacy storage layouts."""
+    if str(stored_value or "").upper() == MULTI_MINECRAFT_VERSION:
+        return compatibility_values(related_values)
+    return compatibility_values(stored_value)
+
+
 def version_is_compatible(
     version_minecraft,
     version_modloader,
     build_minecraft,
     build_modloader,
+    version_minecraft_values=None,
 ):
     """Match null version fields as universal, as existing mcversion does."""
-    minecraft_versions = compatibility_values(version_minecraft)
-    modloaders = compatibility_values(version_modloader, modloaders=True)
-    minecraft_matches = (
-        not minecraft_versions or str(build_minecraft) in minecraft_versions
+    minecraft_versions = resolved_minecraft_versions(
+        version_minecraft, version_minecraft_values
     )
+    modloaders = compatibility_values(version_modloader, modloaders=True)
+    if str(version_minecraft or "").upper() == MULTI_MINECRAFT_VERSION:
+        # A MULTI marker without related rows is incomplete data, not a
+        # universal version.
+        minecraft_matches = bool(minecraft_versions) and (
+            str(build_minecraft) in minecraft_versions
+        )
+    else:
+        minecraft_matches = (
+            not minecraft_versions
+            or str(build_minecraft) in minecraft_versions
+        )
     loader_matches = (
         not modloaders
         or build_modloader is None

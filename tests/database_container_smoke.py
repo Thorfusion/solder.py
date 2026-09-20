@@ -285,13 +285,16 @@ def verify_performance_indexes(database_container: str) -> None:
         ("build_modversion", "build_id,modversion_id"),
         ("build_modversion", "modversion_id,build_id"),
         ("builds", "modpack_id,version,is_published,private"),
+        ("builds", "modpack_id,id"),
         ("client_modpack", "modpack_id,client_id"),
         ("client_modpack", "client_id,modpack_id"),
         ("modversions", "mod_id,mcversion"),
         ("modversions", "mod_id,mcversion,modloader"),
         ("modversions", "mod_id,version"),
+        ("modversions", "mod_id,id"),
         ("mods", "integration_provider,integration_project_id"),
         ("modversions", "mod_id,integration_version_id"),
+        ("modversion_minecraft_versions", "minecraft_version,modversion_id"),
         ("maven_artifacts", "repository_id"),
         ("maven_versions", "maven_artifact_id,minecraft,modloader,enabled,available,metadata_order"),
         ("build_optional_groups", "build_id,sort_order"),
@@ -302,6 +305,10 @@ def verify_performance_indexes(database_container: str) -> None:
         ("user_modpack", "modpack_id,user_id"),
         ("clients", "uuid"),
         ("keys", "api_key"),
+        ("users", "username"),
+        ("sessions", "user_id"),
+        ("sessions", "expiry"),
+        ("modpack_publication_targets", "provider_account_id"),
     )
     for table, columns in expected_indexes:
         index_count = mysql(
@@ -316,6 +323,25 @@ def verify_performance_indexes(database_container: str) -> None:
         )
         if int(index_count) < 1:
             raise AssertionError(f"No index on {table} covers the columns {columns}")
+
+
+def verify_compatible_collations(database_container: str) -> None:
+    incompatible = mysql(
+        database_container,
+        "SELECT COALESCE(GROUP_CONCAT(CONCAT(TABLE_NAME, ':', "
+        "TABLE_COLLATION) ORDER BY TABLE_NAME SEPARATOR ','), '') "
+        "FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_TYPE = 'BASE TABLE' "
+        # 1.7.4's standalone migration ledger is never joined to application
+        # data and is intentionally outside Database.APPLICATION_TABLES.
+        "AND TABLE_NAME <> 'migrations' "
+        "AND TABLE_COLLATION <> 'utf8mb4_unicode_ci';",
+    )
+    if incompatible:
+        raise AssertionError(
+            f"Application tables use incompatible collations: {incompatible}"
+        )
 
 
 def verify_technic_migration(database_container: str) -> None:
@@ -349,8 +375,10 @@ def verify_technic_migration(database_container: str) -> None:
         ("modversions", "mcversion"),
         ("modversions", "modloader"),
         ("modversions", "integration_version_id"),
+        ("maven_artifacts", "solderpy_loader_direct"),
         ("platform_export_overrides", "override_solder_only"),
         ("user_permissions", "solder_env"),
+        ("users", "night_mode"),
         ("users", "two_factor_confirmed_at"),
         ("users", "two_factor_recovery_codes"),
         ("users", "two_factor_secret"),
@@ -386,10 +414,15 @@ def verify_technic_migration(database_container: str) -> None:
         "'solder_settings', 'platform_export_overrides', "
         "'build_optional_groups', 'build_optional_group_items', "
         "'technic_solderpy_loader_builds', "
+        "'modversion_download_overrides', "
+        "'modversion_download_sources', "
+        "'modversion_minecraft_versions', "
+        "'publishing_provider_accounts', "
+        "'modpack_publication_targets', 'modpack_publication_runs', "
         "'personal_access_tokens', 'password_reset_tokens', "
         "'maven_repositories', 'maven_artifacts', 'maven_versions');",
     )
-    if int(table_count) != 13:
+    if int(table_count) != 19:
         raise AssertionError(
             "Migration did not preserve the current Technic tables and create "
             "the solder.py tables"
@@ -484,6 +517,15 @@ def verify_fresh_schema(database_container: str) -> None:
     if java_runtime_column_count != "1":
         raise AssertionError("Fresh schema did not create java_runtime")
 
+    night_mode_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND "
+        "TABLE_NAME = 'users' AND COLUMN_NAME = 'night_mode';",
+    )
+    if night_mode_column_count != "1":
+        raise AssertionError("Fresh schema did not create user night mode")
+
     integration_schema_count = mysql(
         database_container,
         "SELECT COUNT(*) FROM information_schema.COLUMNS "
@@ -495,6 +537,21 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if integration_schema_count != "3":
         raise AssertionError("Fresh schema did not create integration columns")
+
+    direct_source_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ("
+        "(TABLE_NAME = 'modversion_download_overrides' AND "
+        "COLUMN_NAME = 'jar_url') OR "
+        "(TABLE_NAME = 'modversion_download_sources' AND COLUMN_NAME IN "
+        "('provider', 'url', 'filename', 'md5', 'sha1', 'sha512', "
+        "'filesize')) OR "
+        "(TABLE_NAME = 'maven_artifacts' AND COLUMN_NAME = "
+        "'solderpy_loader_direct'));",
+    )
+    if direct_source_column_count != "9":
+        raise AssertionError("Fresh schema did not create direct JAR source columns")
 
     integration_table_count = mysql(
         database_container,
@@ -1582,13 +1639,15 @@ def exercise_synthetic_user_login(
             b'id="distribution_settings"'
         )
         hashing_position = settings_page.find(b'id="manual_md5_hashing"')
+        environment_position = settings_page.find(b"DEBUG ENV")
         if (
             distribution_position < 0
             or hashing_position < 0
-            or distribution_position >= hashing_position
+            or environment_position < 0
+            or hashing_position >= environment_position
         ):
             raise AssertionError(
-                "Distribution settings were not above manual MD5 hashing"
+                "Manual MD5 hashing was not above the environment list"
             )
 
     with opener.open(
@@ -1625,25 +1684,27 @@ def exercise_synthetic_user_login(
             f"The Maven integration was not portable: {integration_manifest}"
         )
 
-    with opener.open(f"{base_url}/modversion/3", timeout=5) as response:
+    with opener.open(f"{base_url}/modversion/3/manage/3", timeout=5) as response:
         version_page = response.read()
         if (
             response.status != 200
             or b">Create JAR</button>" not in version_page
+            or b">Verify ZIP</button>" not in version_page
         ):
-            raise AssertionError("The legacy JAR action was not shown")
+            raise AssertionError("The artifact verification actions were not shown")
 
     mcil_jar_request = urllib.request.Request(
-        f"{base_url}/modversion/3",
-        data=urllib.parse.urlencode(
-            {"createmciljar_id": "3", "createmciljar_submit": "1"}
-        ).encode(),
+        f"{base_url}/modversion/3/manage/3",
+        data=urllib.parse.urlencode({"jar_action_submit": "1"}).encode(),
         method="POST",
     )
     try:
         opener.open(mcil_jar_request, timeout=10)
     except urllib.error.HTTPError as error:
-        if error.code != 302 or error.headers.get("Location") != "/modversion/3":
+        if (
+            error.code != 302
+            or error.headers.get("Location") != "/modversion/3/manage/3"
+        ):
             raise AssertionError(
                 f"Creating a legacy MCIL JAR returned an unexpected response: {error}"
             ) from error
@@ -1679,9 +1740,9 @@ def exercise_synthetic_user_login(
     if artifact_hash != expected_legacy_jar_md5:
         raise AssertionError(f"The converted MCIL JAR was incorrect: {artifact_hash}")
 
-    with opener.open(f"{base_url}/modversion/3", timeout=5) as response:
-        if b"JAR ready" not in response.read():
-            raise AssertionError("The converted version was not shown as JAR ready")
+    with opener.open(f"{base_url}/modversion/3/manage/3", timeout=5) as response:
+        if b">Verify JAR</button>" not in response.read():
+            raise AssertionError("The converted version did not show the JAR verification action")
 
     dependency_request = urllib.request.Request(
         f"{base_url}/modversion/3",
@@ -1999,6 +2060,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         ).strip()
         base_url = f"http://127.0.0.1:{port_mapping.rsplit(':', 1)[1]}"
         wait_for_application(application_container, f"{base_url}/api/")
+        verify_compatible_collations(database_container)
         migrated_bootstrap_type = mysql(
             database_container,
             "SELECT modtype FROM mods WHERE id = 26;",
@@ -2096,6 +2158,22 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         )
         if maven_table_count != "3":
             raise AssertionError("Application startup did not create the Maven catalog")
+        direct_source_column_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.COLUMNS "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ("
+            "(TABLE_NAME = 'modversion_download_overrides' AND "
+            "COLUMN_NAME = 'jar_url') OR "
+            "(TABLE_NAME = 'modversion_download_sources' AND COLUMN_NAME IN "
+            "('provider', 'url', 'filename', 'md5', 'sha1', 'sha512', "
+            "'filesize')) OR "
+            "(TABLE_NAME = 'maven_artifacts' AND COLUMN_NAME = "
+            "'solderpy_loader_direct'));",
+        )
+        if direct_source_column_count != "9":
+            raise AssertionError(
+                "Application startup did not create direct JAR source columns"
+            )
         integration_schema_count = mysql(
             database_container,
             "SELECT COUNT(*) FROM information_schema.COLUMNS "

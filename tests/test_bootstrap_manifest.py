@@ -139,8 +139,8 @@ class BootstrapManifestTests(unittest.TestCase):
             [],
             "https://cdn.example.test/mods/",
             {},
-            modrinth_downloads={
-                ("project-id", "version-id"): modrinth_url
+            native_downloads={
+                ("MODRINTH", "project-id", "version-id"): modrinth_url
             },
         )
 
@@ -158,9 +158,74 @@ class BootstrapManifestTests(unittest.TestCase):
                 },
             ],
         )
+        self.assertEqual(download["url"], download["sources"][1]["url"])
+
+    def test_solder_source_ignores_override_and_provider_urls(self):
+        selected = package(4, 10, "example-mod")
+        selected.integration_provider = "MODRINTH"
+        selected.integration_project_id = "project-id"
+        selected.integration_version_id = "version-id"
+        selected.jar_url_override = "https://override.example/mod.jar"
+        selected.download_source_provider = "MODRINTH"
+        selected.download_source_url = "https://cdn.modrinth.com/mod.jar"
+
+        manifest = BootstrapManifest.render(
+            modpack(),
+            build(1, "1.0"),
+            [selected],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+            source_mode="solder",
+        )
+
+        download = manifest["packages"][0]["download"]
+        self.assertNotIn("sources", download)
+        self.assertEqual(
+            download["url"],
+            "https://cdn.example.test/mods/example-mod/example-mod-1.0.jar",
+        )
+        self.assertEqual(manifest["source"], "solder")
         self.assertEqual(download["md5"], "a" * 32)
         self.assertEqual(download["filesize"], 80)
-        self.assertEqual(download["url"], download["sources"][1]["url"])
+
+    def test_override_precedes_maven_and_solder_sources(self):
+        selected = package(4, 10, "example-mod")
+        selected.integration_provider = "MAVEN"
+        selected.integration_project_id = "7"
+        selected.integration_version_id = "version-id"
+        selected.jar_url_override = "https://override.example/mod.jar"
+        maven_url = "https://maven.example/releases/mod-1.0.jar"
+
+        manifest = BootstrapManifest.render(
+            modpack(),
+            build(1, "1.0"),
+            [selected],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+            native_downloads={
+                ("MAVEN", "7", "version-id"): maven_url
+            },
+        )
+
+        self.assertEqual(
+            manifest["packages"][0]["download"]["sources"],
+            [
+                {
+                    "provider": "override",
+                    "url": "https://override.example/mod.jar",
+                },
+                {"provider": "maven", "url": maven_url},
+                {
+                    "provider": "solder",
+                    "url": (
+                        "https://cdn.example.test/mods/example-mod/"
+                        "example-mod-1.0.jar"
+                    ),
+                },
+            ],
+        )
 
     def test_config_download_remains_a_solder_zip(self):
         selected = package(4, 10, "config-pack")

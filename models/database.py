@@ -34,12 +34,45 @@ CORE_TABLES = {
 
 
 class Database:
+    TABLE_OPTIONS = (
+        " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+    )
+    APPLICATION_TABLES = CORE_TABLES | {
+        "sessions",
+        "solder_settings",
+        "platform_export_overrides",
+        "build_optional_groups",
+        "build_optional_group_items",
+        "technic_solderpy_loader_builds",
+        "personal_access_tokens",
+        "mod_dependencies",
+        "modversion_download_overrides",
+        "modversion_download_sources",
+        "modversion_minecraft_versions",
+        "publishing_provider_accounts",
+        "modpack_publication_targets",
+        "modpack_publication_runs",
+        "user_modpack",
+        "maven_repositories",
+        "maven_artifacts",
+        "maven_versions",
+    }
+
+    SESSION_TABLE_SQL = """CREATE TABLE IF NOT EXISTS sessions (
+        token VARCHAR(80) NOT NULL PRIMARY KEY,
+        ip VARCHAR(255) NOT NULL,
+        expiry TIMESTAMP NOT NULL,
+        user_id INT NOT NULL,
+        INDEX idx_sessions_user (user_id),
+        INDEX idx_sessions_expiry (expiry)
+    )""" + TABLE_OPTIONS
+
     SOLDER_SETTINGS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS solder_settings (
         name VARCHAR(64) NOT NULL PRIMARY KEY,
         value VARCHAR(255) NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    )"""
+    )""" + TABLE_OPTIONS
 
     PLATFORM_EXPORT_OVERRIDES_TABLE_SQL = """CREATE TABLE IF NOT EXISTS platform_export_overrides (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -54,7 +87,7 @@ class Database:
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uq_platform_export_overrides_modrinth (modrinth_project_id),
         UNIQUE KEY uq_platform_export_overrides_curseforge (curseforge_project_id)
-    )"""
+    )""" + TABLE_OPTIONS
 
     PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL = """INSERT IGNORE INTO platform_export_overrides
         (name, modrinth_project_id, curseforge_project_id, side, enabled,
@@ -73,7 +106,7 @@ class Database:
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY uq_build_optional_group_name (build_id, name),
             INDEX idx_build_optional_groups_build (build_id, sort_order)
-        )""",
+        )""" + TABLE_OPTIONS,
         """CREATE TABLE IF NOT EXISTS build_optional_group_items (
             id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
             group_id INT NULL,
@@ -84,7 +117,7 @@ class Database:
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             UNIQUE KEY uq_build_optional_group_membership (build_modversion_id),
             INDEX idx_build_optional_group_items_group (group_id, sort_order)
-        )""",
+        )""" + TABLE_OPTIONS,
     )
 
     TECHNIC_SOLDERPY_LOADER_TABLE_SQL = """CREATE TABLE IF NOT EXISTS technic_solderpy_loader_builds (
@@ -96,7 +129,7 @@ class Database:
         bootstrap_filesize BIGINT UNSIGNED NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    )"""
+    )""" + TABLE_OPTIONS
 
     PERSONAL_ACCESS_TOKENS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS personal_access_tokens (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -112,7 +145,7 @@ class Database:
         INDEX personal_access_tokens_tokenable_type_tokenable_id_index
             (tokenable_type, tokenable_id),
         INDEX personal_access_tokens_expires_at_index (expires_at)
-    )"""
+    )""" + TABLE_OPTIONS
 
     MOD_DEPENDENCIES_TABLE_SQL = """CREATE TABLE IF NOT EXISTS mod_dependencies (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -122,7 +155,93 @@ class Database:
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY uq_mod_dependencies_pair (mod_id, dependency_mod_id),
         INDEX idx_mod_dependencies_dependency (dependency_mod_id)
-    )"""
+    )""" + TABLE_OPTIONS
+
+    MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL = """CREATE TABLE IF NOT EXISTS modversion_download_overrides (
+        modversion_id INT NOT NULL PRIMARY KEY,
+        jar_url VARCHAR(2048) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )""" + TABLE_OPTIONS
+
+    MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL = """CREATE TABLE IF NOT EXISTS modversion_download_sources (
+        modversion_id INT NOT NULL,
+        provider VARCHAR(16) NOT NULL,
+        url VARCHAR(2048) NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        md5 CHAR(32),
+        sha1 CHAR(40),
+        sha512 CHAR(128),
+        filesize BIGINT UNSIGNED,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (modversion_id, provider),
+        INDEX idx_modversion_download_sources_provider (provider, modversion_id)
+    )""" + TABLE_OPTIONS
+
+    MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS modversion_minecraft_versions (
+        modversion_id INT NOT NULL,
+        minecraft_version VARCHAR(64) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (modversion_id, minecraft_version),
+        INDEX idx_modversion_minecraft_compatibility
+            (minecraft_version, modversion_id)
+    )""" + TABLE_OPTIONS
+
+    PUBLISHING_TABLES_SQL = (
+        """CREATE TABLE IF NOT EXISTS publishing_provider_accounts (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            provider VARCHAR(32) NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            token TEXT NOT NULL,
+            token_hint VARCHAR(16) NOT NULL DEFAULT '',
+            configuration TEXT,
+            enabled TINYINT(1) NOT NULL DEFAULT 1,
+            user_id INT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_publishing_provider_account
+                (user_id, provider, name),
+            INDEX idx_publishing_provider_user (user_id, enabled),
+            INDEX idx_publishing_provider_enabled (provider, enabled)
+        )""" + TABLE_OPTIONS,
+        """CREATE TABLE IF NOT EXISTS modpack_publication_targets (
+            id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            modpack_id INT NOT NULL,
+            provider_account_id INT NOT NULL,
+            project_id VARCHAR(191) NOT NULL,
+            configuration TEXT,
+            enabled TINYINT(1) NOT NULL DEFAULT 1,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY uq_modpack_publication_account
+                (modpack_id, provider_account_id),
+            INDEX idx_modpack_publication_enabled
+                (modpack_id, enabled),
+            INDEX idx_modpack_publication_provider_account
+                (provider_account_id)
+        )""" + TABLE_OPTIONS,
+        """CREATE TABLE IF NOT EXISTS modpack_publication_runs (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            target_id INT NOT NULL,
+            build_id INT NOT NULL,
+            artifact_sha256 CHAR(64) NOT NULL,
+            deduplication_key CHAR(64),
+            release_type VARCHAR(16) NOT NULL,
+            display_name VARCHAR(255) NOT NULL,
+            status VARCHAR(16) NOT NULL,
+            remote_file_id VARCHAR(191),
+            error_message VARCHAR(1000),
+            created_by_user_id INT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_modpack_publication_run_build
+                (target_id, build_id, status),
+            UNIQUE KEY uq_modpack_publication_run_deduplication
+                (target_id, deduplication_key)
+        )""" + TABLE_OPTIONS,
+    )
 
     USER_MODPACK_TABLE_SQL = """CREATE TABLE IF NOT EXISTS user_modpack (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -132,7 +251,7 @@ class Database:
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_user_modpack_user_pack (user_id, modpack_id),
         INDEX idx_user_modpack_pack_user (modpack_id, user_id)
-    )"""
+    )""" + TABLE_OPTIONS
 
     MAVEN_REPOSITORIES_TABLE_SQL = """CREATE TABLE IF NOT EXISTS maven_repositories (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -140,7 +259,7 @@ class Database:
         base_url VARCHAR(2048) NOT NULL,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    )"""
+    )""" + TABLE_OPTIONS
 
     MAVEN_ARTIFACTS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS maven_artifacts (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -159,6 +278,7 @@ class Database:
         author VARCHAR(255),
         link VARCHAR(255),
         side ENUM('CLIENT', 'SERVER', 'BOTH') NOT NULL DEFAULT 'BOTH',
+        solderpy_loader_direct TINYINT(1) NOT NULL DEFAULT 0,
         mod_id INT,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -166,7 +286,7 @@ class Database:
             (repository_id, group_id, artifact_id, classifier, extension),
         UNIQUE KEY uq_maven_artifact_mod (mod_id),
         INDEX idx_maven_artifacts_repository (repository_id)
-    )"""
+    )""" + TABLE_OPTIONS
 
     MAVEN_VERSIONS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS maven_versions (
         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -189,7 +309,7 @@ class Database:
         INDEX idx_maven_version_compatibility
             (maven_artifact_id, minecraft, modloader, enabled, available,
              metadata_order)
-    )"""
+    )""" + TABLE_OPTIONS
 
     MAVEN_TABLES_SQL = (
         MAVEN_REPOSITORIES_TABLE_SQL,
@@ -218,6 +338,15 @@ class Database:
         ),
     )
 
+    USER_COLUMN_MIGRATIONS = (
+        (
+            "users",
+            "night_mode",
+            "ALTER TABLE users ADD COLUMN night_mode TINYINT(1) NOT NULL "
+            "DEFAULT 0 AFTER remember_token",
+        ),
+    )
+
     JAR_COLUMN_MIGRATIONS = (
         (
             "modversions",
@@ -228,6 +357,15 @@ class Database:
             "modversions",
             "jarfilesize",
             "ALTER TABLE modversions ADD COLUMN jarfilesize BIGINT UNSIGNED NULL AFTER jarmd5",
+        ),
+    )
+
+    MAVEN_COLUMN_MIGRATIONS = (
+        (
+            "maven_artifacts",
+            "solderpy_loader_direct",
+            "ALTER TABLE maven_artifacts ADD COLUMN solderpy_loader_direct "
+            "TINYINT(1) NOT NULL DEFAULT 0 AFTER side",
         ),
     )
 
@@ -278,6 +416,12 @@ class Database:
             "(modpack_id, version, is_published, private)",
         ),
         (
+            "builds",
+            ("modpack_id", "id"),
+            "ALTER TABLE builds "
+            "ADD INDEX idx_builds_modpack_id (modpack_id, id)",
+        ),
+        (
             "client_modpack",
             ("modpack_id", "client_id"),
             "ALTER TABLE client_modpack "
@@ -301,6 +445,12 @@ class Database:
             ("mod_id", "version"),
             "ALTER TABLE modversions "
             "ADD INDEX idx_modversions_mod_version (mod_id, version)",
+        ),
+        (
+            "modversions",
+            ("mod_id", "id"),
+            "ALTER TABLE modversions "
+            "ADD INDEX idx_modversions_mod_id (mod_id, id)",
         ),
         (
             "mods",
@@ -341,6 +491,28 @@ class Database:
             "keys",
             ("api_key",),
             "ALTER TABLE `keys` ADD INDEX idx_keys_api_key (api_key)",
+        ),
+        (
+            "users",
+            ("username",),
+            "ALTER TABLE users ADD INDEX idx_users_username (username)",
+        ),
+        (
+            "sessions",
+            ("user_id",),
+            "ALTER TABLE sessions ADD INDEX idx_sessions_user (user_id)",
+        ),
+        (
+            "sessions",
+            ("expiry",),
+            "ALTER TABLE sessions ADD INDEX idx_sessions_expiry (expiry)",
+        ),
+        (
+            "modpack_publication_targets",
+            ("provider_account_id",),
+            "ALTER TABLE modpack_publication_targets "
+            "ADD INDEX idx_modpack_publication_provider_account "
+            "(provider_account_id)",
         ),
     )
 
@@ -538,6 +710,27 @@ class Database:
             cur.execute(f"ALTER TABLE `{table}` {definitions}")
 
     @staticmethod
+    def normalize_table_collations(cur) -> None:
+        """Keep extension tables comparable with Technic Solder text columns."""
+        table_names = tuple(sorted(Database.APPLICATION_TABLES))
+        placeholders = ", ".join(["%s"] * len(table_names))
+        cur.execute(
+            f"""SELECT TABLE_NAME, TABLE_COLLATION
+                FROM information_schema.TABLES
+                WHERE TABLE_SCHEMA = %s
+                  AND TABLE_NAME IN ({placeholders})""",  # nosec B608
+            (db_name, *table_names),
+        )
+        for table, collation in cur.fetchall():
+            if str(collation or "").casefold() == "utf8mb4_unicode_ci":
+                continue
+            # The table name came from the fixed APPLICATION_TABLES allowlist.
+            cur.execute(
+                f"ALTER TABLE `{table}` CONVERT TO CHARACTER SET utf8mb4 "
+                "COLLATE utf8mb4_unicode_ci"  # nosec B608
+            )
+
+    @staticmethod
     def get_connection() -> connector.connection:
         try:
             conn: connector.MySQLConnection = connector.connect(
@@ -605,7 +798,8 @@ class Database:
                         enable_optionals BOOLEAN DEFAULT(0),
                         enable_server BOOLEAN DEFAULT(0),
                         optional_mode TINYINT NOT NULL DEFAULT(0)
-                        )"""
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                          COLLATE=utf8mb4_unicode_ci"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS builds (
@@ -624,8 +818,10 @@ class Database:
                         min_memory INT,
                         marked TINYINT(1) NOT NULL DEFAULT(0),
                         INDEX idx_builds_modpack_version_access
-                            (modpack_id, version, is_published, private)
-                        )"""
+                            (modpack_id, version, is_published, private),
+                        INDEX idx_builds_modpack_id (modpack_id, id)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                          COLLATE=utf8mb4_unicode_ci"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS mods (
@@ -644,7 +840,8 @@ class Database:
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         UNIQUE INDEX uq_mods_integration_project
                             (integration_provider, integration_project_id)
-                        )"""
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                          COLLATE=utf8mb4_unicode_ci"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS modversions (
@@ -663,9 +860,11 @@ class Database:
                         INDEX idx_modversions_mod_compatibility
                             (mod_id, mcversion, modloader),
                         INDEX idx_modversions_mod_version (mod_id, version),
+                        INDEX idx_modversions_mod_id (mod_id, id),
                         UNIQUE INDEX uq_modversions_integration_version
                             (mod_id, integration_version_id)
-                        )"""
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                          COLLATE=utf8mb4_unicode_ci"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS build_modversion (
@@ -677,9 +876,15 @@ class Database:
                         optional TINYINT(1) NOT NULL DEFAULT(0),
                         INDEX idx_build_modversion_build_version (build_id, modversion_id),
                         INDEX idx_build_modversion_version_build (modversion_id, build_id)
-                        )"""
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                          COLLATE=utf8mb4_unicode_ci"""
             )
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
+            cur.execute(Database.MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL)
+            cur.execute(Database.MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL)
+            cur.execute(Database.MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL)
+            for query in Database.PUBLISHING_TABLES_SQL:
+                cur.execute(query)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
             cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
             cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
@@ -701,10 +906,13 @@ class Database:
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         remember_token VARCHAR(255) DEFAULT(''),
+                        night_mode TINYINT(1) NOT NULL DEFAULT 0,
                         updated_by_ip VARCHAR(255),
                         created_by_user_id INT DEFAULT(1),
-                        updated_by_user_id INT
-                        )"""
+                        updated_by_user_id INT,
+                        INDEX idx_users_username (username)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                          COLLATE=utf8mb4_unicode_ci"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS user_permissions (
@@ -725,7 +933,8 @@ class Database:
                         modpacks_delete BOOLEAN DEFAULT(0),
                         modpacks VARCHAR(255),
                         INDEX user_permissions_user_id_index (user_id)
-                        )"""
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                          COLLATE=utf8mb4_unicode_ci"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS clients (
@@ -734,7 +943,8 @@ class Database:
                         uuid VARCHAR(255) NOT NULL UNIQUE,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                        )"""
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                          COLLATE=utf8mb4_unicode_ci"""
             )
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS client_modpack (
@@ -745,7 +955,8 @@ class Database:
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                         INDEX idx_client_modpack_modpack_client (modpack_id, client_id),
                         INDEX idx_client_modpack_client_modpack (client_id, modpack_id)
-                        )"""
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                          COLLATE=utf8mb4_unicode_ci"""
             )
             cur.execute(Database.USER_MODPACK_TABLE_SQL)
             cur.execute(
@@ -755,16 +966,11 @@ class Database:
                         api_key VARCHAR(255) NOT NULL UNIQUE,
                         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                        )"""
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+                          COLLATE=utf8mb4_unicode_ci"""
             )
-            cur.execute(
-                """CREATE TABLE IF NOT EXISTS sessions (
-                    token VARCHAR(80) NOT NULL PRIMARY KEY,
-                    ip VARCHAR(255) NOT NULL,
-                    expiry TIMESTAMP NOT NULL,
-                    user_id INT NOT NULL
-                )"""
-            )
+            cur.execute(Database.SESSION_TABLE_SQL)
+            Database.normalize_table_collations(cur)
             con.commit()
             return True
         except Exception as error:
@@ -848,8 +1054,10 @@ class Database:
             ),
             *Database.MODLOADER_COLUMN_MIGRATIONS,
             *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
+            *Database.USER_COLUMN_MIGRATIONS,
             *Database.NOTES_COLUMN_MIGRATIONS,
             *Database.INTEGRATION_COLUMN_MIGRATIONS,
+            *Database.MAVEN_COLUMN_MIGRATIONS,
             (
                 "platform_export_overrides",
                 "override_solder_only",
@@ -866,6 +1074,8 @@ class Database:
             # This table does not exist in a Technic database. Create its
             # current shape before applying additive column checks.
             cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
+            for query in Database.MAVEN_TABLES_SQL:
+                cur.execute(query)
             Database.normalize_legacy_timestamps(cur)
             for table, column, query in column_migrations:
                 cur.execute(
@@ -894,11 +1104,12 @@ class Database:
                 "WHERE modloader IS NULL AND forge IS NOT NULL"
             )
 
-            for table, columns, query in Database.API_INDEX_MIGRATIONS:
-                if not Database.index_covers_columns(cur, table, columns):
-                    cur.execute(query)
-
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
+            cur.execute(Database.MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL)
+            cur.execute(Database.MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL)
+            cur.execute(Database.MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL)
+            for query in Database.PUBLISHING_TABLES_SQL:
+                cur.execute(query)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
             cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
             cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
@@ -907,17 +1118,16 @@ class Database:
                 cur.execute(query)
             Database.allow_ungrouped_advanced_optionals(cur)
             cur.execute(Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL)
-            for query in Database.MAVEN_TABLES_SQL:
-                cur.execute(query)
 
-            cur.execute(
-                """CREATE TABLE IF NOT EXISTS sessions (
-                    token VARCHAR(80) NOT NULL PRIMARY KEY,
-                    ip VARCHAR(255) NOT NULL,
-                    expiry TIMESTAMP NOT NULL,
-                    user_id INT NOT NULL
-                )"""
-            )
+            cur.execute(Database.SESSION_TABLE_SQL)
+
+            # Run index migrations after every additive table has been
+            # created. A stock Technic database does not contain sessions or
+            # the publishing tables yet.
+            for table, columns, query in Database.API_INDEX_MIGRATIONS:
+                if not Database.index_covers_columns(cur, table, columns):
+                    cur.execute(query)
+            Database.normalize_table_collations(cur)
             con.commit()
             print("technic database migrated!")
             return True
@@ -946,9 +1156,15 @@ class Database:
             cur = con.cursor()
             Database.normalize_legacy_timestamps(cur)
             cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
+            cur.execute(Database.MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL)
+            cur.execute(Database.MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL)
+            cur.execute(Database.MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL)
+            for query in Database.PUBLISHING_TABLES_SQL:
+                cur.execute(query)
             cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
             cur.execute(Database.USER_MODPACK_TABLE_SQL)
             cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
+            cur.execute(Database.SESSION_TABLE_SQL)
             cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
             for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
                 cur.execute(query)
@@ -961,8 +1177,10 @@ class Database:
                 *Database.JAR_COLUMN_MIGRATIONS,
                 *Database.MODLOADER_COLUMN_MIGRATIONS,
                 *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
+                *Database.USER_COLUMN_MIGRATIONS,
                 *Database.NOTES_COLUMN_MIGRATIONS,
                 *Database.INTEGRATION_COLUMN_MIGRATIONS,
+                *Database.MAVEN_COLUMN_MIGRATIONS,
                 (
                     "modpacks",
                     "optional_mode",
@@ -1014,6 +1232,7 @@ class Database:
 
                 if not Database.index_covers_columns(cur, table, columns):
                     cur.execute(query)
+            Database.normalize_table_collations(cur)
             con.commit()
             return True
         except Exception as error:
@@ -1032,14 +1251,7 @@ class Database:
         cur = None
         try:
             cur = con.cursor()
-            cur.execute(
-                """CREATE TABLE IF NOT EXISTS sessions (
-                    token VARCHAR(80) NOT NULL PRIMARY KEY,
-                    ip VARCHAR(255) NOT NULL,
-                    expiry TIMESTAMP NOT NULL,
-                    user_id INT NOT NULL
-                )"""
-            )
+            cur.execute(Database.SESSION_TABLE_SQL)
             con.commit()
             return True
         except Exception as error:

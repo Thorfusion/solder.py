@@ -5,7 +5,7 @@ import threading
 import time
 from datetime import datetime
 
-from flask import flash
+from flask import flash, g, has_request_context
 
 from .database import Database
 
@@ -14,10 +14,19 @@ class Session:
     running: bool = False
     thread: threading.Thread = None
 
-    def __init__(self, token: str, ip, expiry: datetime):
+    def __init__(
+        self,
+        token: str,
+        ip,
+        expiry: datetime,
+        user_id=None,
+        night_mode=False,
+    ):
         self.token = token
         self.ip = ip
         self.expiry = expiry
+        self.user_id = user_id
+        self.night_mode = bool(night_mode)
 
     @staticmethod
     def ip_to_int(ip: str) -> int:
@@ -31,8 +40,10 @@ class Session:
         cur = conn.cursor()
         try:
             cur.execute(
-                "SELECT token, ip, expiry FROM sessions "
-                "WHERE token = %s AND expiry > NOW()",
+                "SELECT sessions.token, sessions.ip, sessions.expiry, "
+                "sessions.user_id, users.night_mode FROM sessions "
+                "INNER JOIN users ON users.id = sessions.user_id "
+                "WHERE sessions.token = %s AND sessions.expiry > NOW()",
                 (token,),
             )
             stored_session = cur.fetchone()
@@ -44,13 +55,24 @@ class Session:
                 (token,),
             )
             conn.commit()
-            return cls(stored_session[0], stored_session[1], stored_session[2])
+            return cls(
+                stored_session[0],
+                stored_session[1],
+                stored_session[2],
+                stored_session[3],
+                stored_session[4],
+            )
         finally:
             cur.close()
             conn.close()
         
     @staticmethod
     def get_user_id(token: str):
+        if (
+            has_request_context()
+            and getattr(g, "solder_session_token", None) == token
+        ):
+            return g.solder_user_id
         conn = Database.get_connection()
         if conn is None:
             return 0
@@ -109,15 +131,24 @@ class Session:
 
     @staticmethod
     def verify_session(token, ip):
-        session = Session.get_and_update_from_token(token)
-        if session:
-            if session.ip == ip:
-                return True
+        stored_session = Session.get_and_update_from_token(token)
+        if stored_session and stored_session.ip == ip:
+            if has_request_context():
+                g.solder_session_token = token
+                g.solder_user_id = stored_session.user_id
+                g.solder_night_mode = stored_session.night_mode
+            return True
         return False
 
     def __eq__(self, other):
         if isinstance(other, Session):
-            return self.token == other.token and self.ip == other.ip and self.expiry == other.expiry
+            return (
+                self.token == other.token
+                and self.ip == other.ip
+                and self.expiry == other.expiry
+                and self.user_id == other.user_id
+                and self.night_mode == other.night_mode
+            )
         return False
 
     @staticmethod

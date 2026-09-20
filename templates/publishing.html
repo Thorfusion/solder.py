@@ -1,0 +1,170 @@
+{%extends "layout.html"%} {% set active_page = "publishing" %}
+{%block head%}<title>Publishing - solder.py</title>{%endblock%}
+{%block main%}
+<h2>Platform publishing</h2>
+<p class="text-muted">
+    Store reusable upload accounts here, then map each local modpack to its
+    existing Modrinth or CurseForge project. Tokens are stored in the database
+    and are never displayed after saving. Accounts, mappings, and publication
+    history are private to your solder.py user.
+</p>
+
+<h4>Provider accounts</h4>
+{%if accounts%}
+{%for account in accounts%}<form id="publishing_account_{{account.id}}" method="post" action="{{url_for('asite.publishing')}}"></form>{%endfor%}
+<div class="table-responsive mb-4">
+    <table class="table table-striped table-sm align-middle">
+        <thead><tr><th>Provider</th><th>Name</th><th>Token</th><th>Enabled</th><th></th></tr></thead>
+        <tbody>
+        {%for account in accounts%}
+            <tr>
+                    <td>
+                        <input form="publishing_account_{{account.id}}" type="hidden" name="account_id" value="{{account.id}}">
+                        <select form="publishing_account_{{account.id}}" class="form-select" name="provider">
+                            <option value="MODRINTH" {%if account.provider == 'MODRINTH'%}selected{%endif%}>Modrinth</option>
+                            <option value="CURSEFORGE" {%if account.provider == 'CURSEFORGE'%}selected{%endif%}>CurseForge</option>
+                        </select>
+                    </td>
+                    <td><input form="publishing_account_{{account.id}}" class="form-control" name="name" value="{{account.name}}" maxlength="255" required></td>
+                    <td>
+                        <input form="publishing_account_{{account.id}}" class="form-control" type="password" name="provider_token" maxlength="4096" autocomplete="new-password" placeholder="Keep existing ••••{{account.token_hint}}">
+                    </td>
+                    <td><input form="publishing_account_{{account.id}}" class="form-check-input" type="checkbox" name="enabled" value="1" {%if account.enabled%}checked{%endif%}></td>
+                    <td class="text-nowrap">
+                        <button form="publishing_account_{{account.id}}" class="btn btn-primary btn-sm" name="save_publishing_account" value="1">Save</button>
+                        <button form="publishing_account_{{account.id}}" class="btn btn-danger btn-sm" name="delete_publishing_account" value="1">Delete</button>
+                    </td>
+            </tr>
+        {%endfor%}
+        </tbody>
+    </table>
+</div>
+{%endif%}
+
+<form method="post" action="{{url_for('asite.publishing')}}" class="row g-3 mb-5">
+    <div class="col-md-3">
+        <label class="form-label" for="new_provider">Provider</label>
+        <select class="form-select" id="new_provider" name="provider">
+            <option value="MODRINTH">Modrinth</option>
+            <option value="CURSEFORGE">CurseForge</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label" for="new_account_name">Account name</label>
+        <input class="form-control" id="new_account_name" name="name" maxlength="255" placeholder="Release account" required>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label" for="new_provider_token">Upload token</label>
+        <input class="form-control" type="password" id="new_provider_token" name="provider_token" maxlength="4096" autocomplete="new-password" required>
+    </div>
+    <div class="col-md-1 d-flex align-items-end">
+        <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="new_account_enabled" name="enabled" value="1" checked>
+            <label class="form-check-label" for="new_account_enabled">Enabled</label>
+        </div>
+    </div>
+    <div class="col-md-1 d-flex align-items-end">
+        <button class="btn btn-success mb-1" name="save_publishing_account" value="1">Add</button>
+    </div>
+</form>
+
+<h4>Modpack targets</h4>
+<p class="text-muted">
+    The remote project must already exist and the selected account must be
+    allowed to upload versions to it.
+</p>
+{%if targets%}
+{%for target in targets%}<form id="publication_target_{{target.id}}" method="post" action="{{url_for('asite.publishing')}}"></form>{%endfor%}
+<div class="table-responsive mb-4">
+    <table class="table table-striped table-sm align-middle">
+        <thead><tr><th>Modpack</th><th>Account</th><th>Project ID or slug</th><th>Enabled</th><th></th></tr></thead>
+        <tbody>
+        {%for target in targets%}
+            <tr>
+                    <td>
+                        <input form="publication_target_{{target.id}}" type="hidden" name="target_id" value="{{target.id}}">
+                        <select form="publication_target_{{target.id}}" class="form-select" name="modpack_id">
+                        {%for modpack in modpacks%}
+                            <option value="{{modpack.id}}" {%if modpack.id == target.modpack_id%}selected{%endif%}>{{modpack.name}}</option>
+                        {%endfor%}
+                        </select>
+                    </td>
+                    <td>
+                        <select form="publication_target_{{target.id}}" class="form-select" name="provider_account_id">
+                        {%for account in accounts%}
+                            <option value="{{account.id}}" {%if account.id == target.provider_account_id%}selected{%endif%}>{{account.provider_label}} — {{account.name}}</option>
+                        {%endfor%}
+                        </select>
+                    </td>
+                    <td><input form="publication_target_{{target.id}}" class="form-control" name="project_id" value="{{target.project_id}}" maxlength="191" required></td>
+                    <td><input form="publication_target_{{target.id}}" class="form-check-input" type="checkbox" name="enabled" value="1" {%if target.enabled%}checked{%endif%}></td>
+                    <td class="text-nowrap">
+                        <button form="publication_target_{{target.id}}" class="btn btn-primary btn-sm" name="save_publication_target" value="1">Save</button>
+                        <button form="publication_target_{{target.id}}" class="btn btn-danger btn-sm" name="delete_publication_target" value="1">Delete</button>
+                    </td>
+            </tr>
+        {%endfor%}
+        </tbody>
+    </table>
+</div>
+{%endif%}
+
+{%if accounts and modpacks%}
+<form method="post" action="{{url_for('asite.publishing')}}" class="row g-3">
+    <div class="col-md-4">
+        <label class="form-label" for="target_modpack">Modpack</label>
+        <select class="form-select" id="target_modpack" name="modpack_id">
+        {%for modpack in modpacks%}<option value="{{modpack.id}}">{{modpack.name}}</option>{%endfor%}
+        </select>
+    </div>
+    <div class="col-md-4">
+        <label class="form-label" for="target_account">Publishing account</label>
+        <select class="form-select" id="target_account" name="provider_account_id">
+        {%for account in accounts%}<option value="{{account.id}}">{{account.provider_label}} — {{account.name}}</option>{%endfor%}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <label class="form-label" for="target_project">Remote project ID or slug</label>
+        <input class="form-control" id="target_project" name="project_id" maxlength="191" required>
+    </div>
+    <div class="col-md-1 d-flex align-items-end">
+        <input type="hidden" name="enabled" value="1">
+        <button class="btn btn-success mb-1" name="save_publication_target" value="1">Add</button>
+    </div>
+</form>
+{%else%}
+<p>Add a provider account and a modpack before creating a publication target.</p>
+{%endif%}
+
+<hr class="my-5">
+<h4>Recent publication attempts</h4>
+{%if publication_runs%}
+<div class="table-responsive">
+    <table class="table table-striped table-sm align-middle">
+        <thead><tr><th>Build</th><th>Provider</th><th>Release</th><th>Status</th><th>Remote ID</th><th>Result</th><th></th></tr></thead>
+        <tbody>
+        {%for run in publication_runs%}
+            <tr>
+                <td>{{run.display_name}} (#{{run.build_id}})</td>
+                <td>{{run.provider_label}} — {{run.account_name}}</td>
+                <td>{{run.release_type}}</td>
+                <td>{{run.status}}</td>
+                <td>{{run.remote_file_id or '—'}}</td>
+                <td>{{run.error_message or 'Uploaded successfully'}}</td>
+                <td>
+                    {%if run.can_retry%}
+                    <form method="post" action="{{url_for('asite.publishing')}}">
+                        <input type="hidden" name="run_id" value="{{run.id}}">
+                        <button class="btn btn-warning btn-sm" name="release_publication_run" value="1">Allow retry</button>
+                    </form>
+                    {%endif%}
+                </td>
+            </tr>
+        {%endfor%}
+        </tbody>
+    </table>
+</div>
+{%else%}
+<p>No publication attempts have been recorded.</p>
+{%endif%}
+{%endblock%}

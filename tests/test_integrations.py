@@ -578,6 +578,20 @@ class MaterializationTests(unittest.TestCase):
         self.assertEqual(new.call_args.kwargs["integration_version_id"], "VERSION")
         self.assertEqual(new.call_args.kwargs["modloader"], "FABRIC")
         self.assertEqual(new.call_args.kwargs["jarfilesize"], len(jar_data))
+        self.assertEqual(
+            new.call_args.kwargs["download_source"],
+            {
+                "provider": MODRINTH,
+                "url": "https://cdn.modrinth.com/data/upstream.jar",
+                "filename": "upstream.jar",
+                "md5": hashlib.md5(
+                    jar_data, usedforsecurity=False
+                ).hexdigest(),
+                "sha1": None,
+                "sha512": hashlib.sha512(jar_data).hexdigest(),
+                "filesize": len(jar_data),
+            },
+        )
 
     def test_selected_modrinth_version_imports_required_dependencies(self):
         jar_data = self.jar_bytes()
@@ -679,7 +693,11 @@ class MaterializationTests(unittest.TestCase):
 
         self.assertIs(result.version, stored_root)
         import_project.assert_called_once_with(
-            MODRINTH, "DEPPROJ1", 7, http=provider.http
+            MODRINTH,
+            "DEPPROJ1",
+            7,
+            http=provider.http,
+            _change_context=import_project.call_args.kwargs["_change_context"],
         )
         provider.get_version_by_id.assert_called_once_with(
             "DEPVER01", "1.21.1", "FABRIC"
@@ -689,6 +707,34 @@ class MaterializationTests(unittest.TestCase):
             ["DEPVER01", "ROOTVER"],
         )
         ensure.assert_called_once_with(9, 10)
+
+    def test_management_import_keeps_multi_compatibility_out_of_provider_lookup(self):
+        mod = SimpleNamespace(id=9)
+        stored = SimpleNamespace(id=42)
+        with patch.object(
+            ModIntegration, "materialize", return_value=stored
+        ) as materialize:
+            result = ModIntegration.materialize_for_management(
+                mod,
+                "VERSION",
+                ["1.20.1", "1.20.2"],
+                ["FORGE", "NEOFORGE"],
+                7,
+                "uploads",
+            )
+
+        self.assertIs(result, stored)
+        provider_build = materialize.call_args.args[1]
+        self.assertEqual(provider_build.minecraft, "1.20.1")
+        self.assertEqual(provider_build.modloader, "FORGE")
+        self.assertEqual(
+            materialize.call_args.kwargs["_stored_minecraft"],
+            "1.20.1,1.20.2",
+        )
+        self.assertEqual(
+            materialize.call_args.kwargs["_stored_modloader"],
+            "FORGE,NEOFORGE",
+        )
 
     def test_modrinth_dependency_without_pinned_version_uses_latest_compatible(self):
         dependency_version = ExternalVersion(
@@ -736,12 +782,21 @@ class MaterializationTests(unittest.TestCase):
                 7,
                 "uploads",
                 dependency_path=("ROOTPROJ",),
+                stored_minecraft="1.21.1,1.21.2",
+                stored_modloader="FABRIC",
             )
 
         provider.list_versions.assert_called_once_with(
             "DEPPROJ1", "1.21.1", "FABRIC"
         )
         self.assertEqual(materialize.call_args.args[2], "LATEST01")
+        self.assertEqual(
+            materialize.call_args.kwargs["_stored_minecraft"],
+            "1.21.1,1.21.2",
+        )
+        self.assertEqual(
+            materialize.call_args.kwargs["_stored_modloader"], "FABRIC"
+        )
         ensure.assert_called_once_with(9, 10)
 
     def test_existing_materialized_version_is_reused_without_provider_call(self):
@@ -816,6 +871,40 @@ class MaterializationTests(unittest.TestCase):
                 )
 
         provider.assert_not_called()
+
+    def test_failed_dependency_graph_rolls_back_created_nodes(self):
+        mod = SimpleNamespace(
+            id=9,
+            name="example-mod",
+            integration_provider=MODRINTH,
+            integration_project_id="PROJECT",
+        )
+        build = SimpleNamespace(minecraft="1.21.1", modloader="FABRIC")
+
+        def fail_after_dependency(*_args, **kwargs):
+            context = kwargs["_dependency_context"]
+            context["created_mods"].add(10)
+            context["created_versions"].add(42)
+            context["dependency_edges"].append((9, 10))
+            raise IntegrationError("root download failed")
+
+        with (
+            patch.object(
+                ModIntegration, "_materialize", side_effect=fail_after_dependency
+            ),
+            patch.object(
+                ModIntegration, "_rollback_modrinth_materialization"
+            ) as rollback,
+            self.assertRaisesRegex(IntegrationError, "root download failed"),
+        ):
+            ModIntegration.materialize(
+                mod, build, "VERSION", 7, "uploads"
+            )
+
+        context = rollback.call_args.args[0]
+        self.assertEqual(context["created_mods"], {10})
+        self.assertEqual(context["created_versions"], {42})
+        self.assertEqual(context["dependency_edges"], [(9, 10)])
 
 
 if __name__ == "__main__":

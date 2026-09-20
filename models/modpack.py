@@ -67,22 +67,55 @@ class Modpack:
         cur.execute("SELECT LAST_INSERT_ID() AS id")
 
     @staticmethod
+    def delete_related_rows(cursor, modpack_id):
+        """Delete pack-owned mappings using the caller's transaction."""
+        cursor.execute(
+            """DELETE modpack_publication_runs
+               FROM modpack_publication_runs
+               INNER JOIN modpack_publication_targets
+                   ON modpack_publication_targets.id =
+                      modpack_publication_runs.target_id
+               WHERE modpack_publication_targets.modpack_id = %s""",
+            (modpack_id,),
+        )
+        cursor.execute(
+            "DELETE FROM modpack_publication_targets WHERE modpack_id = %s",
+            (modpack_id,),
+        )
+        cursor.execute(
+            "DELETE FROM client_modpack WHERE modpack_id = %s", (modpack_id,)
+        )
+        cursor.execute(
+            "DELETE FROM user_modpack WHERE modpack_id = %s", (modpack_id,)
+        )
+        cursor.execute(
+            """UPDATE user_permissions
+               SET modpacks = TRIM(BOTH ',' FROM REPLACE(
+                   CONCAT(',', COALESCE(modpacks, ''), ','),
+                   CONCAT(',', %s, ','),
+                   ','
+               ))""",
+            (modpack_id,),
+        )
+
+    @staticmethod
     def delete_modpack(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM builds WHERE modpack_id = %s", (id,))
-        modversions = cur.fetchall()
-        if modversions:
-            from .advanced_optional import AdvancedOptional
-            from .technic_solderpy_loader import TechnicSolderPyLoader
-
-            for mv in modversions:
-                AdvancedOptional.delete_build(cur, mv["id"])
-                TechnicSolderPyLoader.delete_build(cur, mv["id"])
-                cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (mv["id"],))
-        cur.execute("DELETE FROM builds WHERE modpack_id = %s", (id,))
-        cur.execute("DELETE FROM modpacks WHERE id=%s", (id,))
-        conn.commit()
+        try:
+            cur.execute("SELECT id FROM builds WHERE modpack_id = %s", (id,))
+            for build in cur.fetchall() or []:
+                Build.delete_related_rows(cur, build["id"])
+            Modpack.delete_related_rows(cur, id)
+            cur.execute("DELETE FROM builds WHERE modpack_id = %s", (id,))
+            cur.execute("DELETE FROM modpacks WHERE id=%s", (id,))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     @classmethod
     def get_by_id(cls, id):
@@ -189,6 +222,30 @@ class Modpack:
         if rows:
             return rows
         return []
+
+    @staticmethod
+    def get_all_for_user(user_id) -> list:
+        """Return modpacks assigned to a user, or every pack for full admins."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT DISTINCT modpacks.*
+                   FROM modpacks
+                   INNER JOIN user_permissions
+                       ON user_permissions.user_id = %s
+                   LEFT JOIN user_modpack
+                       ON user_modpack.user_id = %s
+                      AND user_modpack.modpack_id = modpacks.id
+                   WHERE user_permissions.solder_full = 1
+                      OR user_modpack.modpack_id IS NOT NULL
+                   ORDER BY modpacks.name, modpacks.id""",
+                (int(user_id), int(user_id)),
+            )
+            return cur.fetchall() or []
+        finally:
+            cur.close()
+            conn.close()
 
     def get_builds(self):
         return Build.get_by_modpack(self)

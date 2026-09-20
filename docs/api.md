@@ -236,7 +236,9 @@ adds one internal `solderpy-loader-bootstrap` entry containing SolderPy Loader,
 Relauncher, and the build configuration. `LAUNCHER` and `BOOTSTRAP` entries
 remain in the Technic response; every other package is supplied by the
 dedicated bootstrap API before mod discovery. If that integration becomes
-inactive, ordinary Technic manifest delivery applies again.
+inactive, ordinary Technic manifest delivery applies again. Activating it also
+disables the modpack's legacy optional shadow build so Technic receives only
+one optional-delivery mechanism.
 
 `java_runtime` is the nullable per-build Mojang runtime override supported by
 current Technic Launcher releases. Accepted component names are `jre-legacy`
@@ -515,12 +517,13 @@ is unchanged.
 
 ## Metadata values
 
-A mod version may target more than one Minecraft version or modloader. The
-legacy-compatible `minecraft`/`mcversion` and `modloader` fields store those
-sets as comma-separated strings. Extended read manifests, bootstrap manifests,
-and write-API version responses also expose `minecraft_versions` and
-`modloaders` arrays so new clients do not need to parse the storage form. A
-null/empty set remains universal.
+A mod version may target more than one Minecraft version or modloader. A
+single Minecraft version remains in the legacy-compatible
+`minecraft`/`mcversion` field; a multi-version row uses the stable value
+`MULTI`. Read `minecraft_versions` for the concrete compatibility list.
+`modloader` retains its comma-separated compatibility string and
+`modloaders` exposes the same values as an array. A null/empty set remains
+universal.
 
 `side` is one of:
 

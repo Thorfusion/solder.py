@@ -1,12 +1,12 @@
 import os
+from copy import copy
 from pathlib import Path
 import tempfile
-import threading
 import boto3
 import requests
 
 from api import solderpy_version
-from flask import Blueprint, app, flash, jsonify, redirect, render_template, request, send_file, session, url_for
+from flask import Blueprint, app, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 from models.build import (
     Build,
     InvalidJavaRuntimeError,
@@ -17,7 +17,10 @@ from models.build_modversion import Build_modversion
 from models.api_token import ApiToken
 from models.client import Client
 from models.client_modpack import Client_modpack
-from models.compatibility import InvalidModloaderError
+from models.compatibility import (
+    InvalidModloaderError,
+    minecraft_version_storage,
+)
 from models.database import Database
 from models.dashboard import Dashboard
 from models.advanced_optional import (
@@ -51,6 +54,12 @@ from models.platform_export_override import (
     PlatformExportOverride,
     PlatformExportOverrideError,
 )
+from models.platform_publishing import (
+    CURSEFORGE as PUBLISH_CURSEFORGE,
+    MODRINTH as PUBLISH_MODRINTH,
+    PlatformPublishing,
+    PublishingError,
+)
 from models.integration import (
     GITHUB,
     MAVEN,
@@ -83,7 +92,7 @@ from models.session import Session
 from models.user import User
 from mysql import connector
 from werkzeug.utils import secure_filename
-from models.common import api_only, app_url, public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl, write_api, curseforge_api_key
+from models.common import api_only, app_url, public_repo_url, debug, host, port, md5_repo_url, R2_URL, db_name, R2_BUCKET, new_user, migratetechnic, solderpy_version, R2_REGION, R2_ENDPOINT, R2_ACCESS_KEY, R2_SECRET_KEY, UPLOAD_FOLDER, common, DB_IS_UP, cache_size, cache_ttl, write_api, curseforge_api_key, legacy_modversion_adding
 from models.user_modpack import User_modpack
 from models.errorPrinter import ErrorPrinter
 
@@ -176,6 +185,26 @@ def _selected_integration_version(value):
         return None
     return external_id(value[len(prefix):])
 
+
+def _latest_provider_versions(integrated_mods, build, user_id):
+    """Return newest compatible provider metadata without importing files."""
+    latest = {}
+    errors = []
+    for integrated_mod in integrated_mods or ():
+        try:
+            mod = Mod.get_by_id(integrated_mod["id"])
+            versions = ModIntegration.list_versions(mod, build, user_id)
+            if versions:
+                latest[int(integrated_mod["id"])] = versions[0]
+        except IntegrationError as error:
+            errors.append(f'{integrated_mod["pretty_name"]}: {error}')
+        except Exception as error:
+            ErrorPrinter.message("failed to check provider-managed mod", error)
+            errors.append(
+                f'{integrated_mod["pretty_name"]}: provider update check failed'
+            )
+    return latest, errors
+
 def createFolder(dirName):
     os.makedirs(dirName, exist_ok=True)
 
@@ -195,6 +224,7 @@ def inject_menu():
         solderversion=solderpy_version,
         pinnedmodpacks=pinnedmodpacks,
         write_api_enabled=write_api,
+        night_mode=bool(getattr(g, "solder_night_mode", False)),
     )
 
 
@@ -237,7 +267,9 @@ def modversion(id):
     try:
         modversions = mod.get_versions()
         for version in modversions:
-            version["mcil_ready"] = MCInstanceJar.is_ready(version.get("jarmd5"))
+            version["mcil_ready"] = MCInstanceJar.has_complete_metadata(
+                version.get("jarmd5"), version.get("jarfilesize")
+            )
         dependencies, available_dependencies = ModDependency.get_management_data(id)
     except connector.ProgrammingError as e:
         Database.create_tables()
@@ -269,6 +301,99 @@ def modversion(id):
         available_dependencies=available_dependencies,
         upstream_versions=upstream_versions,
         upstream_error=upstream_error,
+        legacy_modversion_adding=legacy_modversion_adding,
+    )
+
+
+@asite.route(
+    "/modversion/<int:mod_id>/manage/<int:version_id>",
+    methods=["GET", "POST"],
+)
+def manage_modversion(mod_id, version_id):
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "mods_manage") == 0:
+        return redirect(url_for("asite.index"))
+
+    mod = Mod.get_by_id(mod_id)
+    version = Modversion.get_by_id(version_id)
+    if (
+        mod is None
+        or version is None
+        or int(version.mod_id) != int(mod.id)
+    ):
+        return render_template("404.html", error="Mod version not found"), 404
+
+    if request.method == "POST":
+        from api import clear_api_caches
+
+        if "verify_zip_submit" in request.form:
+            try:
+                version.rehash(md5_repo_url, mod.name)
+            except (OSError, requests.RequestException, ValueError) as error:
+                flash(str(error), "error")
+            else:
+                clear_api_caches()
+                flash(
+                    f"Verified ZIP ({version.md5}, {version.filesize} bytes).",
+                    "success",
+                )
+        elif "jar_action_submit" in request.form:
+            was_ready = MCInstanceJar.is_ready(version.jarmd5)
+            try:
+                jar_md5 = MCInstanceJar.create(
+                    mod,
+                    version,
+                    md5_repo_url,
+                    UPLOAD_FOLDER,
+                    R2,
+                    R2_BUCKET,
+                )
+            except MCInstanceExportError as error:
+                flash(str(error), "error")
+            except Exception as error:
+                ErrorPrinter.message("failed to create or verify raw JAR", error)
+                flash("Failed to create or verify the raw JAR.", "error")
+            else:
+                clear_api_caches()
+                action = "Verified" if was_ready else "Created"
+                flash(f"{action} the raw JAR ({jar_md5}).", "success")
+        else:
+            value = request.form.get("jar_url_override", "")
+            try:
+                if value.strip() and not Modversion.JAR_MD5_PATTERN.fullmatch(
+                    str(version.jarmd5 or "").strip()
+                ):
+                    raise ValueError(
+                        "Create and verify the raw JAR before adding an override URL."
+                    )
+                Modversion.update_jar_url_override(version.id, mod.id, value)
+            except ValueError as error:
+                flash(str(error), "error")
+            else:
+                clear_api_caches()
+                flash("updated the JAR download override", "success")
+        return redirect(
+            url_for(
+                "asite.manage_modversion",
+                mod_id=mod.id,
+                version_id=version.id,
+            )
+        )
+
+    maven_artifact = None
+    if getattr(mod, "integration_provider", None) == MAVEN:
+        maven_artifact = MavenArtifact.get_by_mod_id(mod.id)
+    return render_template(
+        "manage_modversion.html",
+        mod=mod,
+        version=version,
+        mirror_url=public_repo_url,
+        builds=version.get_management_builds(),
+        maven_artifact=maven_artifact,
+        jar_ready=MCInstanceJar.is_ready(version.jarmd5),
     )
 
 
@@ -420,30 +545,6 @@ def newmodversion(id):
         Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form.get("notes", request.form.get("internal_note", "")))
         flash("updated " + id, "success")
         return redirect(url_for("asite.modversion", id=id))
-    if "createmciljar_submit" in request.form:
-        version_id = request.form.get("createmciljar_id", "").strip()
-        mod = Mod.get_by_id(id)
-        version = Modversion.get_by_id(version_id) if version_id else None
-        try:
-            jar_md5 = MCInstanceJar.create(
-                mod,
-                version,
-                md5_repo_url,
-                UPLOAD_FOLDER,
-                R2,
-                R2_BUCKET,
-            )
-        except MCInstanceExportError as error:
-            flash(str(error), "error")
-        except Exception as error:
-            ErrorPrinter.message("failed to create MCInstanceLoader JAR", error)
-            flash("Failed to store the MCInstanceLoader JAR.", "error")
-        else:
-            flash(
-                f"Created and verified the MCInstanceLoader JAR ({jar_md5}).",
-                "success",
-            )
-        return redirect(url_for("asite.modversion", id=id))
     if "deleteversion_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_delete") == 0:
                 return redirect(request.referrer)
@@ -475,34 +576,13 @@ def newmodversion(id):
         Mod.delete_mod(request.form["mod_delete_id"])
         flash("deleted mod" + id, "success")
         return redirect(url_for('asite.modlibrary'))
-    if "rehash_submit" in request.form:
-        if "rehash_id" not in request.form:
-            return redirect(url_for('asite.clientlibrary'))
-
-        mod = Mod.get_by_id(id)
-        version = Modversion.get_by_id(request.form["rehash_id"])
-        if (
-            mod is None
-            or version is None
-            or int(version.mod_id) != int(mod.id)
-        ):
-            flash("the selected mod version no longer exists", "error")
-            return redirect(url_for("asite.modversion", id=id))
-        try:
-            if request.form["rehash_md5"] != "":
-                version.update_hash(
-                    request.form["rehash_md5"], md5_repo_url, mod.name
-                )
-            else:
-                t = threading.Thread(
-                    target=version.rehash,
-                    args=(md5_repo_url, mod.name),
-                )
-                t.start()
-        except (OSError, requests.RequestException, ValueError) as error:
-            flash(str(error), "error")
-            return redirect(url_for("asite.modversion", id=id))
     if "newmodvermanual_submit" in request.form:
+        if not legacy_modversion_adding:
+            flash(
+                "Legacy manual version adding is disabled by the server.",
+                "error",
+            )
+            return redirect(url_for("asite.modversion", id=id))
         if User.get_permission_token(session["token"], "mods_create") == 0:
                 return redirect(request.referrer)
         mod = Mod.get_by_id(id)
@@ -854,6 +934,10 @@ def maven():
                     request.form.get("link"),
                     request.form.get("side"),
                 )
+                if request.form.get("solderpy_loader_direct") == "1":
+                    artifact = MavenArtifact.update_solderpy_loader_direct(
+                        artifact.id, True
+                    )
                 MavenCatalog.refresh(artifact)
                 mod, _created = ModIntegration.import_project(
                     MAVEN, str(artifact.id),
@@ -907,6 +991,15 @@ def maven_artifact(artifact_id):
                     request.form.get("modloader"),
                 )
                 flash("updated Maven version mapping rule", "success")
+            elif "save_direct_downloads" in request.form:
+                MavenArtifact.update_solderpy_loader_direct(
+                    artifact_id,
+                    request.form.get("solderpy_loader_direct") == "1",
+                )
+                from api import clear_api_caches
+
+                clear_api_caches()
+                flash("updated SolderPy Loader Maven downloads", "success")
             elif "refresh_versions" in request.form:
                 versions = MavenCatalog.refresh(artifact)
                 flash(f"loaded {len(versions)} Maven version(s)", "success")
@@ -1104,7 +1197,7 @@ def mainsettings():
         return redirect(url_for("asite.mainsettings"))
 
     distribution_settings = DistributionSettings.get_all()
-    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, app_url=app_url, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_ttl=cache_ttl, distribution_settings=distribution_settings, curseforge_api_configured=bool(curseforge_api_key))
+    return render_template("mainsettings.html", nam=__name__, deb=debug, host=host, port=port, app_url=app_url, public_repo_url=public_repo_url, md5_repo_url=md5_repo_url, r2_url=R2_URL, db_name=db_name, versr=__version__, r2_bucket=R2_BUCKET, newuser=new_user, technic=migratetechnic, DB_IS_UP=DB_IS_UP, cache_size=cache_size, cache_ttl=cache_ttl, distribution_settings=distribution_settings, curseforge_api_configured=bool(curseforge_api_key), legacy_modversion_adding=legacy_modversion_adding)
 
 
 @asite.route("/platform-export-overrides", methods=["GET", "POST"])
@@ -1114,7 +1207,7 @@ def platform_export_overrides():
     ):
         return redirect(url_for("alogin.login"))
     if User.get_permission_token(session["token"], "solder_env") == 0:
-        return redirect(request.referrer or url_for("asite.index"))
+        return redirect(url_for("asite.index"))
 
     if request.method == "POST":
         try:
@@ -1169,6 +1262,71 @@ def platform_export_overrides():
     )
 
 
+@asite.route("/publishing", methods=["GET", "POST"])
+def publishing():
+    if "token" not in session or not Session.verify_session(
+        session["token"], request.remote_addr
+    ):
+        return redirect(url_for("alogin.login"))
+    if User.get_permission_token(session["token"], "modpacks_manage") == 0:
+        return redirect(url_for("asite.index"))
+
+    user_id = Session.get_user_id(session["token"])
+
+    if request.method == "POST":
+        try:
+            if "save_publishing_account" in request.form:
+                PlatformPublishing.save_account(
+                    request.form.get("account_id"),
+                    request.form.get("provider"),
+                    request.form.get("name"),
+                    request.form.get("provider_token"),
+                    "enabled" in request.form,
+                    user_id,
+                )
+                flash("Publishing account saved.", "success")
+            elif "delete_publishing_account" in request.form:
+                PlatformPublishing.delete_account(
+                    request.form.get("account_id"), user_id
+                )
+                flash("Publishing account deleted.", "success")
+            elif "save_publication_target" in request.form:
+                PlatformPublishing.save_target(
+                    request.form.get("target_id"),
+                    request.form.get("modpack_id"),
+                    request.form.get("provider_account_id"),
+                    request.form.get("project_id"),
+                    "enabled" in request.form,
+                    user_id,
+                )
+                flash("Modpack publication target saved.", "success")
+            elif "delete_publication_target" in request.form:
+                PlatformPublishing.delete_target(
+                    request.form.get("target_id"), user_id
+                )
+                flash("Modpack publication target deleted.", "success")
+            elif "release_publication_run" in request.form:
+                PlatformPublishing.release_run_for_retry(
+                    request.form.get("run_id"), user_id
+                )
+                flash(
+                    "The publication lock was released. Verify the remote "
+                    "project before retrying.",
+                    "success",
+                )
+        except (PublishingError, TypeError, ValueError) as error:
+            flash(str(error), "error")
+        return redirect(url_for("asite.publishing"))
+
+    return render_template(
+        "publishing.html",
+        accounts=PlatformPublishing.get_accounts(user_id),
+        targets=PlatformPublishing.get_targets(user_id),
+        publication_runs=PlatformPublishing.get_recent_runs(user_id),
+        modpacks=Modpack.get_all_for_user(user_id),
+    )
+
+
 @asite.route("/platform-export-overrides/export", methods=["GET"])
 def export_platform_sync():
     if "token" not in session or not Session.verify_session(
@@ -1176,7 +1334,7 @@ def export_platform_sync():
     ):
         return redirect(url_for("alogin.login"))
     if User.get_permission_token(session["token"], "solder_env") == 0:
-        return redirect(request.referrer or url_for("asite.index"))
+        return redirect(url_for("asite.index"))
 
     try:
         output = PlatformExportOverride.render_manifest()
@@ -1332,15 +1490,15 @@ def userlibrary_post():
             flash("deleted user", "success")
             return redirect(url_for('asite.userlibrary'))
         if "changeuser_submit" in request.form:
-            userid = str(Session.get_user_id(session["token"]))
-            changeid = request.form["changeuser_id"]
-            if userid not in changeid:
-                if User.get_permission_token(session["token"], "solder_users") == 0:
-                    return redirect(request.referrer)
             if "changeuser_id" not in request.form:
                 return redirect(url_for('asite.userlibrary'))
             if "changeuser_password" not in request.form:
                 return redirect(url_for('asite.userlibrary'))
+            userid = str(Session.get_user_id(session["token"]))
+            changeid = request.form["changeuser_id"]
+            if userid != changeid:
+                if User.get_permission_token(session["token"], "solder_users") == 0:
+                    return redirect(url_for('asite.userlibrary'))
             User.change(request.form["changeuser_id"], request.form["changeuser_password"], request.remote_addr, Session.get_user_id(session["token"]))
             flash("updated user", "success")
             return redirect(url_for('asite.userlibrary'))
@@ -1435,27 +1593,32 @@ def modpackbuild(id):
             else:
                 build = Build.get_by_id(id)
                 user_id = Session.get_user_id(session["token"])
-                for integrated_mod in integrated_mods:
+                integration_names = {
+                    int(item["id"]): item["pretty_name"]
+                    for item in integrated_mods
+                }
+                latest_versions, lookup_errors = _latest_provider_versions(
+                    integrated_mods, build, user_id
+                )
+                integration_errors.extend(lookup_errors)
+                for mod_id, latest in latest_versions.items():
                     try:
-                        mod = Mod.get_by_id(integrated_mod["id"])
-                        versions = ModIntegration.list_versions(
-                            mod, build, user_id
+                        materialized = _materialize_integration_version(
+                            mod_id, id, latest.version_id
                         )
-                        if versions:
-                            materialized = _materialize_integration_version(
-                                mod.id, id, versions[0].version_id
-                            )
-                            preferred_versions[mod.id] = materialized.version.id
+                        preferred_versions[mod_id] = materialized.version.id
                     except IntegrationError as error:
                         integration_errors.append(
-                            f'{integrated_mod["pretty_name"]}: {error}'
+                            f'{integration_names.get(mod_id, f"Mod {mod_id}")}: '
+                            f"{error}"
                         )
                     except Exception as error:
                         ErrorPrinter.message(
                             "failed to update provider-managed mod", error
                         )
                         integration_errors.append(
-                            f'{integrated_mod["pretty_name"]}: provider update failed'
+                            f'{integration_names.get(mod_id, f"Mod {mod_id}")}: '
+                            "provider update failed"
                         )
 
             updated = Build_modversion.update_all_compatible(
@@ -1611,16 +1774,76 @@ def modpackbuild(id):
         flash("unable to find build", "error")
         return redirect(url_for("asite.modpacklibrary"))
 
+    if request.args.get("check_updates") == "1":
+        update_memberships = set()
+        for combo in editor.buildlist:
+            compatible = combo.get("versions") or []
+            if (
+                compatible
+                and int(compatible[0]["id"]) != int(combo["modverid"])
+            ):
+                update_memberships.add(int(combo["id"]))
+                combo["available_version"] = compatible[0]["version"]
+
+        integrated_mods = Build_modversion.get_integrated_mods(id)
+        integration_errors = []
+        latest_versions = {}
+        if integrated_mods and User.get_permission_token(
+            session["token"], "mods_manage"
+        ) == 0:
+            integration_errors.append(
+                "Provider-managed mods need mod management permission."
+            )
+        else:
+            latest_versions, integration_errors = _latest_provider_versions(
+                integrated_mods,
+                editor.packbuild,
+                Session.get_user_id(session["token"]),
+            )
+
+        for combo in editor.buildlist:
+            if not combo.get("integration_provider"):
+                continue
+            latest = latest_versions.get(int(combo["modid"]))
+            if latest is None:
+                continue
+            membership_id = int(combo["id"])
+            if str(combo.get("integration_version_id") or "") == str(
+                latest.version_id
+            ):
+                update_memberships.discard(membership_id)
+                combo.pop("available_version", None)
+            else:
+                update_memberships.add(membership_id)
+                combo["available_version"] = latest.version_number
+
+        for combo in editor.buildlist:
+            combo["update_available"] = int(combo["id"]) in update_memberships
+
+        if update_memberships:
+            flash(
+                f"{len(update_memberships)} mod update(s) available.",
+                "success",
+            )
+        elif not integration_errors:
+            flash("All checked mods are up to date.", "success")
+        if integration_errors:
+            flash("; ".join(integration_errors), "error")
+
     distribution_settings = DistributionSettings.get_all()
     export_requested = (
         request.method == "GET" and request.args.get("export") == "1"
     )
     modrinth_downloaders, modrinth_downloader_error = (), None
+    server_downloaders, server_downloader_error = (), None
     prism_downloaders, prism_downloader_error = (), None
     curseforge_downloaders, curseforge_downloader_error = (), None
+    publication_targets = ()
+    publication_states = {}
     if export_requested and (
         distribution_settings[DistributionSettings.MRPACK]
         or distribution_settings[DistributionSettings.PRISM]
+        or distribution_settings[DistributionSettings.SOLDERPY_LOADER]
     ):
         resolved_downloaders, resolved_error = _available_downloaders(
             editor.packbuild, distribution_settings, "modrinth"
@@ -1631,6 +1854,18 @@ def modpackbuild(id):
         if distribution_settings[DistributionSettings.PRISM]:
             prism_downloaders = resolved_downloaders
             prism_downloader_error = resolved_error
+        if distribution_settings[DistributionSettings.SOLDERPY_LOADER]:
+            server_downloaders = tuple(
+                downloader
+                for downloader in resolved_downloaders
+                if downloader.key == "solderpyloader"
+            )
+            server_downloader_error = resolved_error
+            if not server_downloaders and server_downloader_error is None:
+                server_downloader_error = (
+                    "No compatible SolderPy Loader release was found for "
+                    "this build."
+                )
     if (
         export_requested
         and distribution_settings[DistributionSettings.CURSEFORGE]
@@ -1640,6 +1875,32 @@ def modpackbuild(id):
                 editor.packbuild, distribution_settings, "curseforge"
             )
         )
+    if export_requested:
+        publication_targets = tuple(
+            target
+            for target in PlatformPublishing.get_targets(
+                Session.get_user_id(session["token"]),
+                modpack_id,
+                enabled_only=True,
+            )
+            if (
+                target.provider == PUBLISH_MODRINTH
+                and distribution_settings[DistributionSettings.MRPACK]
+            )
+            or (
+                target.provider == PUBLISH_CURSEFORGE
+                and distribution_settings[DistributionSettings.CURSEFORGE]
+            )
+        )
+        if publication_targets:
+            publication_states = (
+                PlatformPublishing.get_build_publication_states(
+                    publication_targets,
+                    editor.packbuild.id,
+                    editor.packbuild.version,
+                    Session.get_user_id(session["token"]),
+                )
+            )
 
     return render_template(
         "modpackbuild.html",
@@ -1654,10 +1915,14 @@ def modpackbuild(id):
         export_requested=export_requested,
         modrinth_downloaders=modrinth_downloaders,
         modrinth_downloader_error=modrinth_downloader_error,
+        server_downloaders=server_downloaders,
+        server_downloader_error=server_downloader_error,
         prism_downloaders=prism_downloaders,
         prism_downloader_error=prism_downloader_error,
         curseforge_downloaders=curseforge_downloaders,
         curseforge_downloader_error=curseforge_downloader_error,
+        publication_targets=publication_targets,
+        publication_states=publication_states,
     )
 
 
@@ -1920,7 +2185,7 @@ def export_mcinstance(id):
     try:
         build, packages = MCInstanceExport.load(id)
         build = PlatformPackExport.override_modloader_version(
-            build, request.args.get("forge_version")
+            build, request.values.get("forge_version")
         )
         source_mode = PlatformPackExport.source_mode(
             request.args.get("source"), default="solder"
@@ -1985,6 +2250,78 @@ def _hosted_export_allowed(build):
     return False
 
 
+def _render_native_platform_archive(
+    provider, build, packages, build_id, *, version_override=None
+):
+    """Render the same archive used by downloads and direct publishing."""
+    selector = request.values.get("selector")
+    if version_override is not None:
+        # Patch publication changes the native platform version number, not the
+        # Solder build that a hosted downloader follows.
+        if not selector or selector == "build":
+            selector = str(build.version)
+        build = copy(build)
+        build.version = str(version_override)
+    if provider == PUBLISH_MODRINTH:
+        downloader = request.values.get("modrinth_downloader") or request.values.get(
+            "downloader"
+        )
+        if not _downloader_export_enabled(downloader):
+            return None
+        archive = PlatformPackExport.render_mrpack(
+            build,
+            packages,
+            downloader,
+            public_repo_url,
+            UPLOAD_FOLDER,
+            app_url,
+            source_mode=request.values.get("source"),
+            delivery=request.values.get("delivery"),
+            selector=selector,
+            export_overrides=PlatformExportOverride.get_enabled(),
+            optional_groups=AdvancedOptional.get_active_groups_for_packages(
+                build_id, packages
+            ),
+        )
+        return (
+            archive,
+            secure_filename(f"{build.modpack_slug}-{build.version}.mrpack"),
+            "application/x-modrinth-modpack+zip",
+        )
+
+    if provider == PUBLISH_CURSEFORGE:
+        downloader = request.values.get("curseforge_downloader") or request.values.get(
+            "downloader"
+        )
+        if not _downloader_export_enabled(downloader):
+            return None
+        archive = PlatformPackExport.render_curseforge(
+            build,
+            packages,
+            downloader,
+            public_repo_url,
+            UPLOAD_FOLDER,
+            app_url,
+            curseforge_api_key=curseforge_api_key,
+            source_mode=request.values.get("source"),
+            delivery=request.values.get("delivery"),
+            selector=selector,
+            export_overrides=PlatformExportOverride.get_enabled(),
+            optional_groups=AdvancedOptional.get_active_groups_for_packages(
+                build_id, packages
+            ),
+        )
+        return (
+            archive,
+            secure_filename(
+                f"{build.modpack_slug}-{build.version}-curseforge.zip"
+            ),
+            "application/zip",
+        )
+
+    raise PublishingError("The selected publishing provider is not supported.")
+
+
 @asite.route("/modpackbuild/<int:id>/solderpy-loader", methods=["GET"])
 def export_solderpy_loader(id):
     if not DistributionSettings.is_enabled(
@@ -2008,6 +2345,45 @@ def export_solderpy_loader(id):
 
     filename = secure_filename(
         f"{build.modpack_slug}-{build.version}-solderpy-loader.zip"
+    )
+    return send_file(
+        archive,
+        mimetype="application/zip",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@asite.route("/modpackbuild/<int:id>/server", methods=["GET"])
+def export_server(id):
+    if not DistributionSettings.is_enabled(
+        DistributionSettings.SOLDERPY_LOADER
+    ):
+        return render_template("404.html", error="Not Found"), 404
+
+    loaded, failure = _platform_export_build(id)
+    if failure is not None:
+        return failure
+    build, packages = loaded
+    downloader = request.args.get("server_downloader")
+    if not _downloader_export_enabled(downloader):
+        return redirect(url_for("asite.modpackbuild", id=id))
+    try:
+        archive = PlatformPackExport.render_server(
+            build,
+            packages,
+            downloader,
+            public_repo_url,
+            UPLOAD_FOLDER,
+            app_url,
+            selector=request.args.get("selector"),
+        )
+    except PlatformExportError as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpackbuild", id=id))
+
+    filename = secure_filename(
+        f"{build.modpack_slug}-{build.version}-server.zip"
     )
     return send_file(
         archive,
@@ -2210,35 +2586,20 @@ def export_mrpack(id):
     if failure is not None:
         return failure
     build, packages = loaded
-    downloader = request.args.get("modrinth_downloader") or request.args.get(
-        "downloader"
-    )
-    if not _downloader_export_enabled(downloader):
-        return redirect(url_for("asite.modpackbuild", id=id))
     try:
-        archive = PlatformPackExport.render_mrpack(
-            build,
-            packages,
-            downloader,
-            public_repo_url,
-            UPLOAD_FOLDER,
-            app_url,
-            source_mode=request.args.get("source"),
-            delivery=request.args.get("delivery"),
-            selector=request.args.get("selector"),
-            export_overrides=PlatformExportOverride.get_enabled(),
-            optional_groups=AdvancedOptional.get_active_groups_for_packages(
-                id, packages
-            ),
+        rendered = _render_native_platform_archive(
+            PUBLISH_MODRINTH, build, packages, id
         )
     except PlatformExportError as error:
         flash(str(error), "error")
         return redirect(url_for("asite.modpackbuild", id=id))
+    if rendered is None:
+        return redirect(url_for("asite.modpackbuild", id=id))
+    archive, filename, mimetype = rendered
 
-    filename = secure_filename(f"{build.modpack_slug}-{build.version}.mrpack")
     return send_file(
         archive,
-        mimetype="application/x-modrinth-modpack+zip",
+        mimetype=mimetype,
         as_attachment=True,
         download_name=filename,
     )
@@ -2253,41 +2614,107 @@ def export_curseforge(id):
     if failure is not None:
         return failure
     build, packages = loaded
-    downloader = request.args.get("curseforge_downloader") or request.args.get(
-        "downloader"
-    )
-    if not _downloader_export_enabled(downloader):
-        return redirect(url_for("asite.modpackbuild", id=id))
     try:
-        archive = PlatformPackExport.render_curseforge(
-            build,
-            packages,
-            downloader,
-            public_repo_url,
-            UPLOAD_FOLDER,
-            app_url,
-            curseforge_api_key=curseforge_api_key,
-            source_mode=request.args.get("source"),
-            delivery=request.args.get("delivery"),
-            selector=request.args.get("selector"),
-            export_overrides=PlatformExportOverride.get_enabled(),
-            optional_groups=AdvancedOptional.get_active_groups_for_packages(
-                id, packages
-            ),
+        rendered = _render_native_platform_archive(
+            PUBLISH_CURSEFORGE, build, packages, id
         )
     except PlatformExportError as error:
         flash(str(error), "error")
         return redirect(url_for("asite.modpackbuild", id=id))
+    if rendered is None:
+        return redirect(url_for("asite.modpackbuild", id=id))
+    archive, filename, mimetype = rendered
 
-    filename = secure_filename(
-        f"{build.modpack_slug}-{build.version}-curseforge.zip"
-    )
     return send_file(
         archive,
-        mimetype="application/zip",
+        mimetype=mimetype,
         as_attachment=True,
         download_name=filename,
     )
+
+
+@asite.route(
+    "/modpackbuild/<int:id>/publish/<int:target_id>", methods=["POST"]
+)
+def publish_build(id, target_id):
+    loaded, failure = _platform_export_build(id)
+    if failure is not None:
+        return failure
+    build, packages = loaded
+    user_id = Session.get_user_id(session["token"])
+    targets = PlatformPublishing.get_targets(
+        user_id, build.modpack_id, enabled_only=True
+    )
+    target = next((item for item in targets if item.id == target_id), None)
+    if target is None:
+        flash("The selected publication target is not enabled.", "error")
+        return redirect(url_for("asite.modpackbuild", id=id))
+
+    setting = (
+        DistributionSettings.MRPACK
+        if target.provider == PUBLISH_MODRINTH
+        else DistributionSettings.CURSEFORGE
+    )
+    if not DistributionSettings.is_enabled(setting):
+        flash(
+            f"Enable {target.provider_label} exports before publishing.",
+            "error",
+        )
+        return redirect(url_for("asite.modpackbuild", id=id))
+
+    try:
+        publication_state = PlatformPublishing.get_build_publication_states(
+            (target,), build.id, build.version, user_id
+        )[target.id]
+        if publication_state.locked:
+            raise PublishingError(
+                "This build already has a publishing attempt in progress or "
+                "with an unknown result. Check the provider before allowing "
+                "a retry."
+            )
+        rendered = _render_native_platform_archive(
+            target.provider,
+            build,
+            packages,
+            id,
+            version_override=publication_state.version_number,
+        )
+        if rendered is None:
+            return redirect(url_for("asite.modpackbuild", id=id))
+        archive, filename, _mimetype = rendered
+        try:
+            result = PlatformPublishing.publish(
+                target.id,
+                build.modpack_id,
+                build,
+                archive,
+                filename,
+                request.form.get("release_type"),
+                request.form.get("changelog"),
+                user_id,
+                expected_version=publication_state.version_number,
+            )
+        finally:
+            archive.close()
+    except (PlatformExportError, PublishingError) as error:
+        flash(str(error), "error")
+        return redirect(url_for("asite.modpackbuild", id=id, export=1))
+    except Exception as error:
+        ErrorPrinter.message("Unable to publish modpack build", error)
+        flash("The modpack could not be published.", "error")
+        return redirect(url_for("asite.modpackbuild", id=id, export=1))
+
+    remote_reference = (
+        f" as remote version {result.remote_file_id}"
+        if result.remote_file_id
+        else ""
+    )
+    flash(
+        f"Published {result.version_number} to {target.provider_label}"
+        f"{remote_reference}.",
+        "success",
+    )
+    return redirect(url_for("asite.modpackbuild", id=id, export=1))
 
 
 @asite.route("/modpackbuild/<int:id>/csv", methods=["GET"])
@@ -2375,7 +2802,16 @@ def modlibrary_post():
                     "error",
                 )
                 return redirect(url_for("asite.modlibrary"))
-            version = request.form["mcversion"] + "-" + request.form["version"]
+            try:
+                version_minecraft, _minecraft_versions = (
+                    minecraft_version_storage(request.form["mcversion"])
+                )
+                if version_minecraft is None:
+                    raise ValueError("Enter at least one Minecraft version.")
+            except ValueError as error:
+                flash(str(error), "error")
+                return redirect(url_for("asite.modlibrary"))
+            version = version_minecraft + "-" + request.form["version"]
             safe_mod_name = secure_filename(mod.name)
             safe_version = secure_filename(version)
             if (
@@ -2419,6 +2855,10 @@ def modlibrary_post():
                             staged_zip,
                             output_name=jarfilename,
                             expected_md5=jarmd5,
+                            allow_any_jar=(
+                                str(getattr(mod, "modtype", "MOD")).upper()
+                                == "LAUNCHER"
+                            ),
                         )
                         staged_jar = Path(staging_directory, jarfilename)
                         actual_jarfilesize = staged_jar.stat().st_size
@@ -2446,6 +2886,7 @@ def modlibrary_post():
                 InvalidModloaderError,
                 MissingDependencyVersionError,
                 UploadVerificationError,
+                ValueError,
             ) as error:
                 flash(str(error), "error")
                 return redirect(url_for("asite.modlibrary"))
@@ -2572,7 +3013,7 @@ def clients(id):
 
     return render_template("clients.html", clients=packs, modpacklibrary=modpacklibrary)
 
-@asite.route("/user/<id>", methods=["GET", "POST"])
+@asite.route("/user/<int:id>", methods=["GET", "POST"])
 def user(id):
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -2580,6 +3021,10 @@ def user(id):
     
     if User.get_permission_token(session["token"], "solder_users") == 0:
         return redirect(request.referrer)
+
+    managed_user = User.get_by_id(id)
+    if managed_user is None:
+        return render_template("404.html", error="User not found"), 404
     
     try:
         packs = User_modpack.get_all_user_modpacks(id)
@@ -2591,6 +3036,15 @@ def user(id):
     user_perms = User_modpack.get_user_permission(id)
         
     if request.method == "POST":
+        if "appearance-submit" in request.form:
+            User.set_night_mode(
+                id,
+                "night_mode" in request.form,
+                request.remote_addr,
+                Session.get_user_id(session["token"]),
+            )
+            flash("updated user appearance", "success")
+            return redirect(url_for("asite.user", id=id))
         if "form-submit" in request.form:
             if "modpack" not in request.form:
                 return redirect(url_for("asite.user", id=id))
@@ -2645,5 +3099,5 @@ def user(id):
         Database.create_tables()
         modpacklibrary = []
 
-    return render_template("user.html", userpacks=packs, modpacklibrary=modpacklibrary, user_perms=user_perms)
+    return render_template("user.html", userpacks=packs, modpacklibrary=modpacklibrary, user_perms=user_perms, managed_user=managed_user)
 

@@ -15,6 +15,8 @@ from api_write import write_api_blueprint  # noqa: E402
 from models.api_token import ApiPrincipal, ApiToken, TOKENABLE_TYPE  # noqa: E402
 from models.integration import MAVEN, MODRINTH, ExternalVersion  # noqa: E402
 from models.maven import MavenArtifact, MavenRepository, MavenVersion  # noqa: E402
+from models.modversion import Modversion  # noqa: E402
+from models.write_api import WriteApiStore  # noqa: E402
 
 
 FULL_PRINCIPAL = ApiPrincipal(1, 7, {"solder_full": True})
@@ -90,6 +92,7 @@ def version_row(**changes):
         "md5": "a" * 32,
         "jarmd5": None,
         "jarfilesize": None,
+        "jar_url_override": None,
         "filesize": 123,
         "integration_version_id": None,
         "created_at": None,
@@ -324,6 +327,58 @@ class WriteApiRouteTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 422)
         self.assertIn("jarfilesize", response.get_json()["error"])
+        create.assert_not_called()
+
+    def test_modversion_accepts_verified_https_jar_override(self):
+        created = version_row(
+            jarmd5="b" * 32,
+            jar_url_override="https://downloads.example/mod.jar",
+        )
+        with (
+            patch("api_write.WriteApiStore.get_mod", return_value=mod_row()),
+            patch(
+                "api_write.WriteApiStore.create_modversion",
+                return_value=created,
+            ) as create,
+        ):
+            response = self.client.post(
+                "/api/mod/example-mod/version",
+                headers=self.headers,
+                json={
+                    "version": "1.0",
+                    "md5": "a" * 32,
+                    "jarmd5": "b" * 32,
+                    "jar_url_override": "https://downloads.example/mod.jar",
+                },
+            )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            create.call_args.args[1]["jar_url_override"],
+            "https://downloads.example/mod.jar",
+        )
+        self.assertEqual(
+            response.get_json()["jar_url_override"],
+            "https://downloads.example/mod.jar",
+        )
+
+    def test_modversion_rejects_override_without_verified_jar(self):
+        with (
+            patch("api_write.WriteApiStore.get_mod", return_value=mod_row()),
+            patch("api_write.WriteApiStore.create_modversion") as create,
+        ):
+            response = self.client.post(
+                "/api/mod/example-mod/version",
+                headers=self.headers,
+                json={
+                    "version": "1.0",
+                    "md5": "a" * 32,
+                    "jar_url_override": "https://downloads.example/mod.jar",
+                },
+            )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("override", str(response.get_json()["error"]))
         create.assert_not_called()
 
     def test_integer_fields_reject_json_floats(self):
@@ -593,6 +648,38 @@ class WriteApiRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["versions"][0]["id"], "f" * 64)
 
+    def test_maven_artifact_update_can_enable_loader_direct_downloads(self):
+        configured = MavenArtifact(
+            9, 8, "Example Maven", "https://maven.example.test/releases/",
+            "example.group", "example-mod", "", "jar", "EMBEDDED",
+            "{minecraft}-{version}", None, "FORGE", "example-mod",
+            "Example Mod", "", "", "", "BOTH", 4,
+        )
+        enabled = replace(configured, solderpy_loader_direct=True)
+        with (
+            patch("api_write.MavenArtifact.get", return_value=configured),
+            patch(
+                "api_write.MavenArtifact.update_rule",
+                return_value=configured,
+            ) as update_rule,
+            patch(
+                "api_write.MavenArtifact.update_solderpy_loader_direct",
+                return_value=enabled,
+            ) as update_direct,
+        ):
+            response = self.client.put(
+                "/api/integration/maven/artifact/9",
+                headers=self.headers,
+                json={"solderpy_loader_direct": True},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            response.get_json()["artifact"]["solderpy_loader_direct"]
+        )
+        update_direct.assert_called_once_with(9, True)
+        update_rule.assert_not_called()
+
     def test_mcil_jar_generation_uses_configured_repository(self):
         with (
             patch("api_write.WriteApiStore.get_mod", return_value=mod_row()),
@@ -676,6 +763,117 @@ class WriteApiPackagingTests(unittest.TestCase):
     def test_production_image_copies_the_write_api_module(self):
         dockerfile = Path(__file__).resolve().parents[1].joinpath("Dockerfile")
         self.assertIn("COPY /api_write.py /app/", dockerfile.read_text())
+
+
+class WriteApiStoreTests(unittest.TestCase):
+    def test_delete_build_cleans_loader_metadata(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+
+        with (
+            patch(
+                "models.write_api.Database.get_connection",
+                return_value=connection,
+            ),
+            patch("models.write_api.Build.delete_related_rows") as cleanup,
+        ):
+            WriteApiStore.delete_build(12)
+
+        cleanup.assert_called_once_with(cursor, 12)
+        connection.commit.assert_called_once_with()
+
+    def test_delete_modpack_cleans_loader_and_publication_metadata(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [{"id": 12}]
+
+        with (
+            patch(
+                "models.write_api.Database.get_connection",
+                return_value=connection,
+            ),
+            patch("models.write_api.Build.delete_related_rows") as build_cleanup,
+            patch("models.write_api.Modpack.delete_related_rows") as pack_cleanup,
+        ):
+            WriteApiStore.delete_modpack(3)
+
+        build_cleanup.assert_called_once_with(cursor, 12)
+        pack_cleanup.assert_called_once_with(cursor, 3)
+        connection.commit.assert_called_once_with()
+
+    def test_create_modversion_writes_override_to_sparse_table(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.lastrowid = 5
+        cursor.fetchone.side_effect = [
+            None,
+            version_row(
+                jarmd5="b" * 32,
+                jar_url_override="https://downloads.example/mod.jar",
+            ),
+        ]
+
+        with (
+            patch(
+                "models.write_api.Database.get_connection",
+                return_value=connection,
+            ),
+            patch.object(
+                Modversion, "verify_jar_url_override", return_value=456
+            ) as verify,
+        ):
+            row = WriteApiStore.create_modversion(
+                4,
+                {
+                    "version": "1.0",
+                    "md5": "a" * 32,
+                    "jarmd5": "b" * 32,
+                    "jar_url_override": "https://downloads.example/mod.jar",
+                },
+            )
+
+        statements = [call.args[0] for call in cursor.execute.call_args_list]
+        modversion_insert = next(
+            statement
+            for statement in statements
+            if statement.startswith("INSERT INTO modversions")
+        )
+        self.assertNotIn("jar_url_override", modversion_insert)
+        self.assertTrue(
+            any(
+                "INSERT INTO modversion_download_overrides" in statement
+                for statement in statements
+            )
+        )
+        self.assertEqual(
+            row["jar_url_override"], "https://downloads.example/mod.jar"
+        )
+        verify.assert_called_once_with(
+            "https://downloads.example/mod.jar", "b" * 32
+        )
+        connection.commit.assert_called_once_with()
+
+    def test_create_modversion_does_not_save_an_unverified_override(self):
+        with (
+            patch.object(
+                Modversion,
+                "verify_jar_url_override",
+                side_effect=ValueError("The override JAR MD5 does not match."),
+            ),
+            patch("models.write_api.Database.get_connection") as connection,
+            self.assertRaisesRegex(ValueError, "does not match"),
+        ):
+            WriteApiStore.create_modversion(
+                4,
+                {
+                    "version": "1.0",
+                    "md5": "a" * 32,
+                    "jarmd5": "b" * 32,
+                    "jar_url_override": "https://downloads.example/mod.jar",
+                },
+            )
+
+        connection.assert_not_called()
 
 
 if __name__ == "__main__":

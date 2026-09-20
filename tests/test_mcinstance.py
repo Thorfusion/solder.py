@@ -434,6 +434,14 @@ class MCInstanceJarTests(unittest.TestCase):
             archive.writestr("mods/original-name.jar", jar_data)
         return package.getvalue()
 
+    def test_complete_jar_metadata_requires_hash_and_positive_size(self):
+        jar_hash = "a" * 32
+
+        self.assertTrue(MCInstanceJar.has_complete_metadata(jar_hash, 123))
+        self.assertFalse(MCInstanceJar.has_complete_metadata(jar_hash, None))
+        self.assertFalse(MCInstanceJar.has_complete_metadata(jar_hash, 0))
+        self.assertFalse(MCInstanceJar.has_complete_metadata(None, 123))
+
     def test_create_legacy_jar_from_local_solder_package(self):
         jar_data = b"legacy local jar"
         package_data = self.legacy_package(jar_data)
@@ -471,6 +479,141 @@ class MCInstanceJarTests(unittest.TestCase):
                 "mods/example-mod/example-mod-1.7.10-1.0.jar",
                 ExtraArgs={"ContentType": "application/jar"},
             )
+
+    def test_existing_jar_is_verified_and_missing_size_is_stored(self):
+        jar_data = b"already stored jar"
+        version = SimpleNamespace(
+            id=9,
+            mod_id=3,
+            version="1.7.10-1.0",
+            md5="a" * 32,
+            jarmd5=md5(jar_data),
+            jarfilesize=None,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.jar").write_bytes(
+                jar_data
+            )
+            with patch(
+                "models.mcinstance.Modversion.update_modversion_jarmd5"
+            ) as update_hash:
+                jar_hash = MCInstanceJar.create(
+                    self.mod(),
+                    version,
+                    "https://repo.example.test/mods/",
+                    directory,
+                )
+
+        self.assertEqual(jar_hash, md5(jar_data))
+        update_hash.assert_called_once_with(9, md5(jar_data), len(jar_data))
+
+    def test_existing_jar_with_wrong_md5_is_rejected(self):
+        version = SimpleNamespace(
+            id=9,
+            mod_id=3,
+            version="1.7.10-1.0",
+            md5="a" * 32,
+            jarmd5=md5(b"expected jar"),
+            jarfilesize=None,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.jar").write_bytes(
+                b"different jar"
+            )
+            with (
+                patch(
+                    "models.mcinstance.Modversion.update_modversion_jarmd5"
+                ) as update_hash,
+                self.assertRaisesRegex(MCInstanceJarError, "MD5 verification"),
+            ):
+                MCInstanceJar.create(
+                    self.mod(),
+                    version,
+                    "https://repo.example.test/mods/",
+                    directory,
+                )
+
+        update_hash.assert_not_called()
+
+    def test_recreated_jar_must_match_the_stored_jar_md5(self):
+        jar_data = b"jar inside solder zip"
+        package_data = self.legacy_package(jar_data)
+        version = self.version(package_data)
+        version.jarmd5 = md5(b"different expected jar")
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.zip").write_bytes(
+                package_data
+            )
+            with (
+                patch(
+                    "models.mcinstance.Modversion.update_modversion_jarmd5"
+                ) as update_hash,
+                self.assertRaisesRegex(MCInstanceJarError, "stored JAR MD5"),
+            ):
+                MCInstanceJar.create(
+                    self.mod(),
+                    version,
+                    "https://repo.example.test/mods/",
+                    directory,
+                )
+
+            self.assertFalse(
+                Path(package_dir, "example-mod-1.7.10-1.0.jar").exists()
+            )
+        update_hash.assert_not_called()
+
+    def test_create_raw_jar_from_launcher_package(self):
+        jar_data = b"crucible server"
+        package = io.BytesIO()
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr("bin/modpack.jar", jar_data)
+        package_data = package.getvalue()
+        launcher = SimpleNamespace(
+            id=3, name="crucible", modtype="LAUNCHER"
+        )
+        version = SimpleNamespace(
+            id=9,
+            mod_id=3,
+            version="1.7.10-5.4",
+            md5=md5(package_data),
+            jarmd5=None,
+            jarfilesize=None,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "crucible")
+            package_dir.mkdir()
+            Path(package_dir, "crucible-1.7.10-5.4.zip").write_bytes(
+                package_data
+            )
+            with patch(
+                "models.mcinstance.Modversion.update_modversion_jarmd5"
+            ) as update_hash:
+                jar_hash = MCInstanceJar.create(
+                    launcher,
+                    version,
+                    "https://repo.example.test/mods/",
+                    directory,
+                )
+
+            self.assertEqual(
+                Path(
+                    package_dir, "crucible-1.7.10-5.4.jar"
+                ).read_bytes(),
+                jar_data,
+            )
+
+        self.assertEqual(jar_hash, md5(jar_data))
+        update_hash.assert_called_once_with(9, md5(jar_data), len(jar_data))
 
     def test_create_legacy_jar_downloads_missing_local_package(self):
         jar_data = b"legacy remote jar"

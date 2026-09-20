@@ -27,6 +27,7 @@ from models.common import (
 from models.compatibility import (
     compatibility_values,
     InvalidModloaderError,
+    minecraft_version_storage,
     normalize_minecraft_versions,
     normalize_modloader,
     normalize_modloaders,
@@ -318,12 +319,13 @@ def _mod_json(row):
 def _modversion_json(row):
     fields = (
         "id", "mod_id", "version", "mcversion", "modloader", "md5", "jarmd5",
-        "jarfilesize", "filesize", "integration_version_id", "created_at",
-        "updated_at",
+        "jarfilesize", "jar_url_override", "filesize",
+        "integration_version_id", "created_at", "updated_at",
     )
     result = {field: row.get(field) for field in fields}
     result["minecraft_versions"] = list(
-        compatibility_values(result["mcversion"])
+        row.get("minecraft_versions")
+        or compatibility_values(result["mcversion"])
     )
     result["modloaders"] = list(
         compatibility_values(result["modloader"], modloaders=True)
@@ -654,10 +656,23 @@ def _modversion_values(data, *, partial=False):
         and not values.get("jarmd5")
     ):
         _validation("jarfilesize", "A JAR filesize requires a JAR MD5.")
+    if "jar_url_override" in data:
+        override = _string(
+            data,
+            "jar_url_override",
+            nullable=True,
+            maximum=2048,
+        )
+        try:
+            override = Modversion.normalize_jar_url_override(override)
+        except ValueError as error:
+            _validation("jar_url_override", str(error))
+        _include(values, "jar_url_override", override)
     _include(values, "filesize", _integer(data, "filesize", minimum=0))
     if "mcversion" in data:
         try:
             minecraft = normalize_minecraft_versions(data["mcversion"])
+            minecraft_version_storage(minecraft)
         except ValueError as error:
             _validation("mcversion", str(error))
         _include(values, "mcversion", minecraft)
@@ -673,9 +688,15 @@ def create_modversion(slug):
         raise ApiRequestProblem(
             "Provider-managed versions must be imported through the integration API."
         )
-    row = WriteApiStore.create_modversion(
-        mod["id"], _modversion_values(_payload())
-    )
+    values = _modversion_values(_payload())
+    if values.get("jar_url_override") and not Modversion.JAR_MD5_PATTERN.fullmatch(
+        str(values.get("jarmd5") or "")
+    ):
+        _validation(
+            "jar_url_override",
+            "A JAR override requires a verified JAR MD5.",
+        )
+    row = WriteApiStore.create_modversion(mod["id"], values)
     return _written(_modversion_json(row), 201)
 
 
@@ -684,8 +705,20 @@ def update_modversion(slug, version):
     _permission("mods_manage")
     mod = _mod(slug)
     current = _modversion(mod, version)
+    values = _modversion_values(_payload(), partial=True)
+    effective_override = values.get(
+        "jar_url_override", current.get("jar_url_override")
+    )
+    effective_jar_md5 = values.get("jarmd5", current.get("jarmd5"))
+    if effective_override and not Modversion.JAR_MD5_PATTERN.fullmatch(
+        str(effective_jar_md5 or "")
+    ):
+        _validation(
+            "jar_url_override",
+            "A JAR override requires a verified JAR MD5.",
+        )
     row = WriteApiStore.update_modversion(
-        current, _modversion_values(_payload(), partial=True)
+        current, values
     )
     return _written(_modversion_json(row))
 
@@ -828,6 +861,9 @@ def _maven_artifact_json(artifact):
         "mod_id": artifact.mod_id,
         "created_at": artifact.created_at,
         "updated_at": artifact.updated_at,
+        "solderpy_loader_direct": bool(
+            getattr(artifact, "solderpy_loader_direct", False)
+        ),
     }
 
 
@@ -926,6 +962,10 @@ def create_maven_artifact():
             None if (link := _url(data, "link")) is _MISSING else link,
             _enum(data, "side", _SIDES, "BOTH"),
         )
+        if _boolean(data, "solderpy_loader_direct", False):
+            artifact = MavenArtifact.update_solderpy_loader_direct(
+                artifact.id, True
+            )
         versions = MavenCatalog.refresh(artifact)
         mod, _created = ModIntegration.import_project(
             MAVEN, str(artifact.id), g.write_principal.user_id
@@ -975,22 +1015,44 @@ def update_maven_artifact(artifact_id):
     _permission("mods_manage")
     artifact = _maven_artifact(artifact_id)
     data = _payload()
-    version_mode = _enum(
-        data, "version_mode", set(MAVEN_VERSION_MODES), artifact.version_mode
+    if any(
+        field in data
+        for field in (
+            "version_mode",
+            "version_pattern",
+            "fixed_minecraft",
+            "modloader",
+        )
+    ):
+        version_mode = _enum(
+            data,
+            "version_mode",
+            set(MAVEN_VERSION_MODES),
+            artifact.version_mode,
+        )
+        version_pattern = _string(data, "version_pattern")
+        fixed_minecraft = _string(data, "fixed_minecraft", nullable=True)
+        artifact = MavenArtifact.update_rule(
+            artifact.id,
+            version_mode,
+            artifact.version_pattern
+            if version_pattern is _MISSING
+            else (version_pattern or DEFAULT_VERSION_PATTERN),
+            artifact.fixed_minecraft
+            if fixed_minecraft is _MISSING
+            else (fixed_minecraft or None),
+            _loader(data, default=artifact.modloader),
+        )
+    current_direct_downloads = bool(
+        getattr(artifact, "solderpy_loader_direct", False)
     )
-    version_pattern = _string(data, "version_pattern")
-    fixed_minecraft = _string(data, "fixed_minecraft", nullable=True)
-    artifact = MavenArtifact.update_rule(
-        artifact.id,
-        version_mode,
-        artifact.version_pattern
-        if version_pattern is _MISSING
-        else (version_pattern or DEFAULT_VERSION_PATTERN),
-        artifact.fixed_minecraft
-        if fixed_minecraft is _MISSING
-        else (fixed_minecraft or None),
-        _loader(data, default=artifact.modloader),
+    direct_downloads = _boolean(
+        data, "solderpy_loader_direct", current_direct_downloads
     )
+    if direct_downloads != current_direct_downloads:
+        artifact = MavenArtifact.update_solderpy_loader_direct(
+            artifact.id, direct_downloads
+        )
     return _written({"artifact": _maven_artifact_json(artifact)})
 
 

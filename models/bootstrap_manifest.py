@@ -31,7 +31,12 @@ class BootstrapManifest:
 
     @classmethod
     def _download(
-        cls, package, repository_url, modtype, modrinth_downloads
+        cls,
+        package,
+        repository_url,
+        modtype,
+        native_downloads,
+        source_mode,
     ):
         slug = package.modname
         version = package.version
@@ -58,14 +63,34 @@ class BootstrapManifest:
                 version_id = str(
                     getattr(package, "integration_version_id", "") or ""
                 )
-                modrinth_url = modrinth_downloads.get(
-                    (project_id, version_id)
+                source_provider = str(
+                    getattr(package, "download_source_provider", "") or provider
+                ).upper()
+                native_url = str(
+                    getattr(package, "download_source_url", "") or ""
+                ).strip() or native_downloads.get(
+                    (provider, project_id, version_id)
                 )
-                if provider == "MODRINTH" and modrinth_url:
-                    download["sources"] = [
-                        {"provider": "modrinth", "url": modrinth_url},
-                        {"provider": "solder", "url": solder_url},
-                    ]
+                sources = []
+                seen_urls = set()
+
+                def add_source(source_provider, url):
+                    url = str(url or "").strip()
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        sources.append(
+                            {"provider": source_provider, "url": url}
+                        )
+
+                if source_mode == "hybrid":
+                    add_source(
+                        "override",
+                        getattr(package, "jar_url_override", None),
+                    )
+                    add_source(source_provider.casefold(), native_url)
+                add_source("solder", solder_url)
+                if len(sources) > 1:
+                    download["sources"] = sources
                 return download
 
         return {
@@ -146,10 +171,14 @@ class BootstrapManifest:
         dependencies,
         *,
         target="client",
-        modrinth_downloads=None,
+        native_downloads=None,
+        source_mode="hybrid",
     ):
         packages = list(packages)
-        modrinth_downloads = modrinth_downloads or {}
+        native_downloads = native_downloads or {}
+        source_mode = str(source_mode or "hybrid").strip().casefold()
+        if source_mode not in {"hybrid", "solder"}:
+            raise BootstrapManifestError("Unknown bootstrap download source.")
         missing_memberships = [
             package
             for package in packages
@@ -198,7 +227,11 @@ class BootstrapManifest:
             slug = package.modname
             version = package.version
             download = cls._download(
-                package, repository_url, modtype, modrinth_downloads
+                package,
+                repository_url,
+                modtype,
+                native_downloads,
+                source_mode,
             )
             package_dependencies = []
             for dependency in dependencies.get(
@@ -233,7 +266,8 @@ class BootstrapManifest:
                         getattr(package, "mcversion", None)
                     ),
                     "minecraft_versions": list(
-                        compatibility_values(
+                        getattr(package, "minecraft_versions", ())
+                        or compatibility_values(
                             getattr(package, "mcversion", None)
                         )
                     ),
@@ -303,6 +337,7 @@ class BootstrapManifest:
                 "memory": getattr(build, "min_memory", 0),
             },
             "target": target,
+            "source": source_mode,
             "optional_mode": {
                 "id": optional_mode_id,
                 "name": "advanced" if optional_mode_id == 1 else "basic",
