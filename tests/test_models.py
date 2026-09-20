@@ -1997,17 +1997,18 @@ class ModelBehaviorTests(unittest.TestCase):
             ):
                 Modversion.normalize_jar_url_override(invalid)
 
-        http = Mock()
-        with self.assertRaisesRegex(ValueError, "public host"):
+        with (
+            patch.object(Modversion, "_open_verified_https_response") as open_url,
+            self.assertRaisesRegex(ValueError, "public host"),
+        ):
             Modversion.verify_jar_url_override(
                 "https://internal.example/mod.jar",
                 "a" * 32,
-                http=http,
                 resolver=lambda *_args, **_kwargs: [
                     (None, None, None, None, ("10.0.0.4", 443))
                 ],
             )
-        http.get.assert_not_called()
+        open_url.assert_not_called()
 
     def test_build_clone_rolls_back_as_one_transaction(self):
         connection = Mock()
@@ -2091,23 +2092,68 @@ class ModelBehaviorTests(unittest.TestCase):
         connection.commit.assert_called_once_with()
 
     def test_jar_override_verification_rejects_a_different_md5(self):
-        response = Mock(status_code=200)
-        response.headers = {"content-length": "9"}
-        response.iter_content.return_value = [b"different"]
-        http = Mock()
-        http.get.return_value = response
+        connection = Mock()
+        response = Mock(status=200)
+        response.getheader.return_value = "9"
+        response.read.side_effect = [b"different", b""]
 
-        with self.assertRaisesRegex(ValueError, "does not match"):
+        with (
+            patch.object(
+                Modversion,
+                "_open_verified_https_response",
+                return_value=(connection, response),
+            ) as open_url,
+            self.assertRaisesRegex(ValueError, "does not match"),
+        ):
             Modversion.verify_jar_url_override(
                 "https://downloads.example/mod.jar",
                 hashlib.md5(b"expected", usedforsecurity=False).hexdigest(),
-                http=http,
                 resolver=lambda *_args, **_kwargs: [
                     (None, None, None, None, ("93.184.216.34", 443))
                 ],
             )
 
+        open_url.assert_called_once_with(
+            "https://downloads.example/mod.jar",
+            ("93.184.216.34",),
+        )
         response.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_jar_override_connection_is_pinned_to_the_validated_address(self):
+        connection = Mock()
+        response = Mock()
+        connection.getresponse.return_value = response
+
+        with patch(
+            "models.modversion._PinnedHTTPSConnection",
+            return_value=connection,
+        ) as pinned_connection:
+            returned_connection, returned_response = (
+                Modversion._open_verified_https_response(
+                    "https://downloads.example:8443/files/mod jar.jar?build=one two",
+                    ("93.184.216.34",),
+                )
+            )
+
+        self.assertIs(returned_connection, connection)
+        self.assertIs(returned_response, response)
+        pinned_connection.assert_called_once_with(
+            "downloads.example",
+            8443,
+            "93.184.216.34",
+            connect_timeout=5,
+            read_timeout=60,
+        )
+        connection.request.assert_called_once_with(
+            "GET",
+            "/files/mod%20jar.jar?build=one%20two",
+            headers={
+                "Host": "downloads.example:8443",
+                "Accept-Encoding": "identity",
+                "User-Agent": "solder.py jar verifier",
+            },
+        )
 
     def test_mismatched_jar_override_is_not_saved(self):
         connection = Mock()

@@ -2,6 +2,7 @@ from collections import deque
 import datetime
 import hashlib
 import hmac
+import http.client
 import ipaddress
 from pathlib import Path
 import re
@@ -37,6 +38,41 @@ class MissingDependencyVersionError(ValueError):
 
 class IncompatibleModVersionError(ValueError):
     """Raised when a version does not match the target build."""
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS connection whose TCP destination has already been validated."""
+
+    def __init__(
+        self,
+        hostname,
+        port,
+        address,
+        *,
+        connect_timeout=5,
+        read_timeout=60,
+    ):
+        super().__init__(hostname, port=port, timeout=read_timeout)
+        self._verified_address = address
+        self._connect_timeout = connect_timeout
+
+    def connect(self):
+        raw_socket = socket.create_connection(
+            (self._verified_address, self.port),
+            timeout=self._connect_timeout,
+            source_address=self.source_address,
+        )
+        try:
+            # ``self.host`` remains the original hostname, so certificate
+            # validation and SNI are not weakened by connecting to a pinned IP.
+            self.sock = self._context.wrap_socket(
+                raw_socket,
+                server_hostname=self.host,
+            )
+            self.sock.settimeout(self.timeout)
+        except Exception:
+            raw_socket.close()
+            raise
 
 
 class Modversion:
@@ -634,7 +670,7 @@ class Modversion:
 
     @staticmethod
     def _require_public_url_destination(value, *, resolver=None):
-        """Resolve an override host and reject every non-public destination."""
+        """Resolve an override host and return only verified public addresses."""
         parsed = urlsplit(value)
         hostname = parsed.hostname
         port = parsed.port or 443
@@ -664,33 +700,74 @@ class Modversion:
             ) from error
         if not public:
             raise ValueError("The JAR override URL must use a public host.")
+        return tuple(
+            sorted(
+                addresses,
+                key=lambda address: (
+                    ipaddress.ip_address(address).version,
+                    ipaddress.ip_address(address).packed,
+                ),
+            )
+        )
 
     @staticmethod
-    def _response_peer_address(response):
-        """Best-effort extraction of urllib3's connected peer address."""
-        candidates = (
-            ("raw", "_connection", "sock"),
-            ("raw", "_fp", "fp", "raw", "_sock"),
+    def _open_verified_https_response(value, addresses):
+        """Open an HTTPS response without resolving the hostname a second time."""
+        parsed = urlsplit(value)
+        hostname = parsed.hostname.encode("idna").decode("ascii")
+        port = parsed.port or 443
+        request_target = quote(
+            parsed.path or "/",
+            safe="/%:@!$&'()*+,;=-._~",
         )
-        for path in candidates:
-            value = response
-            for attribute in path:
-                value = getattr(value, attribute, None)
-                if value is None:
-                    break
-            if value is None or not callable(getattr(value, "getpeername", None)):
-                continue
+        if parsed.query:
+            request_target += "?" + quote(
+                parsed.query,
+                safe="=&?/:;+,%@!$'()*-._~",
+            )
+
+        try:
+            host_is_ipv6 = ipaddress.ip_address(hostname).version == 6
+        except ValueError:
+            host_is_ipv6 = False
+        host_header = f"[{hostname}]" if host_is_ipv6 else hostname
+        if port != 443:
+            host_header = f"{host_header}:{port}"
+
+        last_error = None
+        for address in addresses:
+            # The complete DNS result was rejected unless every address was
+            # public; this connection receives one of those literal IPs.
+            # codeql[py/full-ssrf]
+            connection = _PinnedHTTPSConnection(
+                hostname,
+                port,
+                address,
+                connect_timeout=5,
+                read_timeout=60,
+            )
             try:
-                peer = value.getpeername()
-            except OSError:
-                continue
-            if isinstance(peer, tuple) and peer and isinstance(peer[0], str):
-                return peer[0].split("%", 1)[0]
-        return None
+                # The destination is a validated public IP. Only the escaped
+                # origin-form path remains user-selectable here.
+                # codeql[py/partial-ssrf]
+                connection.request(
+                    "GET",
+                    request_target,
+                    headers={
+                        "Host": host_header,
+                        "Accept-Encoding": "identity",
+                        "User-Agent": "solder.py jar verifier",
+                    },
+                )
+                return connection, connection.getresponse()
+            except (OSError, http.client.HTTPException) as error:
+                last_error = error
+                connection.close()
+        raise ValueError("The override JAR could not be downloaded.") from last_error
 
     @classmethod
     def verify_jar_url_override(
-        cls, value, expected_md5, *, http=None, resolver=None
+        cls, value, expected_md5, *, resolver=None
     ):
         """Download an override once and verify its Solder JAR checksum."""
         value = cls.normalize_jar_url_override(value)
@@ -699,43 +776,21 @@ class Modversion:
             raise ValueError("The JAR override URL is required.")
         if cls.JAR_MD5_PATTERN.fullmatch(expected_md5) is None:
             raise ValueError("A JAR override requires a verified JAR MD5.")
-        cls._require_public_url_destination(value, resolver=resolver)
+        addresses = cls._require_public_url_destination(value, resolver=resolver)
 
-        http = http or requests
+        connection = None
+        response = None
         try:
-            # The value is normalized to HTTPS, every resolved address must be
-            # public, redirects are rejected, and the connected peer is
-            # checked below before any response data is accepted.
-            response = http.get(  # lgtm[py/full-ssrf]
+            connection, response = cls._open_verified_https_response(
                 value,
-                stream=True,
-                allow_redirects=False,
-                timeout=(5, 60),
+                addresses,
             )
-        except requests.RequestException as error:
-            raise ValueError("The override JAR could not be downloaded.") from error
-
-        try:
-            peer_address = cls._response_peer_address(response)
-            if peer_address is not None:
-                try:
-                    peer_is_public = ipaddress.ip_address(peer_address).is_global
-                except ValueError:
-                    peer_is_public = False
-                if not peer_is_public:
-                    raise ValueError(
-                        "The JAR override connected to a non-public host."
-                    )
-            if 300 <= response.status_code < 400:
+            if 300 <= response.status < 400:
                 raise ValueError("The override JAR URL must not redirect.")
-            try:
-                response.raise_for_status()
-            except requests.RequestException as error:
-                raise ValueError(
-                    "The override JAR could not be downloaded."
-                ) from error
+            if response.status >= 400:
+                raise ValueError("The override JAR could not be downloaded.")
 
-            content_length = response.headers.get("content-length")
+            content_length = response.getheader("content-length")
             if content_length not in {None, ""}:
                 try:
                     content_length = int(content_length)
@@ -755,7 +810,7 @@ class Modversion:
             digest = hashlib.md5(usedforsecurity=False)
             filesize = 0
             try:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                while chunk := response.read(1024 * 1024):
                     if not chunk:
                         continue
                     filesize += len(chunk)
@@ -764,7 +819,7 @@ class Modversion:
                             "The override JAR exceeds the 512 MiB verification limit."
                         )
                     digest.update(chunk)
-            except requests.RequestException as error:
+            except (OSError, http.client.HTTPException) as error:
                 raise ValueError(
                     "The override JAR could not be downloaded."
                 ) from error
@@ -775,7 +830,10 @@ class Modversion:
                 )
             return filesize
         finally:
-            response.close()
+            if response is not None:
+                response.close()
+            if connection is not None:
+                connection.close()
 
     @staticmethod
     def _store_jar_url_override(cur, modversion_id, value):
