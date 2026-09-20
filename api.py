@@ -4,7 +4,7 @@ import logging
 from threading import RLock
 
 from cachetools import cached, TTLCache
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 
 from models.common import (
     cache_size,
@@ -21,13 +21,12 @@ from models.bootstrap_manifest import (
     BootstrapManifestError,
 )
 from models.key import Key
+from models.cache_revision import CacheRevision
 from models.mod import Mod
 from models.modversion import Modversion
 from models.mod_dependency import ModDependency
 from models.modpack import Modpack
 from models.advanced_optional import AdvancedOptional
-from models.integration import IntegrationError, ModrinthProvider
-from models.maven import MavenArtifact, MavenError
 from models.platform_export_override import PlatformExportOverride
 from models.technic_solderpy_loader import TechnicSolderPyLoader
 
@@ -50,99 +49,6 @@ def clear_api_caches():
         cache.clear()
 
 
-@_api_cached(key=lambda references: references)
-def _bootstrap_maven_downloads(references):
-    """Resolve Maven JARs only for artifacts that explicitly opt in."""
-    if not references:
-        return {}
-    try:
-        return MavenArtifact.solderpy_loader_downloads(references)
-    except MavenError:
-        logger.warning(
-            "Could not resolve Maven bootstrap sources; using Solder JARs.",
-            exc_info=True,
-        )
-        return {}
-
-
-def _backfill_bootstrap_modrinth_downloads(packages, minecraft, modloader):
-    """Persist native metadata once for Modrinth versions imported previously."""
-    missing = [
-        package
-        for package in packages
-        if str(getattr(package, "integration_provider", "") or "").upper()
-        == "MODRINTH"
-        and getattr(package, "integration_project_id", None)
-        and getattr(package, "integration_version_id", None)
-        and not getattr(package, "download_source_url", None)
-        and str(getattr(package, "modtype", "") or "").upper() == "MOD"
-        and Modversion.JAR_MD5_PATTERN.fullmatch(
-            str(getattr(package, "jarmd5", "") or "").strip()
-        )
-    ]
-    if not missing:
-        return
-
-    references = tuple(
-        sorted(
-            {
-                (
-                    str(package.integration_project_id),
-                    str(package.integration_version_id),
-                )
-                for package in missing
-            }
-        )
-    )
-    provider = ModrinthProvider()
-    try:
-        versions = provider.get_versions(references, minecraft, modloader)
-    except (IntegrationError, KeyError):
-        logger.warning(
-            "Could not backfill Modrinth bootstrap sources; using Solder JARs."
-        )
-        return
-
-    for package in missing:
-        version = versions.get(str(package.integration_version_id))
-        if version is None:
-            continue
-        try:
-            provider._validate_download_url(version.download_url)
-            source = Modversion.normalize_download_source(
-                {
-                    "provider": "MODRINTH",
-                    "url": version.download_url,
-                    "filename": version.filename,
-                    "md5": package.jarmd5,
-                    "sha1": version.hashes.get("sha1"),
-                    "sha512": version.hashes.get("sha512"),
-                    "filesize": package.jarfilesize or version.size,
-                }
-            )
-        except (IntegrationError, ValueError):
-            logger.warning(
-                "Modrinth returned invalid bootstrap source metadata; using "
-                "the Solder JAR."
-            )
-            continue
-        try:
-            Modversion.store_download_source(package.id, source)
-        except Exception:
-            logger.warning(
-                "Could not persist a Modrinth bootstrap source; using the "
-                "resolved URL for this response.",
-                exc_info=True,
-            )
-        package.download_source_provider = source["provider"]
-        package.download_source_url = source["url"]
-        package.download_source_filename = source["filename"]
-        package.download_source_md5 = source["md5"]
-        package.download_source_sha1 = source["sha1"]
-        package.download_source_sha512 = source["sha512"]
-        package.download_source_filesize = source["filesize"]
-
-
 def _cache_key(*path_parts):
     # Include every query argument that can influence a response. This keeps
     # extension arguments such as target/optional/from from sharing a cached
@@ -153,7 +59,12 @@ def _cache_key(*path_parts):
     )
     principal = _read_principal()
     bearer_identity = principal.cache_identity if principal else None
-    return (*path_parts, query_arguments, bearer_identity)
+    return (
+        0 if current_app.testing else CacheRevision.current(),
+        *path_parts,
+        query_arguments,
+        bearer_identity,
+    )
 
 
 def _read_principal():
@@ -655,9 +566,11 @@ def modpack_bootstrap(slugstring: str, buildstring: str):
     target = (request.args.get("target") or "client").casefold()
     source_mode = (request.args.get("source") or "hybrid").casefold()
     platform = (request.args.get("platform") or "").casefold()
+    ownership_mode = (request.args.get("ownership") or "server").casefold()
     if (
         target not in {"client", "server"}
         or source_mode not in {"hybrid", "solder"}
+        or ownership_mode not in {"server", "explicit"}
         or platform not in {
             "",
             "modrinth",
@@ -678,93 +591,86 @@ def modpack_bootstrap(slugstring: str, buildstring: str):
             include_download_overrides=True,
             include_download_sources=True,
         )
-        if platform == "technic":
-            # Required packages are installed by Technic's normal Solder API.
-            # Only optional/excluded content belongs to SolderPy Loader.
-            packages = [
-                package
-                for package in packages
-                if int(getattr(package, "optional", 0) or 0) != 0
-            ]
-        elif source_mode == "hybrid" and platform == "modrinth":
-            packages = [
-                package
-                for package in packages
-                if not (
-                    str(package.integration_provider or "").upper()
-                    == "MODRINTH"
-                    and package.integration_project_id
-                    and package.integration_version_id
-                    and int(getattr(package, "optional", 0) or 0) != 2
-                )
-            ]
-        elif source_mode == "hybrid" and platform == "curseforge":
-            native_projects = {
+        groups = AdvancedOptional.get_active_groups(selected_build.id)
+        grouped_memberships = {
+            item.build_modversion_id
+            for group in groups
+            for item in group.items
+        }
+        install_owners = {}
+        technic_configuration = (
+            TechnicSolderPyLoader.get_active(selected_build.id)
+            if platform == "technic"
+            else None
+        )
+        technic_native = bool(
+            technic_configuration
+            and technic_configuration.delivery_mode
+            == TechnicSolderPyLoader.TECHNIC_DELIVERY
+        )
+        native_projects = (
+            {
                 str(override.modrinth_project_id)
                 for override in PlatformExportOverride.get_enabled()
             }
-            packages = [
-                package
-                for package in packages
-                if not (
-                    str(package.integration_provider or "").upper()
-                    == "MODRINTH"
-                    and str(package.integration_project_id or "")
-                    in native_projects
-                )
-            ]
-        if source_mode == "hybrid":
-            _backfill_bootstrap_modrinth_downloads(
-                packages,
-                str(selected_build.minecraft),
-                getattr(selected_build, "modloader", None),
-            )
-        def integration_references(provider):
-            return tuple(
-                sorted(
-                    {
-                        (
-                            str(package.integration_project_id),
-                            str(package.integration_version_id),
-                        )
-                        for package in packages
-                        if str(
-                            getattr(package, "integration_provider", "") or ""
-                        ).upper()
-                        == provider
-                        and getattr(package, "integration_project_id", None)
-                        and getattr(package, "integration_version_id", None)
-                        and str(
-                            getattr(package, "modtype", "") or ""
-                        ).upper()
-                        == "MOD"
-                        and Modversion.JAR_MD5_PATTERN.fullmatch(
-                            str(getattr(package, "jarmd5", "") or "").strip()
-                        )
-                    }
-                )
-            )
-
-        maven_references = (
-            integration_references("MAVEN")
-            if source_mode == "hybrid"
-            else ()
+            if source_mode == "hybrid" and platform == "curseforge"
+            else set()
         )
-        maven_downloads = _bootstrap_maven_downloads(maven_references)
-        native_downloads = {
-            ("MAVEN", project_id, version_id): url
-            for (project_id, version_id), url in maven_downloads.items()
-        }
+        for package in packages:
+            membership_id = getattr(package, "membership_id", None)
+            modtype = str(
+                getattr(package, "modtype", "MOD") or "MOD"
+            ).upper()
+            owner = "loader"
+            if modtype in {"BOOTSTRAP", "MCIL", "LAUNCHER"}:
+                owner = "ignored"
+            elif membership_id not in grouped_memberships:
+                provider = str(
+                    getattr(package, "integration_provider", "") or ""
+                ).upper()
+                project_id = str(
+                    getattr(package, "integration_project_id", "") or ""
+                )
+                version_id = getattr(package, "integration_version_id", None)
+                optional_state = int(
+                    getattr(package, "optional", 0) or 0
+                )
+                if technic_native and optional_state == 0:
+                    owner = "launcher"
+                elif (
+                    ownership_mode != "explicit"
+                    and
+                    source_mode == "hybrid"
+                    and platform == "modrinth"
+                    and provider == "MODRINTH"
+                    and project_id
+                    and version_id
+                    and optional_state != 2
+                ):
+                    owner = "launcher"
+                elif (
+                    ownership_mode != "explicit"
+                    and
+                    source_mode == "hybrid"
+                    and platform == "curseforge"
+                    and provider == "MODRINTH"
+                    and project_id in native_projects
+                ):
+                    owner = "launcher"
+            install_owners[membership_id] = owner
+
+        # Bootstrap reads never contact upstream providers or mutate storage.
+        # Native URLs and hashes are persisted during management-side imports.
         return BootstrapManifest.render(
             current_modpack,
             selected_build,
             packages,
-            AdvancedOptional.get_active_groups(selected_build.id),
+            groups,
             public_repo_url,
             ModDependency.get_for_build_api(selected_build.id),
             target=target,
-            native_downloads=native_downloads,
             source_mode=source_mode,
+            install_owners=install_owners,
         )
 
     try:

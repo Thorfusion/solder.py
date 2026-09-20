@@ -8,7 +8,7 @@ from .compatibility import compatibility_values
 
 BOOTSTRAP_SCHEMA = "solder.py/bootstrap"
 BOOTSTRAP_SCHEMA_VERSION = 1
-IGNORED_MODTYPES = frozenset({"LAUNCHER", "BOOTSTRAP"})
+IGNORED_MODTYPES = frozenset({"LAUNCHER", "BOOTSTRAP", "MCIL"})
 STATE_NAMES = {0: "required", 1: "optional", 2: "excluded"}
 SELECTION_TYPES = {0: "multiple", 1: "single"}
 _MD5_RE = re.compile(r"^[0-9a-fA-F]{32}$")
@@ -173,9 +173,11 @@ class BootstrapManifest:
         target="client",
         native_downloads=None,
         source_mode="hybrid",
+        install_owners=None,
     ):
         packages = list(packages)
         native_downloads = native_downloads or {}
+        install_owners = install_owners or {}
         source_mode = str(source_mode or "hybrid").strip().casefold()
         if source_mode not in {"hybrid", "solder"}:
             raise BootstrapManifestError("Unknown bootstrap download source.")
@@ -218,7 +220,23 @@ class BootstrapManifest:
                 else state == 0
             )
             modtype = str(getattr(package, "modtype", "MOD") or "MOD").upper()
-            managed = modtype not in IGNORED_MODTYPES and modtype != "MCIL"
+            default_owner = (
+                "ignored"
+                if modtype in IGNORED_MODTYPES
+                else "loader"
+            )
+            owner = str(
+                install_owners.get(membership_id, default_owner)
+            ).strip().casefold()
+            if owner not in {"loader", "launcher", "ignored"}:
+                raise BootstrapManifestError(
+                    "A build package has an invalid install owner."
+                )
+            # Native launcher formats cannot represent advanced group rules.
+            # A grouped package therefore always remains Loader-owned.
+            if group is not None and owner == "launcher":
+                owner = "loader"
+            managed = owner == "loader"
             if managed and selected_by_default:
                 selected_defaults.append(membership_id)
             if managed and group is None and state == 0:
@@ -285,6 +303,7 @@ class BootstrapManifest:
                     ).upper(),
                     "type": modtype,
                     "modtype": modtype,
+                    "install_owner": owner,
                     "bootstrap_managed": managed,
                     "url": download["url"],
                     "md5": download["md5"],

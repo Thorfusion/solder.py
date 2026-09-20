@@ -453,7 +453,7 @@ class GitHubConfigPack:
         self._ignore_scopes = []
 
     @staticmethod
-    def _root_metadata(archive_path):
+    def _root_metadata(archive_path, expected_sha):
         try:
             archive = zipfile.ZipFile(archive_path, "r")
         except (OSError, zipfile.BadZipFile) as error:
@@ -467,6 +467,14 @@ class GitHubConfigPack:
             if len(roots) != 1:
                 raise GitHubConfigError("The GitHub repository ZIP has an invalid root.")
             root = next(iter(roots))
+            # GitHub zipball roots end in the resolved commit's abbreviated
+            # object id. Bind the archive response to the API-resolved commit
+            # before accepting any of its contents.
+            expected_prefix = str(expected_sha or "").lower()[:7]
+            if not expected_prefix or not root.lower().endswith(expected_prefix):
+                raise GitHubConfigError(
+                    "The GitHub repository ZIP does not match the resolved commit."
+                )
             def control_file(name, maximum):
                 matches = [
                     info for info in archive.infolist()
@@ -509,8 +517,10 @@ class GitHubConfigPack:
                 return True
         return False
 
-    def _extract(self, archive_path, staging, prefix=""):
-        root, modules, ignore_content = self._root_metadata(archive_path)
+    def _extract(self, archive_path, staging, prefix="", expected_sha=None):
+        root, modules, ignore_content = self._root_metadata(
+            archive_path, expected_sha
+        )
         if ignore_content is not None:
             self._ignore_scopes.append((prefix, SolderPyIgnore(ignore_content)))
         try:
@@ -581,7 +591,9 @@ class GitHubConfigPack:
                 )
         archive_path = Path(temporary, f"archive-{hashlib.sha256((repository.full_name + reference.sha + prefix).encode()).hexdigest()}.zip")
         self.client.download_archive(repository, reference.sha, archive_path)
-        modules = self._extract(archive_path, staging, prefix)
+        modules = self._extract(
+            archive_path, staging, prefix, expected_sha=reference.sha
+        )
         if not modules or depth >= MAX_SUBMODULE_DEPTH:
             return
         module_urls = self._submodule_urls(modules)

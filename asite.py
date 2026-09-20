@@ -215,9 +215,13 @@ def allowed_file(filename):
 
 @asite.context_processor
 def inject_menu():
-    
-    markedbuildid2 = Build.get_marked_build()
-    pinnedmodpacks = Modpack.get_by_pinned()
+    user_id = (
+        Session.get_user_id(session["token"])
+        if "token" in session
+        else None
+    )
+    markedbuildid2 = Build.get_marked_build(user_id) if user_id else 0
+    pinnedmodpacks = Modpack.get_by_pinned(user_id) if user_id else []
     
     return dict(
         markedbuildid2=markedbuildid2,
@@ -241,7 +245,7 @@ def index():
     return render_template("index.html", dashboard=dashboard)
 
 
-@asite.route("/logout")
+@asite.route("/logout", methods=["POST"])
 def logout():
     if "token" not in session or not Session.verify_session(session["token"], request.remote_addr):
         # New or invalid session, send to login
@@ -1048,6 +1052,8 @@ def modpack(id):
         flash("error when building modpack build", "error")
 
     if request.method == "POST":
+        allowed_build_ids = {str(build.id) for build in builds}
+        allowed_versions = {str(build.version) for build in builds}
         if "form-submit" in request.form:
             
             if User.get_permission_token(session["token"], "modpacks_create") == 0:
@@ -1068,6 +1074,13 @@ def modpack(id):
                 clonebuild = request.form['clonebuild']
             if "clonebuildman" in request.form and request.form['clonebuildman'] != "":
                 clonebuild = request.form['clonebuildman']
+            if clonebuild:
+                source_build = Build.get_by_id(clonebuild)
+                if source_build is None or not User_modpack.get_user_modpackpermission(
+                    session["token"], source_build.modpack_id
+                ):
+                    flash("The clone source is unavailable.", "error")
+                    return redirect(url_for("asite.modpack", id=id))
             try:
                 Build.new(id, request.form["version"], request.form["mcversion"], publish, private, min_java, request.form["memory"], clonebuild, request.form.get("forge") or None, request.form.get("modloader"), java_runtime)
             except (InvalidJavaRuntimeError, InvalidModloaderError) as error:
@@ -1076,22 +1089,32 @@ def modpack(id):
             flash("added build", "success")
             return redirect(url_for("asite.modpack", id=id))
         if "recommended_submit" in request.form:
+            if request.form["modid"] not in allowed_versions:
+                return redirect(url_for("asite.modpack", id=id))
             common.update_checkbox(id, request.form["modid"], "recommended", "modpacks")
             flash("updated " + id, "success")
             return redirect(url_for("asite.modpack", id=id))
         if "latest_submit" in request.form:
+            if request.form["modid"] not in allowed_versions:
+                return redirect(url_for("asite.modpack", id=id))
             common.update_checkbox(id, request.form["modid"], "latest", "modpacks")
             flash("updated " + id, "success")
             return redirect(url_for("asite.modpack", id=id))
         if "is_published_submit" in request.form:
+            if request.form["modid"] not in allowed_build_ids:
+                return redirect(url_for("asite.modpack", id=id))
             common.update_checkbox(request.form["modid"], request.form["check"], "is_published", "builds")
             flash("updated " + id, "success")
             return redirect(url_for("asite.modpack", id=id))
         if "private_submit" in request.form:
+            if request.form["modid"] not in allowed_build_ids:
+                return redirect(url_for("asite.modpack", id=id))
             common.update_checkbox(request.form["modid"], request.form["check"], 'private', 'builds')
             flash("updated " + id, "success")
             return redirect(url_for("asite.modpack", id=id))
         if "marked_submit" in request.form:
+            if request.form["modid"] not in allowed_build_ids:
+                return redirect(url_for("asite.modpack", id=id))
             Build.update_checkbox_marked(request.form["modid"], request.form["check"])
             flash("updated " + id, "success")
             return redirect(url_for("asite.modpack", id=id))
@@ -1104,9 +1127,7 @@ def modpack(id):
             if User.get_permission_token(session["token"], "modpacks_delete") == 0:
                 return redirect(request.referrer)
             
-            if "modpack_delete_id" not in request.form:
-                return redirect(url_for("asite.modpack", id=id))
-            modpack.delete_modpack(request.form["modpack_delete_id"])
+            modpack.delete_modpack(id)
             flash("deleted " + id, "success")
             return redirect(url_for('asite.modpacklibrary'))
 
@@ -1125,6 +1146,19 @@ def changelog(oldver, newver):
         return redirect(url_for('alogin.login'))
     if User.get_permission_token(session["token"], "modpacks_manage") == 0:
                 return redirect(request.referrer)
+    old_modpack_id = Build.get_modpackid_by_id(oldver)
+    new_modpack_id = Build.get_modpackid_by_id(newver)
+    if (
+        not old_modpack_id
+        or not new_modpack_id
+        or not User_modpack.get_user_modpackpermission(
+            session["token"], old_modpack_id
+        )
+        or not User_modpack.get_user_modpackpermission(
+            session["token"], new_modpack_id
+        )
+    ):
+        return redirect(url_for("asite.modpacklibrary"))
 
     try:
         changelog = Build_modversion.get_changelog(oldver, newver)
@@ -1689,7 +1723,13 @@ def modpackbuild(id):
                 return redirect(request.referrer)
             if "delete_id" not in request.form:
                 return redirect(url_for("asite.modpackbuild", id=id))
-            Build_modversion.delete_build_modversion(request.form["delete_id"])
+            try:
+                Build_modversion.delete_build_modversion(
+                    request.form["delete_id"], id
+                )
+            except ValueError as error:
+                flash(str(error), "error")
+                return redirect(url_for("asite.modpackbuild", id=id))
             flash("deleted modversion", "success")
             return redirect(url_for("asite.modpackbuild", id=id))
         if "deletebuild_submit" in request.form:
@@ -2778,9 +2818,13 @@ def modlibrary_post():
         if "markedbuild" in request.form:
             if User.get_permission_token(session["token"], "modpacks_manage") == 0:
                 return redirect(request.referrer)
-            if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(request.form['markedbuild'])) == False:
+            markedbuild = Build.get_marked_build(
+                Session.get_user_id(session["token"])
+            )
+            if not markedbuild or User_modpack.get_user_modpackpermission(
+                session["token"], Build.get_modpackid_by_id(markedbuild)
+            ) == False:
                 return redirect(request.referrer)
-            markedbuild = request.form['markedbuild']
         if 'file' not in request.files:
             print('No file part')
             return redirect(url_for('asite.modlibrary'))
@@ -2862,23 +2906,45 @@ def modlibrary_post():
                         actual_jarfilesize = staged_jar.stat().st_size
 
                     actual_filesize = staged_zip.stat().st_size
-                    Modversion.new(
-                        request.form["modid"],
-                        version,
-                        request.form["mcversion"],
-                        verified_md5,
-                        actual_filesize,
-                        markedbuild,
-                        "0",
-                        jarmd5.lower(),
-                        modloader=request.form.getlist("modloader"),
-                        jarfilesize=actual_jarfilesize,
-                    )
                     final_zip = destination_folder / filename
-                    os.replace(staged_zip, final_zip)
-                    if staged_jar is not None:
-                        final_jar = destination_folder / jarfilename
-                        os.replace(staged_jar, final_jar)
+                    final_jar = (
+                        destination_folder / jarfilename
+                        if staged_jar is not None
+                        else None
+                    )
+                    if final_zip.exists() or (
+                        final_jar is not None and final_jar.exists()
+                    ):
+                        raise ValueError(
+                            "A repository file for this version already exists."
+                        )
+
+                    moved_files = []
+                    try:
+                        os.replace(staged_zip, final_zip)
+                        moved_files.append(final_zip)
+                        if staged_jar is not None:
+                            os.replace(staged_jar, final_jar)
+                            moved_files.append(final_jar)
+                        # Publish the database row only after every local
+                        # artifact is in its final location. Roll back those
+                        # artifacts if the database transaction fails.
+                        Modversion.new(
+                            request.form["modid"],
+                            version,
+                            request.form["mcversion"],
+                            verified_md5,
+                            actual_filesize,
+                            markedbuild,
+                            "0",
+                            jarmd5.lower(),
+                            modloader=request.form.getlist("modloader"),
+                            jarfilesize=actual_jarfilesize,
+                        )
+                    except Exception:
+                        for moved_file in reversed(moved_files):
+                            moved_file.unlink(missing_ok=True)
+                        raise
             except (
                 IncompatibleModVersionError,
                 InvalidModloaderError,
@@ -2889,7 +2955,7 @@ def modlibrary_post():
                 flash(str(error), "error")
                 return redirect(url_for("asite.modlibrary"))
 
-            if R2_BUCKET != None:
+            if R2_BUCKET:
                 keyname = "mods/" + safe_mod_name + "/" + filename
                 try:
                     R2.upload_file(str(final_zip), R2_BUCKET, keyname, ExtraArgs={'ContentType': 'application/zip'})
@@ -2897,7 +2963,7 @@ def modlibrary_post():
                     ErrorPrinter.message("failed to upload zipfile to buckets", e)
                     flash("failed to upload zipfile to bucket", "error")
             if jarmd5 != "0":
-                if R2_BUCKET != None:
+                if R2_BUCKET:
                     jarkeyname = "mods/" + safe_mod_name + "/" + jarfilename
                     try:
                         R2.upload_file(str(final_jar), R2_BUCKET, jarkeyname, ExtraArgs={'ContentType': 'application/jar'})
@@ -2920,7 +2986,9 @@ def modpacklibrary():
                 return redirect(request.referrer)
 
     try:
-        modpacklibrary = Modpack.get_all()
+        modpacklibrary = Modpack.get_all_for_user(
+            Session.get_user_id(session["token"])
+        )
     except connector.ProgrammingError as e:
         Database.create_tables()
         modpacklibrary = []
@@ -2948,10 +3016,18 @@ def modpacklibrary_post():
                 hidden = request.form['hidden']
             if "private" in request.form:
                 private = request.form['private']
-            Modpack.new(request.form["pretty_name"], request.form["name"], hidden, private, "0")
+            Modpack.new(
+                request.form["pretty_name"],
+                request.form["name"],
+                hidden,
+                private,
+                Session.get_user_id(session["token"]),
+            )
             flash("added modpack", "success")
             return redirect(url_for('asite.modpacklibrary'))
-        if User_modpack.get_user_modpackpermission(session["token"], Build.get_modpackid_by_id(request.form["modid"])) == False:
+        if User_modpack.get_user_modpackpermission(
+            session["token"], request.form["modid"]
+        ) == False:
             return redirect(request.referrer)
         if "hidden_submit" in request.form:
             common.update_checkbox(request.form["modid"], request.form["check"], "hidden", "modpacks")

@@ -13,6 +13,7 @@ from tests.environment import configure_test_environment
 configure_test_environment()
 
 from models.integration import (  # noqa: E402
+    MAVEN,
     MODRINTH,
     ExternalDependency,
     ExternalProject,
@@ -396,6 +397,63 @@ class MaterializationTests(unittest.TestCase):
         with zipfile.ZipFile(data, "w") as jar:
             jar.writestr("fabric.mod.json", "{}")
         return data.getvalue()
+
+    def test_verified_maven_source_is_persistable_for_bootstrap(self):
+        external = ExternalVersion(
+            MAVEN,
+            "7",
+            "VERSION",
+            "Version",
+            "1.0",
+            ("1.7.10",),
+            ("FORGE",),
+            "release",
+            None,
+            "example.jar",
+            "https://maven.example.test/example.jar",
+            {"sha1": "1" * 40, "sha512": "2" * 128},
+            123,
+        )
+
+        source = ModIntegration._provider_download_source(
+            external, md5="a" * 32, filesize=123
+        )
+
+        self.assertEqual(
+            source,
+            {
+                "provider": MAVEN,
+                "url": "https://maven.example.test/example.jar",
+                "filename": "example.jar",
+                "md5": "a" * 32,
+                "sha1": "1" * 40,
+                "sha512": "2" * 128,
+                "filesize": 123,
+            },
+        )
+
+    def test_private_http_maven_source_uses_solder_bootstrap_fallback(self):
+        external = ExternalVersion(
+            MAVEN,
+            "7",
+            "VERSION",
+            "Version",
+            "1.0",
+            ("1.7.10",),
+            ("FORGE",),
+            "release",
+            None,
+            "example.jar",
+            "http://maven.internal.example/example.jar",
+            {"sha256": "2" * 64},
+            123,
+        )
+
+        self.assertIsNone(
+            ModIntegration._provider_download_source(
+                external, md5="a" * 32, filesize=123
+            )
+        )
 
     def test_import_links_metadata_without_downloading_files(self):
         project = ExternalProject(

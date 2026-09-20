@@ -41,7 +41,8 @@ The route accepts these query arguments:
 | --- | --- | --- | --- |
 | `target` | `client`, `server` | `client` | Filter packages by their configured side. |
 | `source` | `hybrid`, `solder` | `hybrid` | Include verified provider/override fallbacks, or restrict raw JARs to Solder. |
-| `platform` | `modrinth`, `curseforge`, `prism`, `technic` | none | Omit packages already owned by the native platform that installed SolderPy Loader. |
+| `platform` | `modrinth`, `curseforge`, `prism`, `technic` | none | Identify the native platform that installed SolderPy Loader and may own package files. |
+| `ownership` | `server`, `explicit` | `server` | Generated exports use `explicit`; it keeps the complete graph Loader-owned until the exported Loader config applies its exact native membership list. |
 | `from` | Build version, `recommended`, or `latest` | none | Add changes from an installed build. |
 | `cid` | Client UUID | none | Read a private modpack associated with that client. |
 | `k` | Solder API key | none | Privileged read access; do not distribute this secret in a client mod. |
@@ -85,7 +86,7 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "1": "optional",
       "2": "excluded"
     },
-    "ignored_modtypes": ["BOOTSTRAP", "LAUNCHER"],
+    "ignored_modtypes": ["BOOTSTRAP", "LAUNCHER", "MCIL"],
     "required_memberships": [91],
     "default_memberships": [91, 92]
   },
@@ -132,6 +133,7 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "side": "BOTH",
       "type": "MOD",
       "modtype": "MOD",
+      "install_owner": "loader",
       "bootstrap_managed": true,
       "url": "https://cdn.example.com/mods/example-library/example-library-1.20.1-4.0.jar",
       "md5": "0123456789abcdef0123456789abcdef",
@@ -180,6 +182,7 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "side": "CLIENT",
       "type": "CONFIG",
       "modtype": "CONFIG",
+      "install_owner": "loader",
       "bootstrap_managed": true,
       "url": "https://cdn.example.com/mods/standard-world/standard-world-1.0.zip",
       "md5": "fedcba9876543210fedcba9876543210",
@@ -280,11 +283,21 @@ a file does not change either value. `download.url` remains the Solder-hosted
 URL, so clients that do not understand `sources` retain the existing behavior.
 If solder.py cannot use saved native-provider metadata, it still returns the
 override, when configured, and the Solder URL. `source=solder` returns only the
-Solder URL. `platform=modrinth` omits native MRPack files, while
-`platform=curseforge` omits enabled Modrinth-CurseForge sync mappings, avoiding
-duplicate installation by SolderPy Loader. `platform=technic` omits state `0`
-packages because Technic installs those required files from its normal Solder
-manifest; state `1` and `2` packages remain for Loader-managed optional content.
+Solder URL. The response always retains the complete dependency graph. Each
+package has an `install_owner` of `loader`, `launcher`, or `ignored`, with the
+legacy `bootstrap_managed` boolean mirroring whether that value is `loader`.
+Launcher-owned dependencies therefore remain visible and can satisfy closure
+without being downloaded twice.
+
+Generated Modrinth and CurseForge exports request `ownership=explicit` and put
+the exact memberships actually embedded in the native pack in the Loader
+configuration's `launcherOwnedMemberships`. This is intentionally based on the
+finished export plan, not merely provider metadata: if native resolution falls
+back to Solder, the package remains Loader-owned. Advanced-group choices always
+remain Loader-owned because native manifests cannot enforce their selection
+rules. `platform=technic` is server-owned: Technic owns ungrouped required
+packages only when that build uses Technic delivery, while SolderPy Loader owns
+optional and advanced content.
 
 `download.format: solder_zip` is used by `CONFIG`, `RES`, `NONE`, and other
 non-mod content. Download the archive, verify its byte size when supplied,
@@ -306,8 +319,12 @@ The bootstrap must not load newly downloaded mod JARs into a Minecraft process
 that has already completed loader discovery. Run before discovery, or stage
 the update and require one controlled restart.
 
-Packages with `bootstrap_managed: false` are visible for diagnostics but must
-not be extracted by this client. This covers `LAUNCHER` (the legacy Technic
+Packages with `install_owner: launcher` or `install_owner: ignored` (and thus
+`bootstrap_managed: false`) must not be extracted by this client. When a
+package changes from Loader-owned to launcher-owned, discard the Loader receipt
+without deleting the launcher's file. For ordinary removals, delete a former
+Loader output only if its current hash still matches the receipt; preserve
+locally modified or unverifiable files. Ignored ownership covers `LAUNCHER` (the legacy Technic
 modloader package) and `BOOTSTRAP` (an initial downloader/bootstrap package).
 Store a dedicated Solder bootstrap package as type `BOOTSTRAP` if it is also
 represented in the build; that prevents it from attempting to update itself.
@@ -349,7 +366,8 @@ example:
   "build": "recommended",
   "target": "client",
   "source": "hybrid",
-  "platform": "modrinth"
+  "platform": "modrinth",
+  "launcherOwnedMemberships": [91]
 }
 ```
 
@@ -367,7 +385,7 @@ A bootstrap mod is compatible with schema version 1 when it:
 - supports states `0`, `1`, and `2` and named single/multiple groups;
 - keys saved choices by group key and package slug;
 - closes required dependencies before downloading;
-- honors `target`, `source`, `platform`, side filtering, and `bootstrap_managed`;
+- honors `target`, `source`, `platform`, side filtering, `install_owner`, and the export's exact native membership list;
 - verifies each ZIP's size and MD5 and extracts it safely;
 - tracks extracted-file ownership for reliable removal and rollback;
 - handles ETags, resolved channels, and the optional `changes` summary;

@@ -297,15 +297,33 @@ class Build:
         return cls(**build)
     
     @staticmethod
-    def get_marked_build():
+    def get_marked_build(user_id=None):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT id FROM builds WHERE marked = 1")
-        try: 
-            build_id = cur.fetchone()["id"]
-            return (build_id)
-        except:
-            return 0
+        try:
+            if user_id is None:
+                cur.execute("SELECT id FROM builds WHERE marked = 1 ORDER BY id LIMIT 1")
+            else:
+                cur.execute(
+                    """SELECT builds.id
+                       FROM builds
+                       INNER JOIN user_permissions
+                           ON user_permissions.user_id = %s
+                       LEFT JOIN user_modpack
+                           ON user_modpack.user_id = %s
+                          AND user_modpack.modpack_id = builds.modpack_id
+                       WHERE builds.marked = 1
+                         AND (user_permissions.solder_full = 1
+                              OR user_modpack.modpack_id IS NOT NULL)
+                       ORDER BY builds.id
+                       LIMIT 1""",
+                    (int(user_id), int(user_id)),
+                )
+            row = cur.fetchone()
+            return row["id"] if row else 0
+        finally:
+            cur.close()
+            conn.close()
 
     def get_modversions_api(
         self,

@@ -623,7 +623,12 @@ all signed-in users:
 
 ```dotenv
 SECRET_KEY=replace-with-a-long-random-application-secret
+SESSION_COOKIE_SECURE=True
 ```
+
+Management session cookies are HTTPS-only by default. Set
+`SESSION_COOKIE_SECURE=False` only when developing locally over plain HTTP;
+never disable it on a public deployment.
 
 `PUBLIC_REPO_LOCATION` is the HTTP(S) prefix written into launcher manifests.
 It must be reachable by players and should include its trailing slash:
@@ -677,8 +682,8 @@ CACHE_TTL=300
 CACHE_SIZE=100
 ```
 
-`CACHE_TTL` is measured in seconds. `CACHE_SIZE` is the in-process cache limit
-in MiB.
+`CACHE_TTL` is measured in seconds. `CACHE_SIZE` is the maximum number of
+responses retained by each in-process cache.
 
 ### S3/R2-compatible object storage
 

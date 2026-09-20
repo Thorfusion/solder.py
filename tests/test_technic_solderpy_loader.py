@@ -183,6 +183,7 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
         connection = Mock()
         cursor = connection.cursor.return_value
         stored = Mock()
+        r2 = Mock()
 
         with (
             tempfile.TemporaryDirectory() as directory,
@@ -200,6 +201,8 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
                 "https://cdn.example.test/mods/",
                 "https://solder.example.test/",
                 delivery_mode="TECHNIC",
+                r2_client=r2,
+                r2_bucket="bucket",
                 http=FakeHTTP((loader_body, runtime_body)),
             )
             artifacts = list(
@@ -235,6 +238,8 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
         )
         connection.commit.assert_called_once_with()
         connection.rollback.assert_not_called()
+        uploaded_key = r2.upload_file.call_args.args[2]
+        self.assertTrue(uploaded_key.startswith("mods/_solderpy/"))
 
 
 if __name__ == "__main__":

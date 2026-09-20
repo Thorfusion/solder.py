@@ -5,7 +5,7 @@ import re
 from urllib.parse import urlparse
 
 import boto3
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 from mysql.connector import IntegrityError
 
 from api import clear_api_caches
@@ -15,6 +15,7 @@ from models.build import (
     InvalidJavaRuntimeError,
     normalize_java_runtime,
 )
+from models.cache_revision import CacheRevision
 from models.common import (
     R2_ACCESS_KEY,
     R2_BUCKET,
@@ -364,6 +365,8 @@ def handle_integration_problem(error):
 
 
 def _written(payload, status=200):
+    if not current_app.testing:
+        CacheRevision.bump()
     clear_api_caches()
     return _response(payload, status)
 
@@ -1168,5 +1171,7 @@ def create_mcil_jar(slug, version):
 def refresh_minecraft_versions():
     # solder.py uses free-form Minecraft version fields and has no remote
     # version-list cache. Keep the Technic endpoint as a compatible no-op.
+    if not current_app.testing:
+        CacheRevision.bump()
     clear_api_caches()
     return _response({"success": "Minecraft versions cache refreshed."})

@@ -914,19 +914,30 @@ def provider_for_user(provider, user_id, *, http=None):
 
 class ModIntegration:
     @staticmethod
-    def _modrinth_download_source(external, *, md5=None, filesize=None):
-        """Return the immutable Modrinth file metadata stored for bootstrap."""
-        if normalize_provider(external.provider) != MODRINTH:
+    def _provider_download_source(external, *, md5=None, filesize=None):
+        """Return verified immutable provider metadata stored for bootstrap."""
+        provider = normalize_provider(external.provider)
+        download_url = str(external.download_url or "")
+        if (
+            provider not in {MODRINTH, MAVEN}
+            or urlparse(download_url).scheme.lower() != "https"
+        ):
+            # Private Maven origins may intentionally use HTTP. They can be
+            # verified and packaged by management, but are not suitable as a
+            # public bootstrap source; use the Solder-hosted JAR instead.
             return None
         return {
-            "provider": MODRINTH,
-            "url": external.download_url,
+            "provider": provider,
+            "url": download_url,
             "filename": external.filename,
             "md5": md5 or external.hashes.get("md5"),
             "sha1": external.hashes.get("sha1"),
             "sha512": external.hashes.get("sha512"),
             "filesize": filesize if filesize is not None else external.size,
         }
+
+    # Kept as an internal compatibility alias for callers from older plugins.
+    _modrinth_download_source = _provider_download_source
 
     @staticmethod
     def _slug(value):
@@ -1943,7 +1954,7 @@ class ModIntegration:
                 modloader=stored_modloader,
                 integration_version_id=external.version_id,
                 jarfilesize=jar_filesize,
-                download_source=cls._modrinth_download_source(
+                download_source=cls._provider_download_source(
                     external, md5=jar_md5, filesize=jar_filesize
                 ),
             )
@@ -1962,16 +1973,15 @@ class ModIntegration:
         except Exception:
             raced = Modversion.get_by_integration(mod.id, integration_version_id)
             if raced:
-                if mod.integration_provider == MODRINTH:
+                if mod.integration_provider in {MODRINTH, MAVEN}:
                     provider._validate_download_url(external.download_url)
-                    Modversion.store_download_source(
-                        raced.id,
-                        cls._modrinth_download_source(
-                            external,
-                            md5=raced.jarmd5,
-                            filesize=raced.jarfilesize,
-                        ),
+                    source = cls._provider_download_source(
+                        external,
+                        md5=raced.jarmd5,
+                        filesize=raced.jarfilesize,
                     )
+                    if source is not None:
+                        Modversion.store_download_source(raced.id, source)
                 return MaterializedVersion(raced, False)
             final_zip.unlink(missing_ok=True)
             final_jar.unlink(missing_ok=True)

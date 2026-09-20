@@ -39,6 +39,7 @@ class ApplicationSmokeTests(unittest.TestCase):
 
     def test_management_session_cookie_has_safe_defaults(self):
         self.assertTrue(self.app_module.app.config["SESSION_COOKIE_HTTPONLY"])
+        self.assertTrue(self.app_module.app.config["SESSION_COOKIE_SECURE"])
         self.assertEqual(
             self.app_module.app.config["SESSION_COOKIE_SAMESITE"], "Lax"
         )
@@ -53,7 +54,11 @@ class ApplicationSmokeTests(unittest.TestCase):
         verify.assert_called_once_with("active-token", "127.0.0.1")
 
     def test_failed_login_does_not_echo_the_password(self):
-        with patch("alogin.User.get_by_username", return_value=None):
+        with (
+            patch("alogin.LoginThrottle.retry_after", return_value=0),
+            patch("alogin.LoginThrottle.failure", return_value=0),
+            patch("alogin.User.get_by_username", return_value=None),
+        ):
             response = self.client.post(
                 "/login",
                 data={"username": "review-user", "password": "do-not-echo"},
@@ -63,6 +68,49 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("review-user", page)
         self.assertNotIn("do-not-echo", page)
+
+    def test_login_throttle_stops_password_lookup_and_sets_retry_after(self):
+        with (
+            patch("alogin.LoginThrottle.retry_after", return_value=73),
+            patch("alogin.User.get_by_username") as get_user,
+        ):
+            response = self.client.post(
+                "/login",
+                data={"username": "review-user", "password": "guess"},
+            )
+
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(response.headers["Retry-After"], "73")
+        get_user.assert_not_called()
+
+    def test_modpack_build_mutation_is_scoped_to_the_route_pack(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        selected_pack = SimpleNamespace(
+            get_builds=lambda: [SimpleNamespace(id=7, version="1.0")]
+        )
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch("asite.Modpack.get_by_id", return_value=selected_pack),
+            patch("asite.common.update_checkbox") as update_checkbox,
+        ):
+            response = self.client.post(
+                "/modpack/3",
+                data={
+                    "is_published_submit": "1",
+                    "modid": "99",
+                    "check": "1",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        update_checkbox.assert_not_called()
 
     def test_user_id_prefix_does_not_authorize_another_users_password_change(self):
         with self.client.session_transaction() as flask_session:
@@ -2508,7 +2556,8 @@ class ApplicationSmokeTests(unittest.TestCase):
                 ),
                 patch("asite.Modversion.new") as new_version,
                 patch("asite.UPLOAD_FOLDER", directory),
-                patch("asite.R2_BUCKET", None),
+                patch("asite.R2_BUCKET", ""),
+                patch("asite.R2.upload_file") as upload_file,
             ):
                 response = self.client.post(
                     "/modlibrary",
@@ -2545,6 +2594,60 @@ class ApplicationSmokeTests(unittest.TestCase):
                 Path(artifact_dir, "example-mod-1.7.10-1.0.jar").read_bytes(),
                 jar_data,
             )
+            upload_file.assert_not_called()
+
+    def test_mod_upload_removes_published_files_when_database_insert_fails(self):
+        package = io.BytesIO()
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr("config/example.cfg", b"enabled=true")
+        package_data = package.getvalue()
+        package_md5 = hashlib.md5(
+            package_data, usedforsecurity=False
+        ).hexdigest()
+
+        with tempfile.TemporaryDirectory() as directory:
+            with self.client.session_transaction() as flask_session:
+                flask_session["token"] = "valid-test-token"
+            with (
+                patch("asite.Session.verify_session", return_value=True),
+                patch("asite.User.get_permission_token", return_value=1),
+                patch(
+                    "asite.Mod.get_by_id",
+                    return_value=SimpleNamespace(
+                        name="example-config",
+                        integration_provider=None,
+                        modtype="CONFIG",
+                    ),
+                ),
+                patch(
+                    "asite.Modversion.new",
+                    side_effect=RuntimeError("database failed"),
+                ),
+                patch("asite.UPLOAD_FOLDER", directory),
+                patch("asite.R2_BUCKET", None),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "database failed"):
+                    self.client.post(
+                        "/modlibrary",
+                        data={
+                            "form-submit": "1",
+                            "modid": "9",
+                            "mod": "example-config",
+                            "mcversion": "1.20.1",
+                            "version": "1.0",
+                            "md5": package_md5,
+                            "jarmd5": "0",
+                            "file": (io.BytesIO(package_data), "upload.zip"),
+                        },
+                        content_type="multipart/form-data",
+                    )
+
+            artifact = Path(
+                directory,
+                "example-config",
+                "example-config-1.20.1-1.0.zip",
+            )
+            self.assertFalse(artifact.exists())
 
     def test_multi_minecraft_upload_uses_a_stable_multi_filename(self):
         package = io.BytesIO()

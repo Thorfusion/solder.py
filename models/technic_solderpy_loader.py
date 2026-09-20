@@ -177,7 +177,7 @@ class TechnicSolderPyLoader:
                 r2_client.upload_file(
                     str(destination),
                     r2_bucket,
-                    relative,
+                    f"mods/{relative}",
                     ExtraArgs={"ContentType": "application/zip"},
                 )
 

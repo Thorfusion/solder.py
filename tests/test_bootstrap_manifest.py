@@ -76,6 +76,43 @@ def group(identifier, membership_id):
 
 
 class BootstrapManifestTests(unittest.TestCase):
+    def test_launcher_owned_dependency_stays_in_the_complete_graph(self):
+        dependent = package(4, 10, "dependent")
+        dependency = package(5, 11, "dependency")
+        manifest = BootstrapManifest.render(
+            modpack(),
+            build(1, "1.0"),
+            [dependent, dependency],
+            [],
+            "https://cdn.example.test/mods/",
+            {4: [{"id": 5, "name": "dependency"}]},
+            install_owners={10: "loader", 11: "launcher"},
+        )
+
+        by_name = {item["name"]: item for item in manifest["packages"]}
+        self.assertEqual(by_name["dependency"]["install_owner"], "launcher")
+        self.assertFalse(by_name["dependency"]["bootstrap_managed"])
+        self.assertTrue(by_name["dependent"]["dependencies"][0]["present"])
+        self.assertEqual(
+            by_name["dependent"]["dependencies"][0]["membership_id"], 11
+        )
+        self.assertEqual(manifest["selection_policy"]["required_memberships"], [10])
+
+    def test_advanced_group_forces_loader_ownership(self):
+        grouped = package(4, 10, "graphics", state=2)
+        manifest = BootstrapManifest.render(
+            modpack(),
+            build(1, "1.0"),
+            [grouped],
+            [group(8, 10)],
+            "https://cdn.example.test/mods/",
+            {},
+            install_owners={10: "launcher"},
+        )
+
+        self.assertEqual(manifest["packages"][0]["install_owner"], "loader")
+        self.assertTrue(manifest["packages"][0]["bootstrap_managed"])
+
     def test_mod_download_uses_the_verified_raw_jar(self):
         manifest = BootstrapManifest.render(
             modpack(),

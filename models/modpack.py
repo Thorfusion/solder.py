@@ -62,9 +62,32 @@ class Modpack:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("INSERT INTO modpacks (name, slug, created_at, updated_at, hidden, private, user_id) VALUES (%s, %s, %s, %s, %s, %s, %s)", (name, slug, now, now, hidden, private, user_id))
-        conn.commit()
-        cur.execute("SELECT LAST_INSERT_ID() AS id")
+        try:
+            cur.execute("INSERT INTO modpacks (name, slug, created_at, updated_at, hidden, private, user_id) VALUES (%s, %s, %s, %s, %s, %s, %s)", (name, slug, now, now, hidden, private, user_id))
+            modpack_id = cur.lastrowid
+            cur.execute(
+                "INSERT INTO user_modpack (user_id, modpack_id, created_at, updated_at) VALUES (%s, %s, %s, %s)",
+                (user_id, modpack_id, now, now),
+            )
+            cur.execute(
+                """UPDATE user_permissions
+                   SET modpacks = CASE
+                       WHEN FIND_IN_SET(%s, COALESCE(modpacks, '')) > 0
+                           THEN modpacks
+                       WHEN COALESCE(modpacks, '') = '' THEN CAST(%s AS CHAR)
+                       ELSE CONCAT(modpacks, ',', %s)
+                   END
+                   WHERE user_id = %s""",
+                (modpack_id, modpack_id, modpack_id, user_id),
+            )
+            conn.commit()
+            return modpack_id
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def delete_related_rows(cursor, modpack_id):
@@ -128,14 +151,31 @@ class Modpack:
         return None
 
     @staticmethod
-    def get_by_pinned():
+    def get_by_pinned(user_id=None):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT name, id FROM modpacks WHERE pinned = 1")
-        rows = cur.fetchall()
-        if rows:
-            return rows
-        return []
+        try:
+            if user_id is None:
+                cur.execute("SELECT name, id FROM modpacks WHERE pinned = 1")
+            else:
+                cur.execute(
+                    """SELECT DISTINCT modpacks.name, modpacks.id
+                       FROM modpacks
+                       INNER JOIN user_permissions
+                           ON user_permissions.user_id = %s
+                       LEFT JOIN user_modpack
+                           ON user_modpack.user_id = %s
+                          AND user_modpack.modpack_id = modpacks.id
+                       WHERE modpacks.pinned = 1
+                         AND (user_permissions.solder_full = 1
+                              OR user_modpack.modpack_id IS NOT NULL)
+                       ORDER BY modpacks.name, modpacks.id""",
+                    (int(user_id), int(user_id)),
+                )
+            return cur.fetchall() or []
+        finally:
+            cur.close()
+            conn.close()
 
     @classmethod
     def get_by_cid_api(cls, cid):

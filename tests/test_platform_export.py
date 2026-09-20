@@ -663,6 +663,7 @@ class PlatformPackExportTests(unittest.TestCase):
                 "target": "auto",
                 "source": "solder",
                 "platform": "modrinth",
+                "launcherOwnedMemberships": [],
             },
         )
         self.assertIn("java.versions = 8\n", relauncher)
@@ -690,6 +691,69 @@ class PlatformPackExportTests(unittest.TestCase):
             )
         self.assertEqual(config["source"], "hybrid")
         self.assertEqual(config["platform"], "modrinth")
+        self.assertEqual(config["launcherOwnedMemberships"], [])
+
+    def test_solderpy_loader_config_records_only_files_native_export_owns(self):
+        selected = replace(modrinth_package(), membership_id=44)
+        with (
+            patch(
+                "models.platform_export.ModrinthProvider.list_versions",
+                return_value=[
+                    downloader_version("zCFNaupz", "relauncher-version")
+                ],
+            ),
+            patch(
+                "models.platform_export.ModrinthProvider.get_versions",
+                return_value={"version123": external_version()},
+            ),
+        ):
+            archive = PlatformPackExport.render_mrpack(
+                build(),
+                [selected, package()],
+                "solderpyloader:loader-version",
+                REPOSITORY,
+                "./mods/",
+                APPLICATION,
+                source_mode="hybrid",
+            )
+
+        with archive, zipfile.ZipFile(archive) as result:
+            config = json.loads(
+                result.read("overrides/config/solderpy-loader.json")
+            )
+
+        self.assertEqual(config["launcherOwnedMemberships"], [44])
+
+    def test_solderpy_loader_owns_native_mapping_when_export_falls_back(self):
+        selected = replace(modrinth_package(), membership_id=44)
+        with (
+            patch(
+                "models.platform_export.ModrinthProvider.list_versions",
+                return_value=[
+                    downloader_version("zCFNaupz", "relauncher-version")
+                ],
+            ),
+            patch(
+                "models.platform_export.ModrinthProvider.get_versions",
+                return_value={},
+            ),
+        ):
+            archive = PlatformPackExport.render_mrpack(
+                build(),
+                [selected],
+                "solderpyloader:loader-version",
+                REPOSITORY,
+                "./mods/",
+                APPLICATION,
+                source_mode="hybrid",
+            )
+
+        with archive, zipfile.ZipFile(archive) as result:
+            config = json.loads(
+                result.read("overrides/config/solderpy-loader.json")
+            )
+
+        self.assertEqual(config["launcherOwnedMemberships"], [])
 
     def test_curseforge_manifest_contains_only_the_downloader(self):
         archive = PlatformPackExport.render_curseforge(
@@ -967,6 +1031,30 @@ class PlatformPackExportTests(unittest.TestCase):
         self.assertEqual(plan.native_entries, ())
         self.assertEqual(plan.downloader_packages, (selected,))
         self.assertEqual(set(plan.native_files), {"version123"})
+
+    def test_advanced_group_choice_stays_with_downloader_in_hybrid_pack(self):
+        selected = replace(
+            modrinth_package(), optional_state=2, membership_id=44
+        )
+        group = SimpleNamespace(
+            items=(SimpleNamespace(build_modversion_id=44),)
+        )
+
+        with patch.object(
+            PlatformPackExport, "native_modrinth_files"
+        ) as native_files:
+            plan = PlatformPackExport._package_plan(
+                build(),
+                [selected],
+                "hybrid",
+                launcher_handles_modrinth=True,
+                optional_groups=(group,),
+            )
+
+        native_files.assert_not_called()
+        self.assertEqual(plan.native_entries, ())
+        self.assertEqual(plan.native_files, {})
+        self.assertEqual(plan.downloader_packages, (selected,))
 
     def test_packwiz_omits_basic_excluded_choices(self):
         with patch.object(

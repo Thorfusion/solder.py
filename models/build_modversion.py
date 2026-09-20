@@ -27,26 +27,42 @@ class Build_modversion:
         self.optional = optional
 
     @staticmethod
-    def delete_build_modversion(id):
+    def delete_build_modversion(id, build_id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute(
-            "SELECT group_id FROM build_optional_group_items "
-            "WHERE build_modversion_id = %s",
-            (id,),
-        )
-        optional_item = cur.fetchone()
-        cur.execute(
-            "DELETE FROM build_optional_group_items "
-            "WHERE build_modversion_id = %s",
-            (id,),
-        )
-        if optional_item:
-            from .advanced_optional import AdvancedOptional
+        try:
+            cur.execute(
+                "SELECT id FROM build_modversion WHERE id = %s AND build_id = %s",
+                (id, build_id),
+            )
+            if cur.fetchone() is None:
+                raise ValueError("The selected build package no longer exists.")
+            cur.execute(
+                "SELECT group_id FROM build_optional_group_items "
+                "WHERE build_modversion_id = %s",
+                (id,),
+            )
+            optional_item = cur.fetchone()
+            cur.execute(
+                "DELETE FROM build_optional_group_items "
+                "WHERE build_modversion_id = %s",
+                (id,),
+            )
+            if optional_item:
+                from .advanced_optional import AdvancedOptional
 
-            AdvancedOptional.normalize_group(cur, optional_item["group_id"])
-        cur.execute("DELETE FROM build_modversion WHERE id = %s", (id,))
-        conn.commit()
+                AdvancedOptional.normalize_group(cur, optional_item["group_id"])
+            cur.execute(
+                "DELETE FROM build_modversion WHERE id = %s AND build_id = %s",
+                (id, build_id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
         return None
 
     @staticmethod

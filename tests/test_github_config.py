@@ -112,12 +112,35 @@ class GitHubConfigPackTests(unittest.TestCase):
             for name, content in files.items():
                 result.writestr(f"{root}/{name}", content)
 
+    def test_archive_must_match_the_resolved_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory, "source.zip")
+            self.archive(
+                source,
+                "owner-config-pack-bbbbbbb",
+                {"config/example.cfg": b"config"},
+            )
+            client = Mock()
+            client.download_archive.side_effect = (
+                lambda _repository, _sha, destination: shutil.copyfile(
+                    source, destination
+                )
+            )
+            destination = Path(directory, "config.zip")
+
+            with self.assertRaisesRegex(GitHubConfigError, "resolved commit"):
+                GitHubConfigPack(client).build(
+                    self.repository(),
+                    GitHubReference("v1", "a" * 40, "b" * 40),
+                    destination,
+                )
+
     def test_repository_metadata_is_removed_and_instance_files_are_kept(self):
         with tempfile.TemporaryDirectory() as directory:
             source = Path(directory, "source.zip")
             self.archive(
                 source,
-                "owner-config-pack-abc",
+                "owner-config-pack-aaaaaaa",
                 {
                     "config/example.cfg": b"config",
                     "scripts/example.zs": b"script",
@@ -150,7 +173,7 @@ class GitHubConfigPackTests(unittest.TestCase):
             source = Path(directory, "source.zip")
             self.archive(
                 source,
-                "owner-config-pack-abc",
+                "owner-config-pack-aaaaaaa",
                 {
                     ".solderpyignore": (
                         b"# Local and generated files\n"
@@ -196,7 +219,7 @@ class GitHubConfigPackTests(unittest.TestCase):
             child_archive = Path(directory, "child.zip")
             self.archive(
                 parent_archive,
-                "owner-parent-abc",
+                "owner-parent-aaaaaaa",
                 {
                     ".gitmodules": (
                         b'[submodule "resources"]\n'
@@ -209,7 +232,7 @@ class GitHubConfigPackTests(unittest.TestCase):
             )
             self.archive(
                 child_archive,
-                "owner-resources-def",
+                "owner-resources-ccccccc",
                 {
                     "lang/en_us.lang": b"language",
                     "lang/private.lang": b"private",

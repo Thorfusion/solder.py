@@ -39,6 +39,7 @@ class Database:
     )
     APPLICATION_TABLES = CORE_TABLES | {
         "sessions",
+        "login_attempts",
         "solder_settings",
         "platform_export_overrides",
         "build_optional_groups",
@@ -65,6 +66,16 @@ class Database:
         user_id INT NOT NULL,
         INDEX idx_sessions_user (user_id),
         INDEX idx_sessions_expiry (expiry)
+    )""" + TABLE_OPTIONS
+
+    LOGIN_ATTEMPTS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS login_attempts (
+        attempt_key CHAR(64) NOT NULL PRIMARY KEY,
+        attempts INT UNSIGNED NOT NULL DEFAULT 0,
+        first_attempt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        blocked_until TIMESTAMP NULL,
+        last_attempt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_login_attempts_cleanup (last_attempt),
+        INDEX idx_login_attempts_blocked (blocked_until)
     )""" + TABLE_OPTIONS
 
     SOLDER_SETTINGS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS solder_settings (
@@ -981,6 +992,7 @@ class Database:
                           COLLATE=utf8mb4_unicode_ci"""
             )
             cur.execute(Database.SESSION_TABLE_SQL)
+            cur.execute(Database.LOGIN_ATTEMPTS_TABLE_SQL)
             Database.normalize_table_collations(cur)
             con.commit()
             return True
@@ -1133,6 +1145,7 @@ class Database:
             cur.execute(Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL)
 
             cur.execute(Database.SESSION_TABLE_SQL)
+            cur.execute(Database.LOGIN_ATTEMPTS_TABLE_SQL)
 
             # Run index migrations after every additive table has been
             # created. A stock Technic database does not contain sessions or
@@ -1178,6 +1191,7 @@ class Database:
             cur.execute(Database.USER_MODPACK_TABLE_SQL)
             cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
             cur.execute(Database.SESSION_TABLE_SQL)
+            cur.execute(Database.LOGIN_ATTEMPTS_TABLE_SQL)
             cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
             for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
                 cur.execute(query)

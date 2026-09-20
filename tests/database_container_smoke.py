@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -411,7 +412,7 @@ def verify_technic_migration(database_container: str) -> None:
         database_container,
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
-        "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies', "
+        "AND TABLE_NAME IN ('sessions', 'login_attempts', 'user_modpack', 'mod_dependencies', "
         "'solder_settings', 'platform_export_overrides', "
         "'build_optional_groups', 'build_optional_group_items', "
         "'technic_solderpy_loader_builds', "
@@ -423,7 +424,7 @@ def verify_technic_migration(database_container: str) -> None:
         "'personal_access_tokens', 'password_reset_tokens', "
         "'maven_repositories', 'maven_artifacts', 'maven_versions');",
     )
-    if int(table_count) != 19:
+    if int(table_count) != 20:
         raise AssertionError(
             "Migration did not preserve the current Technic tables and create "
             "the solder.py tables"
@@ -1596,16 +1597,33 @@ def exercise_synthetic_user_login(
         def redirect_request(self, request, file_pointer, code, message, headers, url):
             return None
 
-    request = urllib.request.Request(
-        f"{base_url}/login",
-        data=urllib.parse.urlencode(
-            {"username": "ci-user", "password": "ci-password"}
-        ).encode(),
-        method="POST",
-    )
     cookies = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(cookies), NoRedirect
+    )
+    with opener.open(f"{base_url}/login", timeout=5) as response:
+        login_page = response.read()
+    token_match = re.search(
+        rb'name="_csrf_token" value="([^"]+)"', login_page
+    )
+    if token_match is None:
+        raise AssertionError("The login form did not include a CSRF token")
+    csrf_token = token_match.group(1).decode("ascii")
+
+    def form_data(values: dict[str, str]) -> bytes:
+        submitted = dict(values)
+        submitted["_csrf_token"] = csrf_token
+        return urllib.parse.urlencode(submitted).encode()
+
+    request = urllib.request.Request(
+        f"{base_url}/login",
+        data=form_data(
+            {
+                "username": "ci-user",
+                "password": "ci-password",
+            }
+        ),
+        method="POST",
     )
     try:
         opener.open(request, timeout=5)  # nosec B310
@@ -1705,7 +1723,7 @@ def exercise_synthetic_user_login(
 
     mcil_jar_request = urllib.request.Request(
         f"{base_url}/modversion/3/manage/3",
-        data=urllib.parse.urlencode({"jar_action_submit": "1"}).encode(),
+        data=form_data({"jar_action_submit": "1"}),
         method="POST",
     )
     try:
@@ -1756,9 +1774,9 @@ def exercise_synthetic_user_login(
 
     dependency_request = urllib.request.Request(
         f"{base_url}/modversion/3",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {"dependency_mod_id": "2", "adddependency_submit": "1"}
-        ).encode(),
+        ),
         method="POST",
     )
     try:
@@ -1778,13 +1796,13 @@ def exercise_synthetic_user_login(
 
     add_parent_request = urllib.request.Request(
         f"{base_url}/modpackbuild/1",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {
                 "modversion": "3",
                 "modnames": "3",
                 "add_mod_submit": "1",
             }
-        ).encode(),
+        ),
         method="POST",
     )
     try:
@@ -1817,9 +1835,9 @@ def exercise_synthetic_user_login(
 
     update_all_request = urllib.request.Request(
         f"{base_url}/modpackbuild/1",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {"update_all_mods_submit": "1"}
-        ).encode(),
+        ),
         method="POST",
     )
     try:
@@ -1873,7 +1891,7 @@ def exercise_synthetic_user_login(
 
     build_settings_request = urllib.request.Request(
         f"{base_url}/modpackbuild/1",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {
                 "form-submit": "1",
                 "version": "1.0",
@@ -1885,7 +1903,7 @@ def exercise_synthetic_user_login(
                 "modloader": "",
                 "publish": "1",
             }
-        ).encode(),
+        ),
         method="POST",
     )
     try:
@@ -1923,13 +1941,13 @@ def exercise_synthetic_user_login(
 
     add_launcher_request = urllib.request.Request(
         f"{base_url}/modpackbuild/20",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {
                 "modversion": "28",
                 "modnames": "28",
                 "add_mod_submit": "1",
             }
-        ).encode(),
+        ),
         method="POST",
     )
     try:
@@ -1977,7 +1995,7 @@ def exercise_synthetic_user_login(
 
     duplicate_request = urllib.request.Request(
         f"{base_url}/newmod",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {
                 "pretty_name": "Duplicate CI Mod",
                 "name": "ci-example-mod",
@@ -1988,7 +2006,7 @@ def exercise_synthetic_user_login(
                 "type": "MOD",
                 "internal_note": "Synthetic duplicate",
             }
-        ).encode(),
+        ),
         method="POST",
     )
     try:

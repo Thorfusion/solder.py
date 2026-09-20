@@ -69,7 +69,7 @@
                                 <li><a href="{{ url_for('asite.publishing') }}" class="nav-link text-white {{ 'active' if active_page == 'publishing' else '' }}">Publishing</a></li>
                                 <li><a href="{{ url_for('asite.mainsettings') }}" class="nav-link text-white {{ 'active' if active_page == 'mainsettings' else '' }}">Env Settings</a></li>
                                 {%if write_api_enabled%}<li><a href="{{ url_for('asite.apitokens') }}" class="nav-link text-white {{ 'active' if active_page == 'apitokens' else '' }}">API Tokens</a></li>{%endif%}
-                                <li><a href="{{ url_for('asite.logout') }}" class="nav-link text-white {{ 'active' if active_page == 'logout' else '' }}">Logout</a></li>
+                                <li><form method="post" action="{{ url_for('asite.logout') }}"><button type="submit" class="btn nav-link text-white {{ 'active' if active_page == 'logout' else '' }}">Logout</button></form></li>
                             </ul>
                         </div>
                     </li>

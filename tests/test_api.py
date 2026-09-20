@@ -522,18 +522,19 @@ class ApiTests(unittest.TestCase):
         )
 
     @patch.object(api_module.BootstrapManifest, "render")
+    @patch.object(api_module.TechnicSolderPyLoader, "get_active")
     @patch.object(
         api_module.AdvancedOptional, "get_active_groups", return_value=[]
     )
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
     @patch.object(api_module.Key, "get_key", return_value=None)
-    def test_technic_bootstrap_manifest_contains_only_optional_content(
-        self, _get_key, get_modpack, _get_groups, render
+    def test_technic_bootstrap_manifest_keeps_the_complete_package_graph(
+        self, _get_key, get_modpack, _get_groups, get_loader, render
     ):
         packages = [
-            SimpleNamespace(optional=0),
-            SimpleNamespace(optional=1),
-            SimpleNamespace(optional=2),
+            SimpleNamespace(optional=0, membership_id=1, modtype="MOD"),
+            SimpleNamespace(optional=1, membership_id=2, modtype="MOD"),
+            SimpleNamespace(optional=2, membership_id=3, modtype="MOD"),
         ]
         build = Mock(id=7, minecraft="1.20.1", modloader="FORGE")
         build.get_modversions_api.return_value = packages
@@ -542,6 +543,9 @@ class ApiTests(unittest.TestCase):
             get_build_api=Mock(return_value=build),
         )
         get_modpack.return_value = modpack
+        get_loader.return_value = SimpleNamespace(
+            delivery_mode=api_module.TechnicSolderPyLoader.TECHNIC_DELIVERY
+        )
         render.return_value = {"manifest_hash": "a" * 64}
 
         response = self.client.get(
@@ -551,7 +555,46 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             [package.optional for package in render.call_args.args[2]],
-            [1, 2],
+            [0, 1, 2],
+        )
+        self.assertEqual(
+            render.call_args.kwargs["install_owners"],
+            {1: "launcher", 2: "loader", 3: "loader"},
+        )
+
+    @patch.object(api_module.BootstrapManifest, "render")
+    @patch.object(
+        api_module.AdvancedOptional, "get_active_groups", return_value=[]
+    )
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_explicit_export_ownership_does_not_guess_native_files(
+        self, _get_key, get_modpack, _get_groups, render
+    ):
+        package = SimpleNamespace(
+            optional=0,
+            membership_id=1,
+            modtype="MOD",
+            integration_provider="MODRINTH",
+            integration_project_id="project",
+            integration_version_id="version",
+        )
+        build = Mock(id=7, minecraft="1.20.1", modloader="FORGE")
+        build.get_modversions_api.return_value = [package]
+        get_modpack.return_value = SimpleNamespace(
+            enable_server=1,
+            get_build_api=Mock(return_value=build),
+        )
+        render.return_value = {"manifest_hash": "a" * 64}
+
+        response = self.client.get(
+            "/api/modpack/stable/42/bootstrap"
+            "?platform=modrinth&source=hybrid&ownership=explicit"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            render.call_args.kwargs["install_owners"], {1: "loader"}
         )
 
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
@@ -849,7 +892,6 @@ class ApiTests(unittest.TestCase):
             optional_response.get_json(), {"error": "Invalid manifest options"}
         )
 
-    @patch.object(api_module, "_bootstrap_maven_downloads")
     @patch.object(api_module.AdvancedOptional, "get_active_groups")
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
     @patch.object(api_module.Key, "get_key", return_value=None)
@@ -858,7 +900,6 @@ class ApiTests(unittest.TestCase):
         _get_key,
         get_modpack,
         get_groups,
-        get_maven_downloads,
     ):
         def package(
             identifier,
@@ -911,9 +952,8 @@ class ApiTests(unittest.TestCase):
         packages[1].integration_version_id = "maven-version-id"
         packages[1].jar_url_override = "https://override.example/ui.jar"
         maven_url = "https://maven.example/releases/ui.jar"
-        get_maven_downloads.return_value = {
-            ("7", "maven-version-id"): maven_url
-        }
+        packages[1].download_source_provider = "MAVEN"
+        packages[1].download_source_url = maven_url
         build = Mock(
             id=7,
             version="42",
@@ -1042,71 +1082,11 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(conditional.status_code, 304)
 
-    @patch.object(api_module.Modversion, "store_download_source")
-    @patch.object(api_module, "ModrinthProvider")
-    def test_bootstrap_backfills_missing_modrinth_source_only_once(
-        self, provider_class, store_source
-    ):
-        package = SimpleNamespace(
-            id=17,
-            integration_provider="MODRINTH",
-            integration_project_id="project-id",
-            integration_version_id="version-id",
-            download_source_url=None,
-            modtype="MOD",
-            jarmd5="a" * 32,
-            jarfilesize=123,
+    def test_bootstrap_read_path_has_no_upstream_backfill_helpers(self):
+        self.assertFalse(
+            hasattr(api_module, "_backfill_bootstrap_modrinth_downloads")
         )
-        version = SimpleNamespace(
-            download_url=(
-                "https://cdn.modrinth.com/data/project-id/versions/"
-                "version-id/mod.jar"
-            ),
-            filename="mod.jar",
-            hashes={"sha1": "b" * 40, "sha512": "c" * 128},
-            size=123,
-        )
-        provider = provider_class.return_value
-        provider.get_versions.return_value = {"version-id": version}
-
-        api_module._backfill_bootstrap_modrinth_downloads(
-            [package], "1.20.1", "FORGE"
-        )
-        api_module._backfill_bootstrap_modrinth_downloads(
-            [package], "1.20.1", "FORGE"
-        )
-
-        provider.get_versions.assert_called_once_with(
-            (("project-id", "version-id"),), "1.20.1", "FORGE"
-        )
-        store_source.assert_called_once_with(
-            17,
-            {
-                "provider": "MODRINTH",
-                "url": version.download_url,
-                "filename": "mod.jar",
-                "md5": "a" * 32,
-                "sha1": "b" * 40,
-                "sha512": "c" * 128,
-                "filesize": 123,
-            },
-        )
-        self.assertEqual(package.download_source_url, version.download_url)
-
-    @patch.object(api_module.MavenArtifact, "solderpy_loader_downloads")
-    def test_bootstrap_maven_downloads_use_the_cached_artifact_resolver(
-        self, resolve_downloads
-    ):
-        references = (("12", "maven-version"),)
-        expected = {
-            ("12", "maven-version"): "https://maven.example/mod.jar"
-        }
-        resolve_downloads.return_value = expected
-
-        self.assertEqual(
-            api_module._bootstrap_maven_downloads(references), expected
-        )
-        resolve_downloads.assert_called_once_with(references)
+        self.assertFalse(hasattr(api_module, "_bootstrap_maven_downloads"))
 
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
     @patch.object(api_module.Key, "get_key", return_value=None)

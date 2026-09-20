@@ -167,10 +167,10 @@ class Modversion:
         finally:
             cur.close()
             conn.close()
-        if markedbuild == "1":
+        if str(markedbuild or "0") != "0":
             try:
                 Modversion.add_modversion_to_selected_build(
-                    id, mod_id, "0", "1", "0"
+                    id, mod_id, markedbuild, "0", "0"
                 )
             except Exception:
                 # Do not leave a database row for an upload that could not be
@@ -180,8 +180,8 @@ class Modversion:
         if md5 == "0":
             stored_version = Modversion.get_by_id(id)
             t = threading.Thread(
-                target=stored_version.rehash,
-                args=(repository_base_url, repository_mod_slug),
+                target=Modversion._rehash_and_invalidate,
+                args=(stored_version, repository_base_url, repository_mod_slug),
             )
             t.start()
         return cls(
@@ -1367,6 +1367,13 @@ class Modversion:
         self.updated_at = datetime.datetime.now()
         print(f"Updated hash for {self.mod_id} {self.version} to {md5}")
         return self
+
+    @staticmethod
+    def _rehash_and_invalidate(version, repository_location, mod_slug):
+        version.rehash(repository_location, mod_slug)
+        from .cache_revision import CacheRevision
+
+        CacheRevision.bump()
 
     def rehash(self, repository_location, mod_slug):
         source = Modversion.repository_file_source(

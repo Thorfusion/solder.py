@@ -17,6 +17,7 @@ write_api = False
 legacy_modversion_adding = False
 debug = False
 reverse_proxy = False
+session_cookie_secure = True
 
 host = os.getenv("APP_HOST")
 port = os.getenv("APP_PORT")
@@ -25,6 +26,11 @@ curseforge_api_key = os.getenv("CURSEFORGE_API_KEY")
 
 if os.getenv("PROXY_IP"):
     reverse_proxy = True
+
+if os.getenv("SESSION_COOKIE_SECURE"):
+    session_cookie_secure = os.getenv("SESSION_COOKIE_SECURE").lower() in [
+        "true", "t", "1", "yes", "y"
+    ]
 
 if os.getenv("NEW_USER"):
     new_user = os.getenv("NEW_USER").lower() in ["true", "t", "1", "yes", "y"]

@@ -2,6 +2,7 @@ from flask import Blueprint, flash, redirect, render_template, request, session,
 
 from models.session import Session
 from models.user import User
+from models.login_throttle import LoginThrottle
 
 alogin = Blueprint("alogin", __name__)
 
@@ -27,12 +28,20 @@ def login():
 
     username = request.form.get("username", "")
     password = request.form.get("password", "")
+    retry_after = LoginThrottle.retry_after(username, request.remote_addr)
+    if retry_after:
+        response = render_template("login.html", failed=True)
+        return response, 429, {"Retry-After": str(retry_after)}
     user = User.get_by_username(username)
     if user is None:
+        retry_after = LoginThrottle.failure(username, request.remote_addr)
         flash("Login Failed!", "error")
-        return render_template("login.html")
+        status = 429 if retry_after else 200
+        headers = {"Retry-After": str(retry_after)} if retry_after else {}
+        return render_template("login.html", failed=True), status, headers
     else:
         if user.verify_password(password):
+            LoginThrottle.success(username, request.remote_addr)
             # if new_user:
             # return render_template("login.html", failed=True)
             session["token"] = Session.new_session(
@@ -40,5 +49,8 @@ def login():
             )
             return redirect(url_for('asite.index'))
         else:
+            retry_after = LoginThrottle.failure(username, request.remote_addr)
             flash("Login Failed!", "error")
-            return render_template("login.html")
+            status = 429 if retry_after else 200
+            headers = {"Retry-After": str(retry_after)} if retry_after else {}
+            return render_template("login.html", failed=True), status, headers

@@ -150,6 +150,7 @@ class ExportPackagePlan:
     downloader_packages: tuple
     native_entries: tuple
     native_files: dict
+    launcher_memberships: tuple
 
 
 @dataclass(frozen=True)
@@ -897,6 +898,7 @@ class PlatformPackExport:
         target="auto",
         source_mode="hybrid",
         platform=None,
+        launcher_memberships=None,
     ):
         """Create the launch-time bootstrap API pointer for SolderPy Loader."""
         if not build.is_published or build.private:
@@ -933,6 +935,14 @@ class PlatformPackExport:
         }
         if platform is not None:
             config["platform"] = platform
+        if launcher_memberships is not None:
+            config["launcherOwnedMemberships"] = sorted(
+                {
+                    int(membership_id)
+                    for membership_id in launcher_memberships
+                    if membership_id is not None
+                }
+            )
         return (json.dumps(config, indent=2) + "\n").encode("utf-8")
 
     @staticmethod
@@ -1274,6 +1284,7 @@ class PlatformPackExport:
         optional_groups=(),
         archive_root="overrides",
         platform=None,
+        launcher_memberships=(),
     ):
         source_mode = cls.source_mode(source_mode)
         delivery = cls.config_delivery(spec, delivery)
@@ -1296,6 +1307,7 @@ class PlatformPackExport:
                     selector,
                     source_mode=source_mode,
                     platform=platform,
+                    launcher_memberships=launcher_memberships,
                 ),
             )
             relauncher_config = cls.relauncher_java_config(build)
@@ -1386,6 +1398,7 @@ class PlatformPackExport:
         *,
         launcher_handles_modrinth=False,
         excluded_modrinth_projects=(),
+        optional_groups=(),
         http=None,
     ):
         """Apply the common package filters used by launcher exports."""
@@ -1401,8 +1414,20 @@ class PlatformPackExport:
                 in excluded_modrinth_projects
             )
         )
+        grouped_memberships = {
+            item.build_modversion_id
+            for group in optional_groups or ()
+            for item in group.items
+        }
         native_packages = tuple(
-            package for package in packages if package.is_native_modrinth
+            package
+            for package in packages
+            if package.is_native_modrinth
+            and not (
+                launcher_handles_modrinth
+                and getattr(package, "membership_id", None)
+                in grouped_memberships
+            )
         )
         native_files = (
             cls.native_modrinth_files(build, native_packages, http=http)
@@ -1412,6 +1437,7 @@ class PlatformPackExport:
 
         native_entries = []
         handled_ids = set()
+        launcher_memberships = set()
         if launcher_handles_modrinth:
             paths = set()
             for package in native_packages:
@@ -1427,6 +1453,8 @@ class PlatformPackExport:
                     )
                 paths.add(entry["path"])
                 handled_ids.add(id(package))
+                if getattr(package, "membership_id", None) is not None:
+                    launcher_memberships.add(int(package.membership_id))
                 native_entries.append(entry)
 
         return ExportPackagePlan(
@@ -1436,6 +1464,31 @@ class PlatformPackExport:
             ),
             native_entries=tuple(native_entries),
             native_files=native_files,
+            launcher_memberships=tuple(sorted(launcher_memberships)),
+        )
+
+    @classmethod
+    def _override_launcher_memberships(cls, packages, override_files):
+        project_ids = {
+            str(override.modrinth_project_id)
+            for override, _native_file in override_files
+        }
+        return tuple(
+            sorted(
+                {
+                    int(package.membership_id)
+                    for package in cls._actual_packages(packages)
+                    if getattr(package, "membership_id", None) is not None
+                    and str(
+                        getattr(package, "integration_provider", "") or ""
+                    ).upper()
+                    == "MODRINTH"
+                    and str(
+                        getattr(package, "integration_project_id", "") or ""
+                    )
+                    in project_ids
+                }
+            )
         )
 
     @staticmethod
@@ -1731,7 +1784,11 @@ class PlatformPackExport:
             ) from error
 
         for package in missing_packages:
-            version = versions[package.integration_version_id]
+            version = versions.get(package.integration_version_id)
+            if version is None:
+                # Keep this package in the downloader fallback when the
+                # provider no longer returns its exact native file.
+                continue
             native_file = NativeModrinthFile(
                 project_id=version.project_id,
                 version_id=version.version_id,
@@ -1866,6 +1923,7 @@ class PlatformPackExport:
                 build,
                 packages,
                 source_mode,
+                optional_groups=optional_groups,
                 http=http,
             )
             spec = cls.resolve_downloader(
@@ -1941,6 +1999,7 @@ class PlatformPackExport:
                         optional_groups=optional_groups,
                         archive_root=".minecraft",
                         platform="prism",
+                        launcher_memberships=plan.launcher_memberships,
                     )
         except MCInstanceExportError as error:
             raise PlatformExportError(str(error)) from error
@@ -2122,6 +2181,7 @@ class PlatformPackExport:
                 override.modrinth_project_id
                 for override, _native_file in override_files
             ),
+            optional_groups=optional_groups,
             http=http,
         )
         files = list(plan.native_entries)
@@ -2189,6 +2249,12 @@ class PlatformPackExport:
                     native_files=plan.native_files,
                     optional_groups=optional_groups,
                     platform="modrinth",
+                    launcher_memberships=(
+                        *plan.launcher_memberships,
+                        *cls._override_launcher_memberships(
+                            packages, override_files
+                        ),
+                    ),
                 )
         return archive
 
@@ -2337,5 +2403,11 @@ class PlatformPackExport:
                 native_files=plan.native_files,
                 optional_groups=optional_groups,
                 platform="curseforge",
+                launcher_memberships=(
+                    *plan.launcher_memberships,
+                    *cls._override_launcher_memberships(
+                        packages, override_files
+                    ),
+                ),
             )
         return archive
