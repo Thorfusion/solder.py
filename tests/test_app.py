@@ -1629,11 +1629,28 @@ class ApplicationSmokeTests(unittest.TestCase):
                 "/modpackbuild/7/mcinstance",
                 headers={"Referer": "https://attacker.example/redirect"},
             )
+            same_page_response = self.client.get(
+                "/modversion/9",
+                headers={
+                    "Referer": "http://localhost/modlibrary?search=forge"
+                },
+            )
+            external_back_response = self.client.get(
+                "/modversion/9",
+                headers={"Referer": "https://attacker.example/redirect"},
+            )
 
         self.assertEqual(integration_response.status_code, 302)
         self.assertEqual(integration_response.headers["Location"], "/")
         self.assertEqual(export_response.status_code, 302)
         self.assertEqual(export_response.headers["Location"], "/modpacklibrary")
+        self.assertEqual(same_page_response.status_code, 302)
+        self.assertEqual(
+            same_page_response.headers["Location"],
+            "/modlibrary?search=forge",
+        )
+        self.assertEqual(external_back_response.status_code, 302)
+        self.assertEqual(external_back_response.headers["Location"], "/")
 
     def test_maven_management_page_renders_with_configured_repositories(self):
         with self.client.session_transaction() as flask_session:

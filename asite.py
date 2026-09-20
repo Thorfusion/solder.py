@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import boto3
 import requests
+from urllib.parse import urlsplit
 
 from api import solderpy_version
 from flask import Blueprint, app, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
@@ -102,6 +103,29 @@ asite = Blueprint("asite", __name__)
 
 if DB_IS_UP == 1 and not api_only:
     Session.start_session_loop()
+
+
+def _redirect_back():
+    """Return to a same-host management page without allowing an open redirect."""
+    referrer = request.referrer
+    if referrer:
+        parsed = urlsplit(referrer)
+        current_host = (urlsplit(request.host_url).hostname or "").casefold()
+        referrer_host = (parsed.hostname or "").casefold()
+        path = parsed.path or "/"
+        if (
+            parsed.scheme.casefold() in {"http", "https"}
+            and referrer_host == current_host
+            and path.startswith("/")
+            and not path.startswith("//")
+            and not any(ord(character) < 32 for character in path)
+        ):
+            destination = path
+            if parsed.query:
+                destination += "?" + parsed.query
+            # Only a relative path from a same-host URL reaches redirect().
+            return redirect(destination)  # lgtm[py/url-redirection]
+    return redirect(url_for("asite.index"))
 
 
 def _enabled_downloader_specs(settings):
@@ -262,7 +286,7 @@ def modversion(id):
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "mods_manage") == 0:
-        return redirect(request.referrer)
+        return _redirect_back()
 
     mod = Mod.get_by_id(id)
     upstream_versions = []
@@ -408,7 +432,7 @@ def newmodversion(id):
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "mods_manage") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
 
     if "link_modrinth_submit" in request.form or "link_github_submit" in request.form:
         mod = Mod.get_by_id(id)
@@ -551,7 +575,7 @@ def newmodversion(id):
         return redirect(url_for("asite.modversion", id=id))
     if "deleteversion_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_delete") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
         if "delete_id" not in request.form:
             return redirect(url_for("asite.modversion", id=id))
         Modversion.delete_modversion(request.form["delete_id"])
@@ -559,7 +583,7 @@ def newmodversion(id):
         return redirect(url_for("asite.modversion", id=id))
     if "addtoselbuild_submit" in request.form:
         if User.get_permission_token(session["token"], "modpacks_manage") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
         if "addtoselbuild_id" not in request.form:
             return redirect(url_for("asite.modversion", id=id))
         try:
@@ -574,7 +598,7 @@ def newmodversion(id):
         return redirect(url_for("asite.modversion", id=id))
     if "deletemod_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_delete") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
         if "mod_delete_id" not in request.form:
             return redirect(url_for("asite.modversion", id=id))
         Mod.delete_mod(request.form["mod_delete_id"])
@@ -588,7 +612,7 @@ def newmodversion(id):
             )
             return redirect(url_for("asite.modversion", id=id))
         if User.get_permission_token(session["token"], "mods_create") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
         mod = Mod.get_by_id(id)
         if mod is None:
             flash("the selected mod no longer exists", "error")
@@ -639,7 +663,7 @@ def newmod():
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "mods_create") == 0:
-        return redirect(request.referrer)
+        return _redirect_back()
     
     if request.method == "POST":
         mod_side = request.form['flexRadioDefault']
@@ -1038,10 +1062,10 @@ def modpack(id):
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "modpacks_manage") == 0:
-        return redirect(request.referrer)
+        return _redirect_back()
     
     if User_modpack.get_user_modpackpermission(session["token"], id) == False:
-        return redirect(request.referrer)
+        return _redirect_back()
 
     try:
         modpack = Modpack.get_by_id(id)
@@ -1057,7 +1081,7 @@ def modpack(id):
         if "form-submit" in request.form:
             
             if User.get_permission_token(session["token"], "modpacks_create") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
             
             publish = "0"
             private = "0"
@@ -1125,7 +1149,7 @@ def modpack(id):
         if "deletemod_submit" in request.form:
             
             if User.get_permission_token(session["token"], "modpacks_delete") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
             
             modpack.delete_modpack(id)
             flash("deleted " + id, "success")
@@ -1145,7 +1169,7 @@ def changelog(oldver, newver):
         # New or invalid session, send to login
         return redirect(url_for('alogin.login'))
     if User.get_permission_token(session["token"], "modpacks_manage") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
     old_modpack_id = Build.get_modpackid_by_id(oldver)
     new_modpack_id = Build.get_modpackid_by_id(newver)
     if (
@@ -1176,7 +1200,7 @@ def mainsettings():
         return redirect(url_for('alogin.login'))
 
     if User.get_permission_token(session["token"], "solder_env") == 0:
-        return redirect(request.referrer)
+        return _redirect_back()
 
     if request.method == "POST" and "convert_none_mods_submit" in request.form:
         if User.get_permission_token(session["token"], "mods_manage") == 0:
@@ -1391,7 +1415,7 @@ def apikeylibrary():
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "solder_keys") == 0:
-        return redirect(request.referrer)
+        return _redirect_back()
 
     try:
         keys = Key.get_all_keys()
@@ -1409,7 +1433,7 @@ def apikeylibrary_post():
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "solder_keys") == 0:
-        return redirect(request.referrer)
+        return _redirect_back()
     
     if request.method == "POST":
         if "form-submit" in request.form:
@@ -1436,7 +1460,7 @@ def clientlibrary():
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "solder_clients") == 0:
-        return redirect(request.referrer)
+        return _redirect_back()
 
     try:
         clients = Client.get_all_clients()
@@ -1455,7 +1479,7 @@ def clientlibrary_post():
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "solder_clients") == 0:
-        return redirect(request.referrer)
+        return _redirect_back()
     
     if request.method == "POST":
         if "form-submit" in request.form:
@@ -1505,7 +1529,7 @@ def userlibrary_post():
     if request.method == "POST":
         if "form-submit" in request.form:
             if User.get_permission_token(session["token"], "solder_users") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
             if "newemail" not in request.form:
                 return redirect(url_for('asite.userlibrary'))
             if "newpassword" not in request.form:
@@ -1517,7 +1541,7 @@ def userlibrary_post():
             return redirect(url_for('asite.userlibrary'))
         if "form2-submit" in request.form:
             if User.get_permission_token(session["token"], "solder_users") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
             if "delete_id" not in request.form:
                 return redirect(url_for('asite.userlibrary'))
             User.delete(request.form["delete_id"])
@@ -1589,11 +1613,11 @@ def modpackbuild(id):
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "modpacks_manage") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
     
     modpack_id = Build.get_modpackid_by_id(id)
     if User_modpack.get_user_modpackpermission(session["token"], modpack_id) == False:
-        return redirect(request.referrer)
+        return _redirect_back()
 
     if request.method == "POST":
         if "form-submit" in request.form:
@@ -1720,7 +1744,7 @@ def modpackbuild(id):
             return redirect(url_for("asite.modpackbuild", id=id))
         if "delete_submit" in request.form:
             if User.get_permission_token(session["token"], "modpacks_delete") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
             if "delete_id" not in request.form:
                 return redirect(url_for("asite.modpackbuild", id=id))
             try:
@@ -1734,7 +1758,7 @@ def modpackbuild(id):
             return redirect(url_for("asite.modpackbuild", id=id))
         if "deletebuild_submit" in request.form:
             if User.get_permission_token(session["token"], "modpacks_delete") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
             Build.delete_build(id)
             flash("deleted build" + id, "success")
             return redirect(url_for('asite.modpacklibrary'))
@@ -2792,7 +2816,7 @@ def modlibrary():
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "mods_manage") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
 
     try:
         mods = Mod.get_all()
@@ -2811,20 +2835,20 @@ def modlibrary_post():
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "mods_manage") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
 
     if "form-submit" in request.form:
         markedbuild = "0"
         if "markedbuild" in request.form:
             if User.get_permission_token(session["token"], "modpacks_manage") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
             markedbuild = Build.get_marked_build(
                 Session.get_user_id(session["token"])
             )
             if not markedbuild or User_modpack.get_user_modpackpermission(
                 session["token"], Build.get_modpackid_by_id(markedbuild)
             ) == False:
-                return redirect(request.referrer)
+                return _redirect_back()
         if 'file' not in request.files:
             print('No file part')
             return redirect(url_for('asite.modlibrary'))
@@ -2983,7 +3007,7 @@ def modpacklibrary():
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "modpacks_manage") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
 
     try:
         modpacklibrary = Modpack.get_all_for_user(
@@ -3004,12 +3028,12 @@ def modpacklibrary_post():
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "modpacks_manage") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
 
     if request.method == "POST":
         if "form-submit" in request.form:
             if User.get_permission_token(session["token"], "modpacks_create") == 0:
-                return redirect(request.referrer)
+                return _redirect_back()
             hidden = "0"
             private = "0"
             if "hidden" in request.form:
@@ -3028,7 +3052,7 @@ def modpacklibrary_post():
         if User_modpack.get_user_modpackpermission(
             session["token"], request.form["modid"]
         ) == False:
-            return redirect(request.referrer)
+            return _redirect_back()
         if "hidden_submit" in request.form:
             common.update_checkbox(request.form["modid"], request.form["check"], "hidden", "modpacks")
             flash("updated modpack", "success")
@@ -3055,7 +3079,7 @@ def clients(id):
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "solder_clients") == 0:
-        return redirect(request.referrer)
+        return _redirect_back()
 
     try:
         packs = Client_modpack.get_all_client_modpacks(id)
@@ -3094,7 +3118,7 @@ def user(id):
         return redirect(url_for('alogin.login'))
     
     if User.get_permission_token(session["token"], "solder_users") == 0:
-        return redirect(request.referrer)
+        return _redirect_back()
 
     managed_user = User.get_by_id(id)
     if managed_user is None:

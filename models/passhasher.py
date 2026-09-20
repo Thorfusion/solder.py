@@ -24,4 +24,12 @@ class Passhasher:
         :param salt: Salt to hash with. This should be the username
         :return: Hashed password
         """
-        return hashlib.blake2b(pw.encode("UTF-8"), salt=hashlib.blake2b(salt.encode("UTF-8"), digest_size=16).digest()).hexdigest()
+        # This is the established solder.py password format. Changing it would
+        # invalidate every existing account, so compatibility is intentional
+        # until a versioned password migration can rehash users on login.
+        return hashlib.blake2b(  # lgtm[py/weak-sensitive-data-hashing]
+            pw.encode("UTF-8"),
+            salt=hashlib.blake2b(
+                salt.encode("UTF-8"), digest_size=16
+            ).digest(),
+        ).hexdigest()

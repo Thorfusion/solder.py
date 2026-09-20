@@ -63,6 +63,9 @@ def database_environment(
         "R2_REGION": "auto",
         "R2_SECRET_KEY": "smoke-test",
         "R2_URL": "https://example.invalid/mods/",
+        # The smoke endpoint is deliberately plain HTTP on loopback. Production
+        # keeps Secure cookies enabled behind its HTTPS reverse proxy.
+        "SESSION_COOKIE_SECURE": "false",
     }
     arguments: list[str] = []
     for key, value in values.items():

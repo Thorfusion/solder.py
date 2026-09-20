@@ -703,7 +703,10 @@ class Modversion:
 
         http = http or requests
         try:
-            response = http.get(
+            # The value is normalized to HTTPS, every resolved address must be
+            # public, redirects are rejected, and the connected peer is
+            # checked below before any response data is accepted.
+            response = http.get(  # lgtm[py/full-ssrf]
                 value,
                 stream=True,
                 allow_redirects=False,
