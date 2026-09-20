@@ -3,6 +3,7 @@ import hashlib
 import tempfile
 import unittest
 import zipfile
+
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
@@ -48,13 +49,88 @@ class PasswordHasherTests(unittest.TestCase):
         self.assertTrue(password.verify("correct horse"))
         self.assertFalse(password.verify("wrong password"))
 
-    def test_password_hash_is_deterministic_for_the_same_salt(self):
+    def test_argon2_uses_a_fresh_embedded_salt(self):
         first = Passhasher.hasher("secret", "first-user")
         second = Passhasher.hasher("secret", "first-user")
-        other_user = Passhasher.hasher("secret", "second-user")
 
-        self.assertEqual(first, second)
-        self.assertNotEqual(first, other_user)
+        self.assertTrue(first.startswith("$argon2id$"))
+        self.assertTrue(second.startswith("$argon2id$"))
+        self.assertNotEqual(first, second)
+        self.assertTrue(Passhasher(first, "first-user").verify("secret"))
+        self.assertTrue(Passhasher(second, "first-user").verify("secret"))
+
+    def test_legacy_solder_hash_is_upgraded_after_verification(self):
+        legacy = Passhasher.legacy_hasher("secret", "legacy-user")
+
+        valid, replacement = Passhasher(
+            legacy, "legacy-user"
+        ).verify_and_rehash("secret")
+
+        self.assertTrue(valid)
+        self.assertTrue(replacement.startswith("$argon2id$"))
+        self.assertFalse(
+            Passhasher(legacy, "legacy-user").verify("wrong password")
+        )
+
+    def test_successful_legacy_login_updates_the_hash_conditionally(self):
+        legacy = Passhasher.legacy_hasher("secret", "legacy-user")
+        user = User(
+            7,
+            "legacy-user",
+            "legacy@example.test",
+            legacy,
+            "127.0.0.1",
+            "127.0.0.1",
+            None,
+            None,
+            "127.0.0.1",
+            1,
+            1,
+        )
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.rowcount = 1
+
+        with patch.object(Database, "get_connection", return_value=connection):
+            self.assertTrue(user.verify_password("secret"))
+
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("WHERE id = %s AND password = %s", query)
+        self.assertTrue(parameters[0].startswith("$argon2id$"))
+        self.assertEqual(parameters[1:], (7, legacy))
+        self.assertTrue(user.password.get_hash().startswith("$argon2id$"))
+        connection.commit.assert_called_once_with()
+
+    def test_hash_upgrade_failure_does_not_reject_a_valid_login(self):
+        legacy = Passhasher.legacy_hasher("secret", "legacy-user")
+        user = User(
+            7,
+            "legacy-user",
+            "legacy@example.test",
+            legacy,
+            "127.0.0.1",
+            "127.0.0.1",
+            None,
+            None,
+            "127.0.0.1",
+            1,
+            1,
+        )
+
+        with (
+            patch.object(
+                Database,
+                "get_connection",
+                side_effect=RuntimeError("database unavailable"),
+            ),
+            patch("models.user.logger.exception") as log_error,
+        ):
+            self.assertTrue(user.verify_password("secret"))
+
+        self.assertEqual(user.password.get_hash(), legacy)
+        log_error.assert_called_once_with(
+            "Could not upgrade the stored password hash"
+        )
 
 
 class SessionTests(unittest.TestCase):

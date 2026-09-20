@@ -13,6 +13,7 @@ cachetools = "*"
 gunicorn = "*"
 defusedxml = "*"
 markdown = "*"
+argon2-cffi = "*"
 
 [dev-packages]
 bandit = "*"

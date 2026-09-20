@@ -57,6 +57,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         with (
             patch("alogin.LoginThrottle.retry_after", return_value=0),
             patch("alogin.LoginThrottle.failure", return_value=0),
+            patch("alogin.Passhasher.verify_dummy") as verify_dummy,
             patch("alogin.User.get_by_username", return_value=None),
         ):
             response = self.client.post(
@@ -68,6 +69,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("review-user", page)
         self.assertNotIn("do-not-echo", page)
+        verify_dummy.assert_called_once_with("do-not-echo")
 
     def test_login_throttle_stops_password_lookup_and_sets_retry_after(self):
         with (

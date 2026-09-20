@@ -837,6 +837,11 @@ To prevent an untested pull request from being merged, add a branch rule for
 
 ## Security checks
 
+New and changed management passwords use Argon2id with a random salt embedded
+in the encoded value stored in `users.password`. Existing solder.py BLAKE2 and
+passwords remain usable and are replaced with Argon2id automatically after
+their next successful login. No password or salt schema migration is required.
+
 Pull requests and trusted branch pushes run several complementary checks:
 
 - CodeQL scans the Python and JavaScript sources with extended security queries.

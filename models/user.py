@@ -1,4 +1,5 @@
 import datetime
+import logging
 
 from flask import flash
 from models.common import DB_IS_UP, new_user
@@ -6,6 +7,9 @@ from models.common import DB_IS_UP, new_user
 from .database import Database
 from .modpack import Modpack
 from .passhasher import Passhasher
+
+
+logger = logging.getLogger(__name__)
 
 
 class User:
@@ -244,4 +248,34 @@ class User:
         return check is not None
 
     def verify_password(self, password):
-        return self.password.verify(password)
+        valid, replacement = self.password.verify_and_rehash(password)
+        if valid and replacement:
+            self._replace_password_hash(replacement)
+        return valid
+
+    def _replace_password_hash(self, replacement):
+        """Atomically upgrade a verified legacy or outdated password hash."""
+        previous = self.password.get_hash()
+        conn = None
+        cur = None
+        try:
+            conn = Database.get_connection()
+            cur = conn.cursor()
+            cur.execute(
+                "UPDATE users SET password = %s WHERE id = %s AND password = %s",
+                (replacement, self.id, previous),
+            )
+            conn.commit()
+            if cur.rowcount:
+                self.password = Passhasher(replacement, self.username)
+        except Exception:
+            if conn is not None:
+                conn.rollback()
+            # A maintenance write must not reject a password that was already
+            # verified successfully. Never include the password or hashes.
+            logger.exception("Could not upgrade the stored password hash")
+        finally:
+            if cur is not None:
+                cur.close()
+            if conn is not None:
+                conn.close()

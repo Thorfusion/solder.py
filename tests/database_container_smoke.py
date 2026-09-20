@@ -1638,6 +1638,15 @@ def exercise_synthetic_user_login(
     else:
         raise AssertionError("Synthetic user login did not redirect after success")
 
+    upgraded_password = mysql(
+        database_container,
+        "SELECT password LIKE '$argon2id$%' FROM users WHERE username = 'ci-user';",
+    )
+    if upgraded_password != "1":
+        raise AssertionError(
+            "A successful legacy login did not upgrade the password to Argon2id"
+        )
+
     with opener.open(f"{base_url}/", timeout=5) as response:
         dashboard_page = response.read()
         if response.status != 200:

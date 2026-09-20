@@ -3,6 +3,7 @@ from flask import Blueprint, flash, redirect, render_template, request, session,
 from models.session import Session
 from models.user import User
 from models.login_throttle import LoginThrottle
+from models.passhasher import Passhasher
 
 alogin = Blueprint("alogin", __name__)
 
@@ -34,6 +35,8 @@ def login():
         return response, 429, {"Retry-After": str(retry_after)}
     user = User.get_by_username(username)
     if user is None:
+        # Keep unknown-user failures comparable to an Argon2 password check.
+        Passhasher.verify_dummy(password)
         retry_after = LoginThrottle.failure(username, request.remote_addr)
         flash("Login Failed!", "error")
         status = 429 if retry_after else 200
