@@ -350,15 +350,23 @@ def _technic_solderpy_loader_manifest(
     configuration = TechnicSolderPyLoader.get_active(build.id)
     if configuration is None:
         return modversions, []
-    # Technic must still install its modloader and the initial bootstrap. The
-    # loader fetches every other package from the dedicated bootstrap API, so
-    # leaving normal entries here would install and update them twice.
-    retained = [
-        modversion
-        for modversion in modversions
-        if str(getattr(modversion, "modtype", "") or "").upper()
-        in {"LAUNCHER", "BOOTSTRAP", "MCIL"}
-    ]
+    if (
+        getattr(configuration, "delivery_mode", TechnicSolderPyLoader.LOADER_DELIVERY)
+        == TechnicSolderPyLoader.TECHNIC_DELIVERY
+    ):
+        # This list already contains only the normal Technic/basic selection.
+        # SolderPy Loader receives optional and excluded packages separately.
+        retained = modversions
+    else:
+        # Technic must still install its modloader and the initial bootstrap.
+        # The loader fetches every other package from the dedicated bootstrap
+        # API, so leaving normal entries here would install them twice.
+        retained = [
+            modversion
+            for modversion in modversions
+            if str(getattr(modversion, "modtype", "") or "").upper()
+            in {"LAUNCHER", "BOOTSTRAP", "MCIL"}
+        ]
     return retained, configuration.manifest_entries(
         public_repo_url, expanded=expanded, extended=extended
     )
@@ -650,7 +658,13 @@ def modpack_bootstrap(slugstring: str, buildstring: str):
     if (
         target not in {"client", "server"}
         or source_mode not in {"hybrid", "solder"}
-        or platform not in {"", "modrinth", "curseforge", "prism"}
+        or platform not in {
+            "",
+            "modrinth",
+            "curseforge",
+            "prism",
+            "technic",
+        }
     ):
         return jsonify({"error": "Invalid bootstrap options"}), 400
     if target == "server" and not current_modpack.enable_server:
@@ -664,7 +678,15 @@ def modpack_bootstrap(slugstring: str, buildstring: str):
             include_download_overrides=True,
             include_download_sources=True,
         )
-        if source_mode == "hybrid" and platform == "modrinth":
+        if platform == "technic":
+            # Required packages are installed by Technic's normal Solder API.
+            # Only optional/excluded content belongs to SolderPy Loader.
+            packages = [
+                package
+                for package in packages
+                if int(getattr(package, "optional", 0) or 0) != 0
+            ]
+        elif source_mode == "hybrid" and platform == "modrinth":
             packages = [
                 package
                 for package in packages

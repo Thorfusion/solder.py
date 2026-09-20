@@ -82,6 +82,25 @@ def selected_downloader():
 
 
 class TechnicSolderPyLoaderTests(unittest.TestCase):
+    def test_delivery_mode_is_validated_and_old_rows_default_to_loader(self):
+        configured = TechnicSolderPyLoader._from_row(
+            {
+                "build_id": 7,
+                "version_id": "release",
+                "version": "0.1.0",
+                "bootstrap_path": "bootstrap.zip",
+                "bootstrap_md5": "a" * 32,
+                "bootstrap_filesize": 100,
+            }
+        )
+
+        self.assertEqual(
+            configured.delivery_mode,
+            TechnicSolderPyLoader.LOADER_DELIVERY,
+        )
+        with self.assertRaisesRegex(ValueError, "Technic Solder API"):
+            TechnicSolderPyLoader.normalize_delivery_mode("invalid")
+
     def test_archive_contains_loader_runtime_and_build_config(self):
         selected, loader_body, runtime_body = selected_downloader()
         config = json.dumps(
@@ -180,6 +199,7 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
                 directory,
                 "https://cdn.example.test/mods/",
                 "https://solder.example.test/",
+                delivery_mode="TECHNIC",
                 http=FakeHTTP((loader_body, runtime_body)),
             )
             artifacts = list(
@@ -187,6 +207,10 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
                     "*.zip"
                 )
             )
+            with zipfile.ZipFile(artifacts[0]) as archive:
+                loader_config = json.loads(
+                    archive.read("config/solderpy-loader.json")
+                )
 
         self.assertIs(result, stored)
         self.assertEqual(len(artifacts), 1)
@@ -194,6 +218,14 @@ class TechnicSolderPyLoaderTests(unittest.TestCase):
         self.assertTrue(
             any("technic_solderpy_loader_builds" in args[0] for args in statements)
         )
+        insert = next(
+            args
+            for args in statements
+            if "INSERT INTO technic_solderpy_loader_builds" in args[0]
+        )
+        self.assertEqual(insert[1][3], "TECHNIC")
+        self.assertEqual(loader_config["target"], "client")
+        self.assertEqual(loader_config["platform"], "technic")
         self.assertTrue(
             any(
                 "SET modpacks.enable_optionals = 0" in args[0]

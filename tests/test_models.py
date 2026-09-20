@@ -318,6 +318,17 @@ class ModelBehaviorTests(unittest.TestCase):
         )
         connection.commit.assert_called_once_with()
 
+    def test_technic_delivery_mode_is_in_current_schema_and_upgrade(self):
+        self.assertIn(
+            "delivery_mode VARCHAR(16) NOT NULL DEFAULT 'LOADER'",
+            Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL,
+        )
+        migration = Database.TECHNIC_SOLDERPY_LOADER_COLUMN_MIGRATIONS[0]
+        self.assertEqual(
+            migration[:2],
+            ("technic_solderpy_loader_builds", "delivery_mode"),
+        )
+
     def test_dashboard_checks_updates_only_on_each_modpacks_newest_build(self):
         connection = Mock()
         cursor = connection.cursor.return_value

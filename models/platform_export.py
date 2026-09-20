@@ -915,7 +915,13 @@ class PlatformPackExport:
             source_mode, default="hybrid"
         )
         platform = str(platform or "").strip().casefold() or None
-        if platform not in {None, "modrinth", "curseforge", "prism"}:
+        if platform not in {
+            None,
+            "modrinth",
+            "curseforge",
+            "prism",
+            "technic",
+        }:
             raise PlatformExportError("Unknown SolderPy Loader platform.")
         config = {
             "enabled": True,

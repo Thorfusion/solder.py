@@ -377,6 +377,7 @@ def verify_technic_migration(database_container: str) -> None:
         ("modversions", "integration_version_id"),
         ("maven_artifacts", "solderpy_loader_direct"),
         ("platform_export_overrides", "override_solder_only"),
+        ("technic_solderpy_loader_builds", "delivery_mode"),
         ("user_permissions", "solder_env"),
         ("users", "night_mode"),
         ("users", "two_factor_confirmed_at"),
@@ -620,6 +621,15 @@ def verify_fresh_schema(database_container: str) -> None:
         raise AssertionError(
             "Fresh schema did not create Technic SolderPy Loader settings"
         )
+    technic_delivery_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME = 'technic_solderpy_loader_builds' "
+        "AND COLUMN_NAME = 'delivery_mode';",
+    )
+    if technic_delivery_column_count != "1":
+        raise AssertionError("Fresh schema omitted the Technic delivery mode")
 
     advanced_optional_column_count = mysql(
         database_container,
@@ -2138,6 +2148,17 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         if technic_solderpy_loader_table_count != "1":
             raise AssertionError(
                 "Application startup did not create Technic SolderPy Loader settings"
+            )
+        technic_delivery_column_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.COLUMNS "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+            "AND TABLE_NAME = 'technic_solderpy_loader_builds' "
+            "AND COLUMN_NAME = 'delivery_mode';",
+        )
+        if technic_delivery_column_count != "1":
+            raise AssertionError(
+                "Application startup omitted the Technic delivery mode"
             )
         override_default = mysql(
             database_container,

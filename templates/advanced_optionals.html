@@ -82,12 +82,20 @@
 
     <div class="border rounded p-3 mt-4">
         <h3 class="h5">Technic launcher delivery</h3>
-        <p class="text-muted">SolderPy Loader can install the build from the bootstrap API before mod discovery. Technic installs only the modloader and the SolderPy Loader bootstrap; SolderPy Loader then handles required files and either basic or advanced optionals.</p>
+        <p class="text-muted">Choose whether Technic's Solder API or SolderPy Loader installs the required files. SolderPy Loader always handles advanced optional content before mod discovery.</p>
         {%if technic_solderpy_loader%}
         <p><span class="badge {%if technic_solderpy_loader_active%}bg-success{%else%}bg-warning text-dark{%endif%}">{%if technic_solderpy_loader_active%}Enabled{%else%}Inactive{%endif%}</span> SolderPy Loader {{technic_solderpy_loader.version}}</p>
         {%if not distribution_settings.solderpy_loader_enabled%}<div class="alert alert-warning">SolderPy Loader is disabled in Settings, so Technic manifests currently use normal Solder delivery.</div>{%endif%}
         {%if not technic_solderpy_loader_active and distribution_settings.solderpy_loader_enabled%}<div class="alert alert-warning">Activation requires a published, public build and modpack.</div>{%endif%}
-        <form method="post" action="{{url_for('asite.advanced_optionals', build_id=packbuild.id)}}">
+        <form method="post" action="{{url_for('asite.advanced_optionals', build_id=packbuild.id)}}" class="mb-2">
+            <input type="hidden" name="solderpy_loader_version" value="{{technic_solderpy_loader.version_id}}">
+            <label class="form-label" for="technic_delivery_mode">Required file delivery</label>
+            <select class="form-select mb-2" id="technic_delivery_mode" name="technic_delivery_mode">
+                <option value="TECHNIC" {%if technic_solderpy_loader.delivery_mode == 'TECHNIC'%}selected{%endif%}>Technic Solder API — required files through Technic</option>
+                <option value="LOADER" {%if technic_solderpy_loader.delivery_mode == 'LOADER'%}selected{%endif%}>SolderPy Loader — all managed files through Loader</option>
+            </select>
+            <div class="form-text mb-2">Technic mode keeps required packages in the normal Technic manifest. Loader mode leaves only the modloader and bootstrap there. Optional and excluded packages use SolderPy Loader in both modes.</div>
+            <button class="btn btn-primary" type="submit" name="enable_technic_solderpy_loader" value="1">Save delivery</button>
             <button class="btn btn-danger" type="submit" name="disable_technic_solderpy_loader" value="1">Disable for Technic</button>
         </form>
         {%elif configure_solderpy_loader%}
@@ -98,6 +106,12 @@
                 <select class="form-select mb-2" id="solderpy_loader_version" name="solderpy_loader_version" required>
                     {%for release in solderpy_loader_releases%}<option value="{{release.selector}}">{{release.version}}</option>{%endfor%}
                 </select>
+                <label class="form-label" for="technic_delivery_mode">Required file delivery</label>
+                <select class="form-select mb-2" id="technic_delivery_mode" name="technic_delivery_mode">
+                    <option value="TECHNIC" selected>Technic Solder API — required files through Technic</option>
+                    <option value="LOADER">SolderPy Loader — all managed files through Loader</option>
+                </select>
+                <div class="form-text mb-2">Optional and excluded packages are handled by SolderPy Loader in both modes.</div>
                 <div class="alert alert-info py-2">Enabling this delivery disables the modpack's legacy Technic optional shadow build. SolderPy Loader handles its optional content instead.</div>
                 <button class="btn btn-success" type="submit" name="enable_technic_solderpy_loader" value="1">Enable for Technic</button>
             </form>

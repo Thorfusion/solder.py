@@ -19,12 +19,25 @@ class TechnicSolderPyLoaderError(ValueError):
 
 @dataclass(frozen=True)
 class TechnicSolderPyLoader:
+    LOADER_DELIVERY = "LOADER"
+    TECHNIC_DELIVERY = "TECHNIC"
+
     build_id: int
     version_id: str
     version: str
     bootstrap_path: str
     bootstrap_md5: str
     bootstrap_filesize: int
+    delivery_mode: str = LOADER_DELIVERY
+
+    @classmethod
+    def normalize_delivery_mode(cls, value):
+        mode = str(value or cls.LOADER_DELIVERY).strip().upper()
+        if mode not in {cls.LOADER_DELIVERY, cls.TECHNIC_DELIVERY}:
+            raise TechnicSolderPyLoaderError(
+                "Choose either Technic Solder API or SolderPy Loader delivery."
+            )
+        return mode
 
     @staticmethod
     def _checksum(path):
@@ -89,6 +102,7 @@ class TechnicSolderPyLoader:
         repository_url,
         application_url,
         *,
+        delivery_mode=LOADER_DELIVERY,
         r2_client=None,
         r2_bucket=None,
         http=None,
@@ -119,12 +133,17 @@ class TechnicSolderPyLoader:
                 "The SolderPy Loader version name is too long."
             )
 
+        delivery_mode = cls.normalize_delivery_mode(delivery_mode)
         DistributionExport.repository_base(repository_url)
         config = PlatformPackExport.solderpy_loader_config(
             build,
             application_url,
             selector="build",
             modpack_slug=getattr(modpack, "slug", None),
+            target="client",
+            platform=(
+                "technic" if delivery_mode == cls.TECHNIC_DELIVERY else None
+            ),
         )
         relauncher_config = PlatformPackExport.relauncher_java_config(build)
 
@@ -171,12 +190,13 @@ class TechnicSolderPyLoader:
             try:
                 cursor.execute(
                     """INSERT INTO technic_solderpy_loader_builds
-                       (build_id, version_id, version, bootstrap_path,
-                        bootstrap_md5, bootstrap_filesize)
-                       VALUES (%s, %s, %s, %s, %s, %s)
+                       (build_id, version_id, version, delivery_mode,
+                        bootstrap_path, bootstrap_md5, bootstrap_filesize)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)
                        ON DUPLICATE KEY UPDATE
                            version_id = VALUES(version_id),
                            version = VALUES(version),
+                           delivery_mode = VALUES(delivery_mode),
                            bootstrap_path = VALUES(bootstrap_path),
                            bootstrap_md5 = VALUES(bootstrap_md5),
                            bootstrap_filesize = VALUES(bootstrap_filesize)""",
@@ -184,6 +204,7 @@ class TechnicSolderPyLoader:
                         build.id,
                         version_id,
                         version_name,
+                        delivery_mode,
                         relative,
                         bootstrap_md5,
                         bootstrap_size,
@@ -227,8 +248,17 @@ class TechnicSolderPyLoader:
             "bootstrap_path",
             "bootstrap_md5",
             "bootstrap_filesize",
+            "delivery_mode",
         }
-        return cls(**{name: row[name] for name in allowed})
+        values = {
+            name: row[name]
+            for name in allowed
+            if name in row
+        }
+        values["delivery_mode"] = cls.normalize_delivery_mode(
+            values.get("delivery_mode")
+        )
+        return cls(**values)
 
     @classmethod
     def get(cls, build_id):

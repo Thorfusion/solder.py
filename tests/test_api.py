@@ -431,6 +431,9 @@ class ApiTests(unittest.TestCase):
         modpack.get_build_api.return_value = build
         get_modpack.return_value = modpack
         configuration = Mock()
+        configuration.delivery_mode = (
+            api_module.TechnicSolderPyLoader.LOADER_DELIVERY
+        )
         configuration.manifest_entries.return_value = [
             {
                 "id": -14,
@@ -454,6 +457,101 @@ class ApiTests(unittest.TestCase):
             "https://cdn.example.test/mods/",
             expanded=False,
             extended=False,
+        )
+
+    @patch.object(api_module.TechnicSolderPyLoader, "get_active")
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_technic_delivery_keeps_required_packages_in_normal_manifest(
+        self, _get_key, get_modpack, get_loader
+    ):
+        required = SimpleNamespace(
+            id=10,
+            mod_id=4,
+            modname="ordinary",
+            version="2.0",
+            md5="b" * 32,
+            filesize=200,
+            modtype="MOD",
+        )
+        modloader = SimpleNamespace(
+            id=11,
+            mod_id=5,
+            modname="modpack",
+            version="forge",
+            md5="d" * 32,
+            filesize=400,
+            modtype="LAUNCHER",
+        )
+        build = Mock(
+            id=7,
+            minecraft="1.7.10",
+            min_java="1.8",
+            java_runtime=None,
+            min_memory=2048,
+            forge="10.13.4.1614",
+            modloader="FORGE",
+        )
+        build.get_modversions_api.return_value = [required, modloader]
+        modpack = Mock(optional_mode=1)
+        modpack.get_build_api.return_value = build
+        get_modpack.return_value = modpack
+        configuration = Mock(
+            delivery_mode=(
+                api_module.TechnicSolderPyLoader.TECHNIC_DELIVERY
+            )
+        )
+        configuration.manifest_entries.return_value = [
+            {
+                "id": -14,
+                "name": "solderpy-loader-bootstrap",
+                "version": "0.1.0",
+                "md5": "c" * 32,
+                "filesize": 300,
+                "url": "https://cdn.example.test/mods/_solderpy/bootstrap.zip",
+            }
+        ]
+        get_loader.return_value = configuration
+
+        response = self.client.get("/api/modpack/legacy-pack/1.0")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [entry["name"] for entry in response.get_json()["mods"]],
+            ["ordinary", "modpack", "solderpy-loader-bootstrap"],
+        )
+
+    @patch.object(api_module.BootstrapManifest, "render")
+    @patch.object(
+        api_module.AdvancedOptional, "get_active_groups", return_value=[]
+    )
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_technic_bootstrap_manifest_contains_only_optional_content(
+        self, _get_key, get_modpack, _get_groups, render
+    ):
+        packages = [
+            SimpleNamespace(optional=0),
+            SimpleNamespace(optional=1),
+            SimpleNamespace(optional=2),
+        ]
+        build = Mock(id=7, minecraft="1.20.1", modloader="FORGE")
+        build.get_modversions_api.return_value = packages
+        modpack = SimpleNamespace(
+            enable_server=1,
+            get_build_api=Mock(return_value=build),
+        )
+        get_modpack.return_value = modpack
+        render.return_value = {"manifest_hash": "a" * 64}
+
+        response = self.client.get(
+            "/api/modpack/stable/42/bootstrap?platform=technic&source=solder"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [package.optional for package in render.call_args.args[2]],
+            [1, 2],
         )
 
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")

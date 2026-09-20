@@ -41,7 +41,7 @@ The route accepts these query arguments:
 | --- | --- | --- | --- |
 | `target` | `client`, `server` | `client` | Filter packages by their configured side. |
 | `source` | `hybrid`, `solder` | `hybrid` | Include verified provider/override fallbacks, or restrict raw JARs to Solder. |
-| `platform` | `modrinth`, `curseforge`, `prism` | none | Omit packages already owned by the native archive that installed SolderPy Loader. |
+| `platform` | `modrinth`, `curseforge`, `prism`, `technic` | none | Omit packages already owned by the native platform that installed SolderPy Loader. |
 | `from` | Build version, `recommended`, or `latest` | none | Add changes from an installed build. |
 | `cid` | Client UUID | none | Read a private modpack associated with that client. |
 | `k` | Solder API key | none | Privileged read access; do not distribute this secret in a client mod. |
@@ -282,7 +282,9 @@ If solder.py cannot use saved native-provider metadata, it still returns the
 override, when configured, and the Solder URL. `source=solder` returns only the
 Solder URL. `platform=modrinth` omits native MRPack files, while
 `platform=curseforge` omits enabled Modrinth-CurseForge sync mappings, avoiding
-duplicate installation by SolderPy Loader.
+duplicate installation by SolderPy Loader. `platform=technic` omits state `0`
+packages because Technic installs those required files from its normal Solder
+manifest; state `1` and `2` packages remain for Loader-managed optional content.
 
 `download.format: solder_zip` is used by `CONFIG`, `RES`, `NONE`, and other
 non-mod content. Download the archive, verify its byte size when supplied,

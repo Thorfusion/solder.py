@@ -1971,13 +1971,11 @@ def advanced_optionals(build_id):
                     UPLOAD_FOLDER,
                     public_repo_url,
                     app_url,
+                    delivery_mode=request.form.get("technic_delivery_mode"),
                     r2_client=R2 if R2_BUCKET else None,
                     r2_bucket=R2_BUCKET,
                 )
-                flash(
-                    "SolderPy Loader enabled for this Technic build.",
-                    "success",
-                )
+                flash("Technic delivery updated for this build.", "success")
             elif "disable_technic_solderpy_loader" in request.form:
                 TechnicSolderPyLoader.disable(build_id)
                 flash(

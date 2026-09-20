@@ -124,6 +124,7 @@ class Database:
         build_id INT NOT NULL PRIMARY KEY,
         version_id VARCHAR(64) NOT NULL,
         version VARCHAR(255) NOT NULL,
+        delivery_mode VARCHAR(16) NOT NULL DEFAULT 'LOADER',
         bootstrap_path VARCHAR(512) NOT NULL,
         bootstrap_md5 CHAR(32) NOT NULL,
         bootstrap_filesize BIGINT UNSIGNED NOT NULL,
@@ -366,6 +367,16 @@ class Database:
             "solderpy_loader_direct",
             "ALTER TABLE maven_artifacts ADD COLUMN solderpy_loader_direct "
             "TINYINT(1) NOT NULL DEFAULT 0 AFTER side",
+        ),
+    )
+
+    TECHNIC_SOLDERPY_LOADER_COLUMN_MIGRATIONS = (
+        (
+            "technic_solderpy_loader_builds",
+            "delivery_mode",
+            "ALTER TABLE technic_solderpy_loader_builds "
+            "ADD COLUMN delivery_mode VARCHAR(16) NOT NULL DEFAULT 'LOADER' "
+            "AFTER version",
         ),
     )
 
@@ -1058,6 +1069,7 @@ class Database:
             *Database.NOTES_COLUMN_MIGRATIONS,
             *Database.INTEGRATION_COLUMN_MIGRATIONS,
             *Database.MAVEN_COLUMN_MIGRATIONS,
+            *Database.TECHNIC_SOLDERPY_LOADER_COLUMN_MIGRATIONS,
             (
                 "platform_export_overrides",
                 "override_solder_only",
@@ -1074,6 +1086,7 @@ class Database:
             # This table does not exist in a Technic database. Create its
             # current shape before applying additive column checks.
             cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
+            cur.execute(Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL)
             for query in Database.MAVEN_TABLES_SQL:
                 cur.execute(query)
             Database.normalize_legacy_timestamps(cur)
@@ -1181,6 +1194,7 @@ class Database:
                 *Database.NOTES_COLUMN_MIGRATIONS,
                 *Database.INTEGRATION_COLUMN_MIGRATIONS,
                 *Database.MAVEN_COLUMN_MIGRATIONS,
+                *Database.TECHNIC_SOLDERPY_LOADER_COLUMN_MIGRATIONS,
                 (
                     "modpacks",
                     "optional_mode",

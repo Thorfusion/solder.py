@@ -167,13 +167,19 @@ writes one internal Solder ZIP containing both JARs and
 `config/solderpy-loader.json`. This is a virtual API entry, not a mod in the
 management library.
 
-Technic continues to install `LAUNCHER` packages such as the legacy
-`bin/modpack.jar`, plus the `BOOTSTRAP` entry. SolderPy Loader obtains every
-other package from the dedicated bootstrap API before mod discovery. This
-avoids duplicate installs and gives Technic builds the same basic or advanced
-optional selection rules as other SolderPy Loader exports. Disabling SolderPy
-Loader exports, or making the build or modpack private, automatically restores
-normal Technic Solder delivery.
+Choose **Technic Solder API** when configuring the build to let Technic install
+the normal state `0` required packages, its `LAUNCHER` package such as the
+legacy `bin/modpack.jar`, and the `BOOTSTRAP` entry. SolderPy Loader then obtains
+only state `1` optional and state `2` excluded content from the bootstrap API.
+This is the smaller Loader workload and keeps most file delivery on Technic's
+native Solder path.
+
+Choose **SolderPy Loader** to retain the alternative behavior: Technic installs
+only the `LAUNCHER` and `BOOTSTRAP` entries, while Loader obtains all other
+packages from the bootstrap API. Both choices avoid duplicate installs and use
+the same advanced optional rules. Existing configured builds keep this Loader
+mode until changed. Disabling SolderPy Loader exports, or making the build or
+modpack private, automatically restores normal Technic Solder delivery.
 
 Activating this delivery always disables the modpack's legacy Technic optional
 shadow build (`enable_optionals = 0`). Both mechanisms otherwise advertise the
