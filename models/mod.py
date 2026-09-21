@@ -21,6 +21,17 @@ class UploadVerificationError(ValueError):
 
 
 _MAX_UPLOAD_JAR_SIZE = 512 * 1024 * 1024
+MOD_TYPES = frozenset({"MOD", "LAUNCHER", "RES", "CONFIG", "BOOTSTRAP", "NONE"})
+
+
+def normalize_modtype(value):
+    """Normalize the former product-specific MCIL role to BOOTSTRAP."""
+    value = str(value or "MOD").strip().upper()
+    if value == "MCIL":
+        value = "BOOTSTRAP"
+    if value not in MOD_TYPES:
+        raise ValueError("Unknown mod type.")
+    return value
 
 
 class Mod:
@@ -50,7 +61,7 @@ class Mod:
         self.updated_at = updated_at
         self.pretty_name = pretty_name
         self.side = side
-        self.modtype = modtype
+        self.modtype = normalize_modtype(modtype)
         self.notes = notes
         self.integration_provider = (
             str(integration_provider).upper() if integration_provider else None
@@ -77,6 +88,7 @@ class Mod:
         integration_provider=None,
         integration_project_id=None,
     ):
+        modtype = normalize_modtype(modtype)
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -129,6 +141,7 @@ class Mod:
 
     @staticmethod
     def update(id, name, description, author, link, pretty_name, side, modtype, notes):
+        modtype = normalize_modtype(modtype)
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
@@ -147,6 +160,11 @@ class Mod:
         cur.execute("SELECT * FROM modversions WHERE mod_id = %s", (id,))
         modversions = cur.fetchall()
         if modversions:
+            from .advanced_optional import AdvancedOptional
+
+            AdvancedOptional.delete_modversion_memberships(
+                cur, [mv["id"] for mv in modversions]
+            )
             for mv in modversions:
                 cur.execute("DELETE FROM build_modversion WHERE modversion_id = %s", (mv["id"],))
         cur.execute(
@@ -161,6 +179,33 @@ class Mod:
             (id,),
         )
         cur.execute("DELETE FROM maven_artifacts WHERE mod_id = %s", (id,))
+        cur.execute(
+            """DELETE modversion_download_overrides
+               FROM modversion_download_overrides
+               INNER JOIN modversions
+                   ON modversions.id =
+                      modversion_download_overrides.modversion_id
+               WHERE modversions.mod_id = %s""",
+            (id,),
+        )
+        cur.execute(
+            """DELETE modversion_download_sources
+               FROM modversion_download_sources
+               INNER JOIN modversions
+                   ON modversions.id =
+                      modversion_download_sources.modversion_id
+               WHERE modversions.mod_id = %s""",
+            (id,),
+        )
+        cur.execute(
+            """DELETE modversion_minecraft_versions
+               FROM modversion_minecraft_versions
+               INNER JOIN modversions
+                   ON modversions.id =
+                      modversion_minecraft_versions.modversion_id
+               WHERE modversions.mod_id = %s""",
+            (id,),
+        )
         cur.execute("DELETE FROM modversions WHERE mod_id = %s", (id,))
         cur.execute("DELETE FROM mods WHERE id=%s", (id,))
         conn.commit()
@@ -285,6 +330,62 @@ class Mod:
             cur.close()
             conn.close()
 
+    @classmethod
+    def link_integration(cls, id, provider, project_id):
+        """Attach provider metadata without replacing a mod or its versions."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        try:
+            cur.execute(
+                """UPDATE mods
+                   SET integration_provider = %s,
+                       integration_project_id = %s,
+                       updated_at = %s
+                   WHERE id = %s
+                     AND integration_provider IS NULL
+                     AND integration_project_id IS NULL""",
+                (str(provider).upper(), str(project_id), now, id),
+            )
+            if cur.rowcount != 1:
+                conn.rollback()
+                return None
+            conn.commit()
+        except IntegrityError as error:
+            conn.rollback()
+            if error.errno == errorcode.ER_DUP_ENTRY:
+                raise DuplicateModError(project_id) from error
+            raise
+        finally:
+            cur.close()
+            conn.close()
+        return cls.get_by_id(id)
+
+    @classmethod
+    def unlink_integration(cls, id, provider):
+        """Detach provider metadata while retaining local versions and builds."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        now = datetime.datetime.now()
+        try:
+            cur.execute(
+                """UPDATE mods
+                   SET integration_provider = NULL,
+                       integration_project_id = NULL,
+                       updated_at = %s
+                   WHERE id = %s AND integration_provider = %s""",
+                (now, id, str(provider).upper()),
+            )
+            changed = cur.rowcount == 1
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+        return cls.get_by_id(id) if changed else None
+
     @staticmethod
     def get_integration_project_ids(provider):
         conn = Database.get_connection()
@@ -318,8 +419,26 @@ class Mod:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
-            cur.execute("SELECT id, mod_id, version, mcversion, modloader, md5, jarmd5, filesize FROM modversions WHERE mod_id = %s ORDER BY id DESC", (self.id,))
-            return cur.fetchall() or []
+            cur.execute(
+                """SELECT id, mod_id, version, mcversion, modloader,
+                          integration_version_id, md5, jarmd5, jarfilesize,
+                          filesize, created_at, updated_at,
+                          (SELECT GROUP_CONCAT(
+                                      compatibility.minecraft_version
+                                      ORDER BY compatibility.minecraft_version
+                                      SEPARATOR ',')
+                             FROM modversion_minecraft_versions compatibility
+                            WHERE compatibility.modversion_id = modversions.id)
+                              AS minecraft_versions_csv
+                   FROM modversions
+                   WHERE mod_id = %s
+                   ORDER BY id DESC""",
+                (self.id,),
+            )
+            return [
+                Modversion.hydrate_minecraft_row(row)
+                for row in (cur.fetchall() or [])
+            ]
         finally:
             cur.close()
             conn.close()
@@ -338,10 +457,31 @@ class Mod:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
-            cur.execute("SELECT * FROM modversions WHERE mod_id = %s AND version = %s", (self.id, version))
+            cur.execute(
+                """SELECT modversions.*,
+                          (SELECT GROUP_CONCAT(
+                                      compatibility.minecraft_version
+                                      ORDER BY compatibility.minecraft_version
+                                      SEPARATOR ',')
+                             FROM modversion_minecraft_versions compatibility
+                            WHERE compatibility.modversion_id = modversions.id)
+                              AS minecraft_versions_csv
+                   FROM modversions
+                   WHERE mod_id = %s AND version = %s""",
+                (self.id, version),
+            )
             row = cur.fetchone()
             if row:
-                return Modversion(row["id"], row["mod_id"], row["version"], row["mcversion"], row["md5"], row["created_at"], row["updated_at"], row["filesize"], modloader=row.get("modloader"), jarmd5=row.get("jarmd5"))
+                return Modversion(
+                    row["id"], row["mod_id"], row["version"],
+                    row["mcversion"], row["md5"], row["created_at"],
+                    row["updated_at"], row["filesize"],
+                    modloader=row.get("modloader"),
+                    integration_version_id=row.get("integration_version_id"),
+                    jarmd5=row.get("jarmd5"),
+                    jarfilesize=row.get("jarfilesize"),
+                    minecraft_versions=row.get("minecraft_versions_csv"),
+                )
             return None
         finally:
             cur.close()
@@ -367,27 +507,53 @@ class Mod:
         return actual_md5
 
     @staticmethod
-    def extract_jar_from_zip(zip_paths, output_name=None, expected_md5=None):
-        """Extract the single mods/*.jar entry and optionally verify its MD5."""
+    def extract_jar_from_zip(
+        zip_paths,
+        output_name=None,
+        expected_md5=None,
+        require_only_jar=False,
+        allow_any_jar=False,
+    ):
+        """Extract one package JAR and optionally verify its MD5.
+
+        ``require_only_jar`` is used by the legacy package maintenance scan. In
+        that mode directory entries are ignored, but the JAR must be the only
+        file payload in the ZIP. Normal uploads deliberately retain the older
+        behaviour which permits configuration files beside the mod JAR.
+        ``allow_any_jar`` supports LAUNCHER packages, whose executable JAR is
+        normally at the archive root or under ``bin/`` rather than ``mods/``.
+        """
         base_dir = Path(zip_paths).parent
         try:
             with zipfile.ZipFile(zip_paths, "r") as zip_ref:
                 jar_files = []
+                payload_files = []
                 for info in zip_ref.infolist():
+                    if not info.is_dir():
+                        payload_files.append(info)
                     normalized = info.filename.replace("\\", "/")
                     path = PurePosixPath(normalized)
                     if (
                         not info.is_dir()
-                        and len(path.parts) >= 2
-                        and path.parts[0] == "mods"
                         and path.suffix.lower() == ".jar"
                         and ".." not in path.parts
+                        and (
+                            allow_any_jar
+                            or (
+                                len(path.parts) >= 2
+                                and path.parts[0] == "mods"
+                            )
+                        )
                     ):
                         jar_files.append(info)
 
                 if len(jar_files) != 1:
                     raise UploadVerificationError(
-                        "A JAR upload must contain exactly one JAR inside the mods folder."
+                        "A JAR upload must contain exactly one eligible JAR."
+                    )
+                if require_only_jar and payload_files != jar_files:
+                    raise UploadVerificationError(
+                        "The package contains files other than its single mods JAR."
                     )
                 if jar_files[0].file_size > _MAX_UPLOAD_JAR_SIZE:
                     raise UploadVerificationError(

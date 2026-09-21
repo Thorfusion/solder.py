@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from models.database import Database
 
 ## Solderpy version
-solderpy_version = "1.9.0"
+solderpy_version = "1.10.0"
 
 load_dotenv(".env")
 
@@ -14,15 +14,23 @@ migratetechnic = False
 api_only = False
 management_only = False
 write_api = False
+legacy_modversion_adding = False
 debug = False
 reverse_proxy = False
+session_cookie_secure = True
 
 host = os.getenv("APP_HOST")
 port = os.getenv("APP_PORT")
 app_url = os.getenv("APP_URL")
+curseforge_api_key = os.getenv("CURSEFORGE_API_KEY")
 
 if os.getenv("PROXY_IP"):
     reverse_proxy = True
+
+if os.getenv("SESSION_COOKIE_SECURE"):
+    session_cookie_secure = os.getenv("SESSION_COOKIE_SECURE").lower() in [
+        "true", "t", "1", "yes", "y"
+    ]
 
 if os.getenv("NEW_USER"):
     new_user = os.getenv("NEW_USER").lower() in ["true", "t", "1", "yes", "y"]
@@ -35,6 +43,10 @@ if os.getenv("MANAGEMENT_ONLY"):
     management_only = os.getenv("MANAGEMENT_ONLY").lower() in ["true", "t", "1", "yes", "y"]
 if os.getenv("WRITE_API") or os.getenv("WRITABLE_API"):
     write_api = (os.getenv("WRITE_API") or os.getenv("WRITABLE_API")).lower() in ["true", "t", "1", "yes", "y"]
+if os.getenv("ENABLE_LEGACY_MODVERSION_ADDING"):
+    legacy_modversion_adding = os.getenv(
+        "ENABLE_LEGACY_MODVERSION_ADDING"
+    ).lower() in ["true", "t", "1", "yes", "y"]
 
 if os.getenv("APP_DEBUG"):
     debug = os.getenv("APP_DEBUG").lower() in ["true", "t", "1", "yes", "y"]

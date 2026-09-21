@@ -57,7 +57,7 @@
                 <div class="form-check">
                     <input class="form-check-input" type="radio" name="type" id="type_LAUNCHER" value="LAUNCHER" required {%if request.form.get('type') == 'LAUNCHER'%}checked{%endif%}>
                     <label class="form-check-label" for="type_LAUNCHER">
-                        LAUNCHER
+                        LAUNCHER (MODLOADER)
                     </label>
                 </div>
                 <div class="form-check">
@@ -73,9 +73,9 @@
                     </label>
                 </div>
                 <div class="form-check">
-                    <input class="form-check-input" type="radio" name="type" id="type_MCIL" value="MCIL" required {%if request.form.get('type') == 'MCIL'%}checked{%endif%}>
-                    <label class="form-check-label" for="type_MCIL">
-                        MCIL
+                    <input class="form-check-input" type="radio" name="type" id="type_BOOTSTRAP" value="BOOTSTRAP" required {%if request.form.get('type') in ['BOOTSTRAP', 'MCIL']%}checked{%endif%}>
+                    <label class="form-check-label" for="type_BOOTSTRAP">
+                        BOOTSTRAP
                     </label>
                 </div>
                 <div class="form-check">

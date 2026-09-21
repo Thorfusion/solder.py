@@ -1,4 +1,4 @@
-{%extends "layout.html"%} {% set active_page = packbuild.id %} {% set active_page_build = 'build' %} {%block head%}
+{%extends "layout.html"%} {%from "_export_fields.html" import downloader_select, export_settings%} {%from "_badges.html" import integration_badge, modtype_badge%} {% set active_page = packbuild.id %} {% set active_page_build = 'build' %} {%block head%}
 <title>solder.py</title>
 <link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" /> {%endblock%}{%block main%}
 
@@ -8,7 +8,7 @@
             <tr>
                 <th scope="col" class="tablewidth70 tablemaxwidth">Name (Slug)</th>
                 <th scope="col" class="tablewidth20">Version</th>
-                <th scope="col">Optional</th>
+                <th scope="col">{%if optional_mode == 1%}List in advanced optional page{%else%}Optional{%endif%}</th>
                 <th>
                     <div class="maxcont">
                         <input type="text" class="form-control tablewidthsearch" id="search" placeholder="Type to search" onkeyup="tablesearches(0);">
@@ -19,7 +19,12 @@
         <tbody class="">
             {% for combo in buildlist %}
             <tr>
-                <td class="tablewidth70 tablemaxwidth">{{combo.pretty_name}} ({{combo.name}}){%if combo.integration_provider%} <span class="badge bg-info text-dark">{{combo.integration_label}}</span>{%endif%}</td>
+                <td class="tablewidth70 tablemaxwidth">
+                    <div class="build-name-cell">
+                        <span class="build-name-details">{{combo.pretty_name}} ({{combo.name}}) {{modtype_badge(combo.modtype)}} {{integration_badge(combo.integration_provider, combo.integration_label)}}</span>
+                        <span class="build-update-indicator{%if not combo.update_available%} invisible{%endif%}" {%if combo.update_available%}title="Update available{%if combo.available_version%}: {{combo.available_version}}{%endif%}" aria-label="Update available"{%else%}aria-hidden="true"{%endif%}>&#x2B07;&#xFE0E;</span>
+                    </div>
+                </td>
                 <td class="tablewidth20">
                     <select class="form-select" name="selmodver_{{combo.modid}}" id="selmodver_{{combo.modid}}" {%if combo.integration_provider%}data-integration-url="{{url_for('asite.integration_versions', build_id=packbuild.id, mod_id=combo.modid)}}" onfocus="loadintegrationversions(this.id, this.dataset.integrationUrl);"{%endif%} onchange="submitoptionpress('selmodver_oldver', '{{combo.modverid}}', 'selmodver_ver', 'selmodver_{{combo.modid}}', 'selmodver_submit');">
                         {%for modlist in combo.versions%}
@@ -28,7 +33,15 @@
                     </select>
                 </td>
                 <td>
-                    <input class="form-check-input" type="checkbox" value="" id="optional_{{combo.modverid}}" onclick="submitecheckedpress('optional_modid', '{{combo.modverid}}', 'optional_check', 'optional_{{combo.modverid}}', 'optional_submit')" {% if combo.optional %}checked{% endif %}>
+                    <div class="d-flex align-items-center">
+                    {%if optional_mode == 1%}
+                    {%if combo.modtype in ['LAUNCHER', 'BOOTSTRAP', 'MCIL']%}<span class="text-muted" title="Modloader and bootstrap packages are not advanced choices">&mdash;</span>{%else%}
+                    <input class="form-check-input" type="checkbox" value="" id="advanced_optional_{{combo.id}}" aria-label="List {{combo.pretty_name}} in advanced optional page" onclick="submitecheckedpress('optional_modid', '{{combo.id}}', 'optional_check', 'advanced_optional_{{combo.id}}', 'optional_submit')" {%if combo.advanced_listed%}checked{%endif%}>
+                    {%endif%}
+                    {%else%}
+                    <input class="form-check-input" type="checkbox" value="" id="optional_{{combo.modverid}}" aria-label="Make {{combo.pretty_name}} optional" onclick="submitecheckedpress('optional_modid', '{{combo.modverid}}', 'optional_check', 'optional_{{combo.modverid}}', 'optional_submit')" {%if combo.optional%}checked{%endif%}>
+                    {%endif%}
+                    </div>
                 </td>
                 <td>
                     <div class="maxcont">
@@ -69,7 +82,7 @@
                     <input type="search" class="form-control mb-2" id="build_mod_search" placeholder="Search mods" autocomplete="off" oninput="dropdownsearches('build_mod_search', 'build_mod_dropdown_options', 'build_mod_no_results');">
                     <div class="overflow-auto" id="build_mod_dropdown_options" style="max-height: 18rem;">
                         {%for lmod in listmod%}
-                        <button type="button" class="dropdown-item" data-searchable-option data-value="{{lmod.id}}" {%if lmod.integration_provider%}data-integration-url="{{url_for('asite.integration_versions', build_id=packbuild.id, mod_id=lmod.id)}}"{%endif%} onclick="selectbuildmod(this, 'modnames', 'build_mod_selection', 'build_mod_dropdown', 'add_mod_submit');">{{lmod.pretty_name}}{%if lmod.integration_provider%} <span class="badge bg-info text-dark">{{lmod.integration_label}}</span>{%endif%}</button>
+                        <button type="button" class="dropdown-item" data-searchable-option data-value="{{lmod.id}}" {%if lmod.integration_provider%}data-integration-url="{{url_for('asite.integration_versions', build_id=packbuild.id, mod_id=lmod.id)}}"{%endif%} onclick="selectbuildmod(this, 'modnames', 'build_mod_selection', 'build_mod_dropdown', 'add_mod_submit');">{{lmod.pretty_name}} {{modtype_badge(lmod.modtype)}} {{integration_badge(lmod.integration_provider, lmod.integration_label)}}</button>
                         {%endfor%}
                         <p class="dropdown-item-text text-muted mb-0" id="build_mod_no_results" hidden>No matching mods</p>
                     </div>
@@ -87,22 +100,142 @@
             </select>
         </div>
         <div class="form-check">
+            {%if optional_mode == 1%}
+            <input class="form-check-input" type="checkbox" value="1" id="newadvancedoptional" name="newadvancedoptional">
+            <label class="form-check-label" for="newadvancedoptional">List the mod in advanced optional page</label>
+            {%else%}
             <input class="form-check-input" type="checkbox" value="1" id="newoptional" name="newoptional">
             <label class="form-check-label" for="newoptional">Optional</label>
+            {%endif%}
         </div>
         <div class="d-flex gap-2 mt-3">
             <input class="btn btn-success" type="submit" value="Add Mod" name="add_mod_submit" id="add_mod_submit" disabled>
             {%if buildlist%}
             <button class="btn btn-primary" type="submit" name="update_all_mods_submit" value="1" form="update_all_mods_form">Update all mods</button>
             {%endif%}
+            <a class="btn btn-secondary" href="{{url_for('asite.modpackbuild', id=packbuild.id, export=1)}}">Export</a>
         </div>
-        <div class="mt-2">
-            <a class="btn btn-secondary" href="{{url_for('asite.export_build_csv', id=packbuild.id)}}">Export mod list (CSV)</a>
+        <div class="d-flex gap-2 mt-2">
+            {%if buildlist%}<a class="btn btn-outline-success" href="{{url_for('asite.modpackbuild', id=packbuild.id, check_updates=1)}}">Check for updates</a>{%endif%}
+            <a class="btn btn-outline-primary" href="{{url_for('asite.advanced_optionals', build_id=packbuild.id)}}">Advanced optionals</a>
         </div>
     </form>
         {%if buildlist%}
         <form method="post" action="" id="update_all_mods_form"></form>
         {%endif%}
+    {%if export_requested%}
+    <div class="modal fade" id="export_modpack_modal" tabindex="-1" aria-labelledby="export_modpack_title" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="export_modpack_title">Export modpack</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form method="get" id="export_modpack_form">
+                        <div class="mb-3">
+                            <label for="export_destination" class="form-label">Export to</label>
+                            <select class="form-select" id="export_destination" onchange="updateexportdestination(this)">
+                                {%if distribution_settings.solderpy_loader_enabled%}<option value="solderpy" data-family="solderpy" data-action="{{url_for('asite.export_solderpy_loader', id=packbuild.id)}}" data-label="Export SolderPy Loader" selected>SolderPy Loader</option>{%endif%}
+                                <option value="csv" data-family="csv" data-action="{{url_for('asite.export_build_csv', id=packbuild.id)}}" data-label="Export CSV">CSV</option>
+                                {%if distribution_settings.solderpy_loader_enabled%}<option value="server" data-family="server" data-action="{{url_for('asite.export_server', id=packbuild.id)}}" data-label="Export server">Dedicated server</option>{%endif%}
+                                {%if distribution_settings.mcil_enabled%}<option value="mcil" data-family="mcil" data-action="{{url_for('asite.export_mcinstance', id=packbuild.id)}}" data-label="Export MCIL">MCInstance Loader</option>{%endif%}
+                                {%if distribution_settings.filedirector_enabled%}<option value="filedirector" data-family="filedirector" data-action="{{url_for('asite.export_filedirector', id=packbuild.id)}}" data-label="Export FileDirector">FileDirector</option>{%endif%}
+                                {%if distribution_settings.modpack_director_enabled%}<option value="modpackdirector" data-family="modpackdirector" data-action="{{url_for('asite.export_modpack_director', id=packbuild.id)}}" data-label="Export Modpack Director">Modpack Director</option>{%endif%}
+                                {%if distribution_settings.packwiz_enabled%}<option value="packwiz" data-family="packwiz" data-action="{{url_for('asite.export_packwiz', id=packbuild.id)}}" data-label="Export Packwiz">Packwiz</option>{%endif%}
+                                {%if distribution_settings.mrpack_enabled%}<option value="modrinth" data-family="modrinth" data-action="{{url_for('asite.export_mrpack', id=packbuild.id)}}" data-label="Export Modrinth">Modrinth</option>{%endif%}
+                                {%if distribution_settings.curseforge_export_enabled%}<option value="curseforge" data-family="curseforge" data-action="{{url_for('asite.export_curseforge', id=packbuild.id)}}" data-label="Export CurseForge">CurseForge</option>{%endif%}
+                                {%if distribution_settings.prism_export_enabled%}<option value="prism" data-family="prism" data-action="{{url_for('asite.export_prism', id=packbuild.id)}}" data-label="Export Prism">Prism Launcher</option>{%endif%}
+                                {%for target in publication_targets%}
+                                    {%set publication_state = publication_states.get(target.id)%}
+                                    {%if publication_state and publication_state.locked%}
+                                    <option disabled>Publishing locked &mdash; {{target.provider_label}} &mdash; {{target.account_name}}</option>
+                                    {%elif publication_state and publication_state.published%}
+                                    <option value="publish-{{target.id}}" data-family="{{target.provider|lower}}" data-publish="1" data-method="post" data-action="{{url_for('asite.publish_build', id=packbuild.id, target_id=target.id)}}" data-label="Send patch {{publication_state.version_number}}">Send patch {{publication_state.version_number}} to {{target.provider_label}} &mdash; {{target.account_name}}</option>
+                                    {%else%}
+                                    <option value="publish-{{target.id}}" data-family="{{target.provider|lower}}" data-publish="1" data-method="post" data-action="{{url_for('asite.publish_build', id=packbuild.id, target_id=target.id)}}" data-label="Publish {{packbuild.version}}">Publish {{packbuild.version}} to {{target.provider_label}} &mdash; {{target.account_name}}</option>
+                                    {%endif%}
+                                {%endfor%}
+                            </select>
+                        </div>
+                        {{export_settings(packbuild)}}
+
+                        {%if distribution_settings.solderpy_loader_enabled%}
+                        <div class="border-top pt-3" data-export-for="solderpy">
+                        <h6>SolderPy Loader</h6>
+                        <div class="form-text mb-2">Exports this build's Solder API configuration. Install the Loader and Relauncher through Modrinth, CurseForge, or Technic.</div>
+                        </div>
+
+                        <div class="border-top pt-3" data-export-for="server" hidden>
+                        <h6>Dedicated server</h6>
+                        {%if server_downloader_error%}<div class="alert alert-warning" role="alert">{{server_downloader_error}}</div>{%endif%}
+                        {{downloader_select('server_downloader', 'server_downloader', 'SolderPy Loader version', server_downloaders)}}
+                        <div class="form-text mb-2">Creates a small server archive containing SolderPy Loader and Relauncher in <code>mods/</code>, plus the build's required server-side <code>LAUNCHER</code> JAR (for example, Crucible) at the archive root.</div>
+                        </div>
+                        {%endif%}
+
+                        {%if distribution_settings.mrpack_enabled%}
+                        <div class="border-top pt-3" data-export-for="modrinth" hidden>
+                        <h6>Modrinth fallback</h6>
+                        {%if modrinth_downloader_error%}<div class="alert alert-warning" role="alert">{{modrinth_downloader_error}}</div>{%endif%}
+                        {{downloader_select('modrinth_downloader', 'modrinth_downloader', 'Fallback downloader', modrinth_downloaders, true)}}
+                        </div>
+                        {%endif%}
+
+                        {%if distribution_settings.prism_export_enabled%}
+                        <div class="border-top pt-3" data-export-for="prism" hidden>
+                        <h6>Prism delivery</h6>
+                        {%if prism_downloader_error%}<div class="alert alert-warning" role="alert">{{prism_downloader_error}}</div>{%endif%}
+                        {{downloader_select('prism_downloader', 'prism_downloader', 'Mod downloader', prism_downloaders, true, 'Self-contained archive (larger, no downloader)')}}
+                        <div class="form-text mb-2">Available downloaders create a small bootstrap archive. Use Self-contained when none supports the build.</div>
+                        </div>
+                        {%endif%}
+
+                        {%if distribution_settings.curseforge_export_enabled%}
+                        <div class="border-top pt-3" data-export-for="curseforge" hidden>
+                        <h6>CurseForge downloader</h6>
+                        {%if curseforge_downloader_error%}<div class="alert alert-warning" role="alert">{{curseforge_downloader_error}}</div>{%endif%}
+                        {{downloader_select('curseforge_downloader', 'curseforge_downloader', 'Mod downloader', curseforge_downloaders)}}
+                        </div>
+                        {%endif%}
+
+                        {%if publication_targets%}
+                        <div class="border-top pt-3" data-export-for="publish" hidden>
+                            <h6>Publish update</h6>
+                            <p class="form-text">
+                                Uploads the generated platform archive directly to the
+                                configured project. After the first publication, later
+                                snapshots of this live build are sent as numbered patch
+                                versions such as <code>{{packbuild.version}}-Patch-1</code>.
+                            </p>
+                            <div class="mb-2">
+                                <label class="form-label" for="publish_release_type">Release type</label>
+                                <select class="form-select" id="publish_release_type" name="release_type">
+                                    <option value="release">Release</option>
+                                    <option value="beta">Beta</option>
+                                    <option value="alpha">Alpha</option>
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label" for="publish_changelog">Changelog</label>
+                                <textarea class="form-control" id="publish_changelog" name="changelog" rows="4" maxlength="100000" placeholder="Changes in {{packbuild.version}}"></textarea>
+                            </div>
+                        </div>
+                        {%endif%}
+
+                        <div class="border-top pt-3">
+                            {%if distribution_settings.solderpy_loader_enabled%}
+                            <button class="btn btn-primary" id="export_destination_submit" type="submit" formaction="{{url_for('asite.export_solderpy_loader', id=packbuild.id)}}">Export SolderPy Loader</button>
+                            {%else%}
+                            <button class="btn btn-primary" id="export_destination_submit" type="submit" formaction="{{url_for('asite.export_build_csv', id=packbuild.id)}}">Export CSV</button>
+                            {%endif%}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {%endif%}
     <div class="divider"></div>
     <form method="post" action="">
         <div class="mb-3">
@@ -141,7 +274,7 @@
                 <input type="text" class="form-control" name="min_java" id="min_java" value="{{ packbuild.min_java or '' }}" maxlength="255" placeholder="For example: 1.8.0_51">
             </div>
             <div class="grid2">
-                <label for="java_runtime" class="form-label">Mojang Java Runtime <span class="badge bg-warning text-dark">Advanced</span></label>
+                <label for="java_runtime" class="form-label">Mojang Java Runtime</label>
                 <select class="form-select" name="java_runtime" id="java_runtime" aria-describedby="java_runtime_help">
                     <option value="" {%if not packbuild.java_runtime%}selected{%endif%}>Automatic (no override)</option>
                     {%for runtime, label in java_runtime_options%}
@@ -170,3 +303,39 @@
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 
 {% endblock %}
+{%block scripts%}
+<script>
+    function updateexportdestination(select) {
+        if (!select || !select.selectedOptions.length) {
+            return;
+        }
+        const option = select.selectedOptions[0];
+        const destination = option.value;
+        const family = option.dataset.family || destination;
+        const publishing = option.dataset.publish === "1";
+        document.querySelectorAll("#export_modpack_form [data-export-for]").forEach(section => {
+            const targets = section.dataset.exportFor.split(" ");
+            section.hidden = !(
+                targets.includes(destination)
+                || targets.includes(family)
+                || (publishing && targets.includes("publish"))
+            );
+        });
+        const submit = document.getElementById("export_destination_submit");
+        if (submit) {
+            submit.formAction = option.dataset.action || "";
+            submit.formMethod = option.dataset.method || "get";
+            submit.textContent = option.dataset.label || "Export";
+        }
+    }
+
+    const exportModalElement = document.getElementById("export_modpack_modal");
+    if (exportModalElement) {
+        document.body.appendChild(exportModalElement);
+        updateexportdestination(document.getElementById("export_destination"));
+        {%if request.args.get('export') == '1'%}
+        new bootstrap.Modal(exportModalElement).show();
+        {%endif%}
+    }
+</script>
+{%endblock%}

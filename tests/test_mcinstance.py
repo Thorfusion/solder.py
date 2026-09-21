@@ -21,6 +21,11 @@ from models.mcinstance import (  # noqa: E402
     MCInstanceJarError,
     MCInstancePackage,
 )
+from models.advanced_optional import (  # noqa: E402
+    AdvancedOptionalGroup,
+    AdvancedOptionalItem,
+    SINGLE,
+)
 
 
 def md5(data):
@@ -39,6 +44,28 @@ class MCInstanceExportTests(unittest.TestCase):
             modpack_slug="example-pack",
         )
 
+    def test_remote_repository_redirect_is_rejected(self):
+        response = MagicMock()
+        response.status_code = 302
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "models.mcinstance.requests.get", return_value=response
+        ) as get:
+            with self.assertRaisesRegex(
+                MCInstanceExportError, "unexpected redirect"
+            ):
+                with MCInstanceExport._package_file(
+                    directory,
+                    "https://cdn.example.test/mods/",
+                    "example-mod",
+                    "example-mod-1.0.zip",
+                ):
+                    pass
+
+        self.assertFalse(get.call_args.kwargs["allow_redirects"])
+
     @staticmethod
     def package(**changes):
         values = {
@@ -55,6 +82,48 @@ class MCInstanceExportTests(unittest.TestCase):
         }
         values.update(changes)
         return MCInstancePackage(**values)
+
+    def test_named_group_uses_mcil_menu_title_and_exact_one_limits(self):
+        selected = self.package(
+            optional_state=2,
+            membership_id=44,
+            side="CLIENT",
+        )
+        group = AdvancedOptionalGroup(
+            id=3,
+            build_id=7,
+            name="Choose a map",
+            description="",
+            selection_type=SINGLE,
+            sort_order=0,
+            items=[
+                AdvancedOptionalItem(
+                    id=9,
+                    group_id=3,
+                    build_modversion_id=44,
+                    selected_by_default=True,
+                    sort_order=0,
+                    optional_state=2,
+                )
+            ],
+        )
+
+        result = MCInstanceExport.render(
+            self.build,
+            [selected],
+            "https://cdn.example.test/mods/",
+            optional_groups=[group],
+        )
+        self.addCleanup(result.close)
+        with zipfile.ZipFile(result) as archive:
+            optionals = archive.read("optionals.packconfig").decode()
+            resources = archive.read("resources.packconfig").decode()
+
+        self.assertIn("title = Choose a map", optionals)
+        self.assertIn("minchoices = 1", optionals)
+        self.assertIn("maxchoices = 1", optionals)
+        self.assertIn("option1.default = true", optionals)
+        self.assertIn("optional = true", resources)
 
     def test_export_maps_resources_optionals_sides_and_skipped_loader_packages(self):
         config_zip = io.BytesIO()
@@ -121,6 +190,29 @@ class MCInstanceExportTests(unittest.TestCase):
         self.assertIn("option1.description = Optional client mod", optionals)
         self.assertIn("option1.resources = optional-mod", optionals)
 
+    def test_hybrid_export_uses_modrinth_url_and_stored_md5(self):
+        selected = self.package(
+            integration_provider="MODRINTH",
+            integration_project_id="project",
+            integration_version_id="version",
+        )
+        native = SimpleNamespace(
+            download_url="https://cdn.modrinth.com/data/project/versions/version/mod.jar"
+        )
+        result = MCInstanceExport.render(
+            self.build,
+            [selected],
+            "https://cdn.example.test/mods/",
+            "unused",
+            native_files={"version": native},
+        )
+        self.addCleanup(result.close)
+
+        with zipfile.ZipFile(result) as archive:
+            resources = archive.read("resources.packconfig").decode()
+        self.assertIn(f"url = {native.download_url}", resources)
+        self.assertIn(f"MD5 = {selected.jarmd5}", resources)
+
     def test_empty_build_still_produces_a_valid_archive(self):
         result = MCInstanceExport.render(
             self.build, [], "https://cdn.example.test/mods", "unused"
@@ -158,6 +250,15 @@ class MCInstanceExportTests(unittest.TestCase):
             metadata = archive.read("metadata.packconfig").decode()
         self.assertIn("type = fabric", metadata)
         self.assertIn("version = 0.16.14", metadata)
+
+    def test_bootstrap_metadata_can_leave_loader_installation_to_launcher(self):
+        metadata = MCInstanceExport._metadata(
+            self.build, include_modloader=False
+        )
+
+        self.assertNotIn("[modloader]", metadata)
+        self.assertNotIn("minecraftVersion", metadata)
+        self.assertIn("[pack]", metadata)
 
     def test_incompatible_package_modloader_is_rejected(self):
         build = replace(self.build, modloader="FABRIC")
@@ -323,7 +424,23 @@ class MCInstanceJarTests(unittest.TestCase):
             version="1.7.10-1.0",
             md5=md5(package_data),
             jarmd5=None,
+            jarfilesize=None,
         )
+
+    @staticmethod
+    def jar_only_package(jar_data=b"legacy jar"):
+        package = io.BytesIO()
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr("mods/original-name.jar", jar_data)
+        return package.getvalue()
+
+    def test_complete_jar_metadata_requires_hash_and_positive_size(self):
+        jar_hash = "a" * 32
+
+        self.assertTrue(MCInstanceJar.has_complete_metadata(jar_hash, 123))
+        self.assertFalse(MCInstanceJar.has_complete_metadata(jar_hash, None))
+        self.assertFalse(MCInstanceJar.has_complete_metadata(jar_hash, 0))
+        self.assertFalse(MCInstanceJar.has_complete_metadata(None, 123))
 
     def test_create_legacy_jar_from_local_solder_package(self):
         jar_data = b"legacy local jar"
@@ -353,13 +470,150 @@ class MCInstanceJarTests(unittest.TestCase):
             )
             self.assertEqual(final_jar.read_bytes(), jar_data)
             self.assertEqual(jar_hash, md5(jar_data))
-            update_hash.assert_called_once_with(9, md5(jar_data))
+            update_hash.assert_called_once_with(
+                9, md5(jar_data), len(jar_data)
+            )
             r2.upload_file.assert_called_once_with(
                 str(final_jar),
                 "bucket",
                 "mods/example-mod/example-mod-1.7.10-1.0.jar",
                 ExtraArgs={"ContentType": "application/jar"},
             )
+
+    def test_existing_jar_is_verified_and_missing_size_is_stored(self):
+        jar_data = b"already stored jar"
+        version = SimpleNamespace(
+            id=9,
+            mod_id=3,
+            version="1.7.10-1.0",
+            md5="a" * 32,
+            jarmd5=md5(jar_data),
+            jarfilesize=None,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.jar").write_bytes(
+                jar_data
+            )
+            with patch(
+                "models.mcinstance.Modversion.update_modversion_jarmd5"
+            ) as update_hash:
+                jar_hash = MCInstanceJar.create(
+                    self.mod(),
+                    version,
+                    "https://repo.example.test/mods/",
+                    directory,
+                )
+
+        self.assertEqual(jar_hash, md5(jar_data))
+        update_hash.assert_called_once_with(9, md5(jar_data), len(jar_data))
+
+    def test_existing_jar_with_wrong_md5_is_rejected(self):
+        version = SimpleNamespace(
+            id=9,
+            mod_id=3,
+            version="1.7.10-1.0",
+            md5="a" * 32,
+            jarmd5=md5(b"expected jar"),
+            jarfilesize=None,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.jar").write_bytes(
+                b"different jar"
+            )
+            with (
+                patch(
+                    "models.mcinstance.Modversion.update_modversion_jarmd5"
+                ) as update_hash,
+                self.assertRaisesRegex(MCInstanceJarError, "MD5 verification"),
+            ):
+                MCInstanceJar.create(
+                    self.mod(),
+                    version,
+                    "https://repo.example.test/mods/",
+                    directory,
+                )
+
+        update_hash.assert_not_called()
+
+    def test_recreated_jar_must_match_the_stored_jar_md5(self):
+        jar_data = b"jar inside solder zip"
+        package_data = self.legacy_package(jar_data)
+        version = self.version(package_data)
+        version.jarmd5 = md5(b"different expected jar")
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.zip").write_bytes(
+                package_data
+            )
+            with (
+                patch(
+                    "models.mcinstance.Modversion.update_modversion_jarmd5"
+                ) as update_hash,
+                self.assertRaisesRegex(MCInstanceJarError, "stored JAR MD5"),
+            ):
+                MCInstanceJar.create(
+                    self.mod(),
+                    version,
+                    "https://repo.example.test/mods/",
+                    directory,
+                )
+
+            self.assertFalse(
+                Path(package_dir, "example-mod-1.7.10-1.0.jar").exists()
+            )
+        update_hash.assert_not_called()
+
+    def test_create_raw_jar_from_launcher_package(self):
+        jar_data = b"crucible server"
+        package = io.BytesIO()
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr("bin/modpack.jar", jar_data)
+        package_data = package.getvalue()
+        launcher = SimpleNamespace(
+            id=3, name="crucible", modtype="LAUNCHER"
+        )
+        version = SimpleNamespace(
+            id=9,
+            mod_id=3,
+            version="1.7.10-5.4",
+            md5=md5(package_data),
+            jarmd5=None,
+            jarfilesize=None,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "crucible")
+            package_dir.mkdir()
+            Path(package_dir, "crucible-1.7.10-5.4.zip").write_bytes(
+                package_data
+            )
+            with patch(
+                "models.mcinstance.Modversion.update_modversion_jarmd5"
+            ) as update_hash:
+                jar_hash = MCInstanceJar.create(
+                    launcher,
+                    version,
+                    "https://repo.example.test/mods/",
+                    directory,
+                )
+
+            self.assertEqual(
+                Path(
+                    package_dir, "crucible-1.7.10-5.4.jar"
+                ).read_bytes(),
+                jar_data,
+            )
+
+        self.assertEqual(jar_hash, md5(jar_data))
+        update_hash.assert_called_once_with(9, md5(jar_data), len(jar_data))
 
     def test_create_legacy_jar_downloads_missing_local_package(self):
         jar_data = b"legacy remote jar"
@@ -401,7 +655,7 @@ class MCInstanceJarTests(unittest.TestCase):
             timeout=(5, 60),
         )
         response.raise_for_status.assert_called_once_with()
-        update_hash.assert_called_once_with(9, md5(jar_data))
+        update_hash.assert_called_once_with(9, md5(jar_data), len(jar_data))
 
     def test_create_legacy_jar_reads_md5_repository_path(self):
         jar_data = b"legacy repository jar"
@@ -438,7 +692,7 @@ class MCInstanceJarTests(unittest.TestCase):
 
         self.assertEqual(jar_hash, md5(jar_data))
         get.assert_not_called()
-        update_hash.assert_called_once_with(9, md5(jar_data))
+        update_hash.assert_called_once_with(9, md5(jar_data), len(jar_data))
 
     def test_create_legacy_jar_rejects_a_changed_package(self):
         package_data = self.legacy_package()
@@ -467,6 +721,154 @@ class MCInstanceJarTests(unittest.TestCase):
             self.assertFalse(
                 Path(package_dir, "example-mod-1.7.10-1.0.jar").exists()
             )
+
+    def test_promote_jar_only_none_mod_converts_every_version_together(self):
+        first_jar = b"first legacy jar"
+        second_jar = b"second legacy jar"
+        first_package = self.jar_only_package(first_jar)
+        second_package = self.jar_only_package(second_jar)
+        rows = [
+            {
+                "mod_id": 3,
+                "mod_name": "example-mod",
+                "version_id": 9,
+                "version_name": "1.7.10-1.0",
+                "zip_md5": md5(first_package),
+            },
+            {
+                "mod_id": 3,
+                "mod_name": "example-mod",
+                "version_id": 10,
+                "version_name": "1.7.10-2.0",
+                "zip_md5": md5(second_package),
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.zip").write_bytes(
+                first_package
+            )
+            Path(package_dir, "example-mod-1.7.10-2.0.zip").write_bytes(
+                second_package
+            )
+            with patch.object(
+                MCInstanceJar, "_load_none_mod_versions", return_value=rows
+            ), patch.object(MCInstanceJar, "_commit_none_mod") as commit:
+                result = MCInstanceJar.promote_jar_only_none_mods(
+                    "https://repo.example.test/mods/", directory
+                )
+
+            self.assertEqual(
+                Path(package_dir, "example-mod-1.7.10-1.0.jar").read_bytes(),
+                first_jar,
+            )
+            self.assertEqual(
+                Path(package_dir, "example-mod-1.7.10-2.0.jar").read_bytes(),
+                second_jar,
+            )
+
+        self.assertEqual(result.scanned_mods, 1)
+        self.assertEqual(result.scanned_versions, 2)
+        self.assertEqual(result.converted_mods, 1)
+        self.assertEqual(result.converted_versions, 2)
+        self.assertEqual(result.failures, ())
+        commit.assert_called_once()
+        self.assertEqual(commit.call_args.args[0], 3)
+        prepared = commit.call_args.args[1]
+        self.assertEqual(
+            [(item.version_id, item.jar_md5) for item in prepared],
+            [(9, md5(first_jar)), (10, md5(second_jar))],
+        )
+        self.assertEqual(
+            [item.jar_filesize for item in prepared],
+            [len(first_jar), len(second_jar)],
+        )
+
+    def test_promote_none_mod_leaves_all_versions_when_one_has_extra_files(self):
+        jar_only_package = self.jar_only_package(b"eligible jar")
+        mixed_package = self.legacy_package(b"mixed jar")
+        rows = [
+            {
+                "mod_id": 3,
+                "mod_name": "example-mod",
+                "version_id": 9,
+                "version_name": "1.7.10-1.0",
+                "zip_md5": md5(jar_only_package),
+            },
+            {
+                "mod_id": 3,
+                "mod_name": "example-mod",
+                "version_id": 10,
+                "version_name": "1.7.10-2.0",
+                "zip_md5": md5(mixed_package),
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            package_dir = Path(directory, "example-mod")
+            package_dir.mkdir()
+            Path(package_dir, "example-mod-1.7.10-1.0.zip").write_bytes(
+                jar_only_package
+            )
+            Path(package_dir, "example-mod-1.7.10-2.0.zip").write_bytes(
+                mixed_package
+            )
+            with patch.object(
+                MCInstanceJar, "_load_none_mod_versions", return_value=rows
+            ), patch.object(MCInstanceJar, "_commit_none_mod") as commit:
+                result = MCInstanceJar.promote_jar_only_none_mods(
+                    "https://repo.example.test/mods/", directory
+                )
+
+            self.assertFalse(
+                Path(package_dir, "example-mod-1.7.10-1.0.jar").exists()
+            )
+            self.assertFalse(
+                Path(package_dir, "example-mod-1.7.10-2.0.jar").exists()
+            )
+
+        self.assertEqual(result.converted_mods, 0)
+        self.assertEqual(result.converted_versions, 0)
+        self.assertEqual(len(result.failures), 1)
+        self.assertIn("files other than", result.failures[0])
+        commit.assert_not_called()
+
+    def test_commit_none_mod_updates_hashes_and_type_in_one_transaction(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = {"modtype": "NONE"}
+        cursor.fetchall.return_value = [{"id": 9}, {"id": 10}]
+        cursor.rowcount = 1
+        prepared = [
+            SimpleNamespace(version_id=9, jar_md5="a" * 32, jar_filesize=10),
+            SimpleNamespace(version_id=10, jar_md5="b" * 32, jar_filesize=20),
+        ]
+
+        with patch(
+            "models.mcinstance.Database.get_connection",
+            return_value=connection,
+        ):
+            MCInstanceJar._commit_none_mod(3, prepared)
+
+        self.assertEqual(cursor.execute.call_count, 5)
+        cursor.execute.assert_any_call(
+            """UPDATE modversions
+                       SET jarmd5 = %s, jarfilesize = %s
+                       WHERE id = %s""",
+            ("a" * 32, 10, 9),
+        )
+        cursor.execute.assert_any_call(
+            """UPDATE modversions
+                       SET jarmd5 = %s, jarfilesize = %s
+                       WHERE id = %s""",
+            ("b" * 32, 20, 10),
+        )
+        connection.commit.assert_called_once_with()
+        connection.rollback.assert_not_called()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
 
 
 if __name__ == "__main__":

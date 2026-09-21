@@ -13,7 +13,9 @@ from tests.environment import configure_test_environment
 configure_test_environment()
 
 from models.integration import (  # noqa: E402
+    MAVEN,
     MODRINTH,
+    ExternalDependency,
     ExternalProject,
     ExternalVersion,
     IntegrationError,
@@ -33,6 +35,94 @@ def json_response(payload, status=200):
 
 
 class ProviderTests(unittest.TestCase):
+    def test_modrinth_parses_only_required_project_dependencies(self):
+        version = ModrinthProvider._version(
+            {
+                "project_id": "ROOTPROJ",
+                "id": "ROOTVER",
+                "version_number": "1.0",
+                "game_versions": ["1.21.1"],
+                "loaders": ["fabric"],
+                "dependencies": [
+                    {
+                        "dependency_type": "required",
+                        "project_id": "DEPPROJ1",
+                        "version_id": "DEPVER01",
+                    },
+                    {
+                        "dependency_type": "optional",
+                        "project_id": "OPTIONAL1",
+                        "version_id": "OPTIONALVER",
+                    },
+                    {
+                        "dependency_type": "required",
+                        "project_id": None,
+                        "version_id": "ONLYVER1",
+                    },
+                ],
+                "files": [
+                    {
+                        "filename": "root.jar",
+                        "url": "https://cdn.modrinth.com/data/root.jar",
+                        "primary": True,
+                        "size": 123,
+                        "hashes": {"sha512": "a" * 128},
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(
+            version.dependencies,
+            (
+                ExternalDependency("DEPPROJ1", "DEPVER01"),
+                ExternalDependency(None, "ONLYVER1"),
+            ),
+        )
+
+    def test_provider_api_redirect_is_rejected(self):
+        http = Mock()
+        http.get.return_value = json_response({}, status=302)
+
+        with self.assertRaisesRegex(IntegrationError, "redirect"):
+            ModrinthProvider(http=http).get_project("PROJECT")
+
+        self.assertFalse(http.get.call_args.kwargs["allow_redirects"])
+
+    def test_modrinth_lists_all_versions_without_a_minecraft_filter(self):
+        http = Mock()
+        http.get.return_value = json_response(
+            [
+                {
+                    "project_id": "PROJECT",
+                    "id": "VERSION",
+                    "name": "Version 1",
+                    "version_number": "1.0",
+                    "game_versions": ["1.20.1", "1.21.1"],
+                    "loaders": ["fabric"],
+                    "version_type": "release",
+                    "date_published": "2026-01-01T00:00:00Z",
+                    "files": [
+                        {
+                            "filename": "example.jar",
+                            "url": "https://cdn.modrinth.com/data/example.jar",
+                            "primary": True,
+                            "size": 123,
+                            "hashes": {"sha512": "a" * 128},
+                        }
+                    ],
+                }
+            ]
+        )
+
+        versions = ModrinthProvider(http=http).list_all_versions("PROJECT")
+
+        self.assertEqual(versions[0].game_versions, ("1.20.1", "1.21.1"))
+        self.assertEqual(
+            http.get.call_args.kwargs["params"],
+            {"include_changelog": "false"},
+        )
+
     def test_modrinth_search_and_versions_use_minecraft_filters(self):
         http = Mock()
         http.get.side_effect = [
@@ -171,6 +261,48 @@ class ProviderTests(unittest.TestCase):
             ["AAAA-NEWER", "ZZZZ-OLDER"],
         )
 
+    def test_modrinth_exact_versions_are_resolved_in_one_batch(self):
+        def version(project_id, version_id):
+            return {
+                "id": version_id,
+                "project_id": project_id,
+                "name": version_id,
+                "version_number": "1.0",
+                "game_versions": ["1.21.1"],
+                "loaders": ["fabric"],
+                "version_type": "release",
+                "files": [
+                    {
+                        "filename": f"{project_id}.jar",
+                        "url": (
+                            "https://cdn.modrinth.com/data/"
+                            f"{project_id}/{version_id}.jar"
+                        ),
+                        "primary": True,
+                        "size": 123,
+                        "hashes": {"sha512": "a" * 128},
+                    }
+                ],
+            }
+
+        http = Mock()
+        http.get.return_value = json_response(
+            [version("PROJECT1", "VERSION1"), version("PROJECT2", "VERSION2")]
+        )
+
+        versions = ModrinthProvider(http=http).get_versions(
+            [("PROJECT1", "VERSION1"), ("PROJECT2", "VERSION2")],
+            "1.21.1",
+            "FABRIC",
+        )
+
+        self.assertEqual(set(versions), {"VERSION1", "VERSION2"})
+        self.assertTrue(http.get.call_args.args[0].endswith("/versions"))
+        self.assertEqual(
+            http.get.call_args.kwargs["params"]["ids"],
+            '["VERSION1", "VERSION2"]',
+        )
+
     def test_untrusted_provider_download_url_is_rejected(self):
         provider = ModrinthProvider(http=Mock())
         version = ExternalVersion(
@@ -266,6 +398,63 @@ class MaterializationTests(unittest.TestCase):
             jar.writestr("fabric.mod.json", "{}")
         return data.getvalue()
 
+    def test_verified_maven_source_is_persistable_for_bootstrap(self):
+        external = ExternalVersion(
+            MAVEN,
+            "7",
+            "VERSION",
+            "Version",
+            "1.0",
+            ("1.7.10",),
+            ("FORGE",),
+            "release",
+            None,
+            "example.jar",
+            "https://maven.example.test/example.jar",
+            {"sha1": "1" * 40, "sha512": "2" * 128},
+            123,
+        )
+
+        source = ModIntegration._provider_download_source(
+            external, md5="a" * 32, filesize=123
+        )
+
+        self.assertEqual(
+            source,
+            {
+                "provider": MAVEN,
+                "url": "https://maven.example.test/example.jar",
+                "filename": "example.jar",
+                "md5": "a" * 32,
+                "sha1": "1" * 40,
+                "sha512": "2" * 128,
+                "filesize": 123,
+            },
+        )
+
+    def test_private_http_maven_source_uses_solder_bootstrap_fallback(self):
+        external = ExternalVersion(
+            MAVEN,
+            "7",
+            "VERSION",
+            "Version",
+            "1.0",
+            ("1.7.10",),
+            ("FORGE",),
+            "release",
+            None,
+            "example.jar",
+            "http://maven.internal.example/example.jar",
+            {"sha256": "2" * 64},
+            123,
+        )
+
+        self.assertIsNone(
+            ModIntegration._provider_download_source(
+                external, md5="a" * 32, filesize=123
+            )
+        )
+
     def test_import_links_metadata_without_downloading_files(self):
         project = ExternalProject(
             MODRINTH,
@@ -283,6 +472,7 @@ class MaterializationTests(unittest.TestCase):
         with (
             patch("models.integration.provider_for_user", return_value=provider),
             patch("models.integration.Mod.get_by_integration", return_value=None),
+            patch("models.integration.Mod.get_by_name_api", return_value=None),
             patch("models.integration.Mod.new", return_value=stored) as new,
         ):
             mod, created = ModIntegration.import_project(
@@ -294,6 +484,81 @@ class MaterializationTests(unittest.TestCase):
         self.assertEqual(new.call_args.kwargs["integration_provider"], MODRINTH)
         self.assertEqual(new.call_args.kwargs["integration_project_id"], "PROJECT")
         provider.download.assert_not_called()
+
+    def test_import_links_an_existing_manual_slug_and_keeps_its_versions(self):
+        project = ExternalProject(
+            MODRINTH,
+            "PROJECT",
+            "example-mod",
+            "Example Mod",
+            "Upstream description",
+            "Upstream Author",
+            "https://modrinth.com/mod/example-mod",
+        )
+        provider = Mock()
+        provider.get_project.return_value = project
+        existing = SimpleNamespace(
+            id=9,
+            name="example-mod",
+            pretty_name="Local Example Mod",
+            integration_provider=None,
+            integration_project_id=None,
+        )
+        linked = SimpleNamespace(
+            id=9,
+            name="example-mod",
+            pretty_name="Local Example Mod",
+            integration_provider=MODRINTH,
+            integration_project_id="PROJECT",
+        )
+
+        with (
+            patch("models.integration.provider_for_user", return_value=provider),
+            patch("models.integration.Mod.get_by_integration", return_value=None),
+            patch("models.integration.Mod.get_by_name_api", return_value=existing),
+            patch(
+                "models.integration.Mod.link_integration", return_value=linked
+            ) as link,
+            patch("models.integration.Mod.new") as new,
+        ):
+            mod, created = ModIntegration.import_project(
+                MODRINTH, "PROJECT", 7
+            )
+
+        self.assertIs(mod, linked)
+        self.assertFalse(created)
+        link.assert_called_once_with(9, MODRINTH, "PROJECT")
+        new.assert_not_called()
+
+    def test_import_does_not_replace_another_slug_integration(self):
+        project = ExternalProject(
+            MODRINTH,
+            "PROJECT",
+            "example-mod",
+            "Example Mod",
+            "Description",
+            "Author",
+            "https://modrinth.com/mod/example-mod",
+        )
+        provider = Mock()
+        provider.get_project.return_value = project
+        existing = SimpleNamespace(
+            id=9,
+            name="example-mod",
+            integration_provider="MAVEN",
+            integration_project_id="4",
+        )
+
+        with (
+            patch("models.integration.provider_for_user", return_value=provider),
+            patch("models.integration.Mod.get_by_integration", return_value=None),
+            patch("models.integration.Mod.get_by_name_api", return_value=existing),
+            patch("models.integration.Mod.link_integration") as link,
+        ):
+            with self.assertRaisesRegex(IntegrationError, "another integration"):
+                ModIntegration.import_project(MODRINTH, "PROJECT", 7)
+
+        link.assert_not_called()
 
     def test_selected_remote_version_is_packaged_once(self):
         jar_data = self.jar_bytes()
@@ -370,6 +635,227 @@ class MaterializationTests(unittest.TestCase):
         self.assertEqual(packaged_jar, jar_data)
         self.assertEqual(new.call_args.kwargs["integration_version_id"], "VERSION")
         self.assertEqual(new.call_args.kwargs["modloader"], "FABRIC")
+        self.assertEqual(new.call_args.kwargs["jarfilesize"], len(jar_data))
+        self.assertEqual(
+            new.call_args.kwargs["download_source"],
+            {
+                "provider": MODRINTH,
+                "url": "https://cdn.modrinth.com/data/upstream.jar",
+                "filename": "upstream.jar",
+                "md5": hashlib.md5(
+                    jar_data, usedforsecurity=False
+                ).hexdigest(),
+                "sha1": None,
+                "sha512": hashlib.sha512(jar_data).hexdigest(),
+                "filesize": len(jar_data),
+            },
+        )
+
+    def test_selected_modrinth_version_imports_required_dependencies(self):
+        jar_data = self.jar_bytes()
+        provider = Mock()
+        provider.http = Mock()
+        provider.get_project.return_value = ExternalProject(
+            MODRINTH,
+            "ROOTPROJ",
+            "root-mod",
+            "Root Mod",
+            "Description",
+            "Author",
+            "https://modrinth.com/mod/root-mod",
+        )
+        root_version = ExternalVersion(
+            MODRINTH,
+            "ROOTPROJ",
+            "ROOTVER",
+            "Root 1",
+            "1.0.0",
+            ("1.21.1",),
+            ("FABRIC",),
+            "release",
+            None,
+            "root.jar",
+            "https://cdn.modrinth.com/data/root.jar",
+            {"sha512": hashlib.sha512(jar_data).hexdigest()},
+            len(jar_data),
+            (ExternalDependency(None, "DEPVER01"),),
+        )
+        dependency_version = ExternalVersion(
+            MODRINTH,
+            "DEPPROJ1",
+            "DEPVER01",
+            "Library 1",
+            "2.0.0",
+            ("1.21.1",),
+            ("FABRIC",),
+            "release",
+            None,
+            "library.jar",
+            "https://cdn.modrinth.com/data/library.jar",
+            {"sha512": hashlib.sha512(jar_data).hexdigest()},
+            len(jar_data),
+        )
+        provider.get_version.return_value = root_version
+        provider.get_version_by_id.return_value = dependency_version
+
+        def download(_version, destination):
+            Path(destination).write_bytes(jar_data)
+            return (
+                len(jar_data),
+                hashlib.md5(jar_data, usedforsecurity=False).hexdigest(),
+            )
+
+        provider.download.side_effect = download
+        root_mod = SimpleNamespace(
+            id=9,
+            name="root-mod",
+            pretty_name="Root Mod",
+            integration_provider=MODRINTH,
+            integration_project_id="ROOTPROJ",
+        )
+        dependency_mod = SimpleNamespace(
+            id=10,
+            name="library",
+            pretty_name="Library",
+            integration_provider=MODRINTH,
+            integration_project_id="DEPPROJ1",
+        )
+        build = SimpleNamespace(minecraft="1.21.1", modloader="FABRIC")
+        stored_dependency = SimpleNamespace(id=42)
+        stored_root = SimpleNamespace(id=43)
+
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch("models.integration.provider_for_user", return_value=provider),
+            patch(
+                "models.integration.ModIntegration.import_project",
+                return_value=(dependency_mod, True),
+            ) as import_project,
+            patch(
+                "models.integration.Modversion.get_by_integration",
+                return_value=None,
+            ),
+            patch(
+                "models.integration.Modversion.version_exists",
+                return_value=False,
+            ),
+            patch(
+                "models.integration.Modversion.new",
+                side_effect=[stored_dependency, stored_root],
+            ) as new,
+            patch("models.integration.ModDependency.ensure") as ensure,
+        ):
+            result = ModIntegration.materialize(
+                root_mod, build, "ROOTVER", 7, directory
+            )
+
+        self.assertIs(result.version, stored_root)
+        import_project.assert_called_once_with(
+            MODRINTH,
+            "DEPPROJ1",
+            7,
+            http=provider.http,
+            _change_context=import_project.call_args.kwargs["_change_context"],
+        )
+        provider.get_version_by_id.assert_called_once_with(
+            "DEPVER01", "1.21.1", "FABRIC"
+        )
+        self.assertEqual(
+            [call.kwargs["integration_version_id"] for call in new.call_args_list],
+            ["DEPVER01", "ROOTVER"],
+        )
+        ensure.assert_called_once_with(9, 10)
+
+    def test_management_import_keeps_multi_compatibility_out_of_provider_lookup(self):
+        mod = SimpleNamespace(id=9)
+        stored = SimpleNamespace(id=42)
+        with patch.object(
+            ModIntegration, "materialize", return_value=stored
+        ) as materialize:
+            result = ModIntegration.materialize_for_management(
+                mod,
+                "VERSION",
+                ["1.20.1", "1.20.2"],
+                ["FORGE", "NEOFORGE"],
+                7,
+                "uploads",
+            )
+
+        self.assertIs(result, stored)
+        provider_build = materialize.call_args.args[1]
+        self.assertEqual(provider_build.minecraft, "1.20.1")
+        self.assertEqual(provider_build.modloader, "FORGE")
+        self.assertEqual(
+            materialize.call_args.kwargs["_stored_minecraft"],
+            "1.20.1,1.20.2",
+        )
+        self.assertEqual(
+            materialize.call_args.kwargs["_stored_modloader"],
+            "FORGE,NEOFORGE",
+        )
+
+    def test_modrinth_dependency_without_pinned_version_uses_latest_compatible(self):
+        dependency_version = ExternalVersion(
+            MODRINTH,
+            "DEPPROJ1",
+            "LATEST01",
+            "Latest Library",
+            "2.0.0",
+            ("1.21.1",),
+            ("FABRIC",),
+            "release",
+            None,
+            "library.jar",
+            "https://cdn.modrinth.com/data/library.jar",
+            {},
+            1,
+        )
+        external = SimpleNamespace(
+            dependencies=(ExternalDependency("DEPPROJ1"),),
+            loader_for_build=Mock(return_value="FABRIC"),
+        )
+        provider = Mock()
+        provider.http = Mock()
+        provider.list_versions.return_value = [dependency_version]
+        root_mod = SimpleNamespace(id=9)
+        dependency_mod = SimpleNamespace(
+            id=10,
+            pretty_name="Library",
+        )
+        build = SimpleNamespace(minecraft="1.21.1", modloader="FABRIC")
+
+        with (
+            patch(
+                "models.integration.ModIntegration.import_project",
+                return_value=(dependency_mod, True),
+            ),
+            patch("models.integration.ModIntegration.materialize") as materialize,
+            patch("models.integration.ModDependency.ensure") as ensure,
+        ):
+            ModIntegration._materialize_modrinth_dependencies(
+                root_mod,
+                build,
+                external,
+                provider,
+                7,
+                "uploads",
+                dependency_path=("ROOTPROJ",),
+                stored_minecraft="1.21.1,1.21.2",
+                stored_modloader="FABRIC",
+            )
+
+        provider.list_versions.assert_called_once_with(
+            "DEPPROJ1", "1.21.1", "FABRIC"
+        )
+        self.assertEqual(materialize.call_args.args[2], "LATEST01")
+        self.assertEqual(
+            materialize.call_args.kwargs["_stored_minecraft"],
+            "1.21.1,1.21.2",
+        )
+        self.assertEqual(
+            materialize.call_args.kwargs["_stored_modloader"], "FABRIC"
+        )
+        ensure.assert_called_once_with(9, 10)
 
     def test_existing_materialized_version_is_reused_without_provider_call(self):
         existing = SimpleNamespace(id=42)
@@ -392,6 +878,39 @@ class MaterializationTests(unittest.TestCase):
         self.assertIs(result.version, existing)
         provider.assert_not_called()
 
+    def test_unimported_catalog_excludes_stored_integration_versions(self):
+        imported = ExternalVersion(
+            MODRINTH, "PROJECT", "IMPORTED", "Imported", "1.0",
+            ("1.21.1",), ("FABRIC",), "release", None, "old.jar", None,
+            {}, 0,
+        )
+        available = ExternalVersion(
+            MODRINTH, "PROJECT", "AVAILABLE", "Available", "2.0",
+            ("1.21.1",), ("FABRIC",), "release", None, "new.jar", None,
+            {}, 0,
+        )
+        provider = Mock()
+        provider.get_project.return_value = ExternalProject(
+            MODRINTH, "PROJECT", "example", "Example", "", "Author",
+            "https://modrinth.com/mod/example",
+        )
+        provider.list_all_versions.return_value = [available, imported]
+        mod = SimpleNamespace(
+            id=9,
+            integration_provider=MODRINTH,
+            integration_project_id="PROJECT",
+        )
+        with (
+            patch("models.integration.provider_for_user", return_value=provider),
+            patch(
+                "models.integration.Modversion.get_integration_version_ids",
+                return_value={"IMPORTED"},
+            ),
+        ):
+            versions = ModIntegration.list_unimported_versions(mod, 7)
+
+        self.assertEqual([version.version_id for version in versions], ["AVAILABLE"])
+
     def test_managed_mod_rejects_an_unsafe_local_slug(self):
         mod = SimpleNamespace(
             id=9,
@@ -410,6 +929,40 @@ class MaterializationTests(unittest.TestCase):
                 )
 
         provider.assert_not_called()
+
+    def test_failed_dependency_graph_rolls_back_created_nodes(self):
+        mod = SimpleNamespace(
+            id=9,
+            name="example-mod",
+            integration_provider=MODRINTH,
+            integration_project_id="PROJECT",
+        )
+        build = SimpleNamespace(minecraft="1.21.1", modloader="FABRIC")
+
+        def fail_after_dependency(*_args, **kwargs):
+            context = kwargs["_dependency_context"]
+            context["created_mods"].add(10)
+            context["created_versions"].add(42)
+            context["dependency_edges"].append((9, 10))
+            raise IntegrationError("root download failed")
+
+        with (
+            patch.object(
+                ModIntegration, "_materialize", side_effect=fail_after_dependency
+            ),
+            patch.object(
+                ModIntegration, "_rollback_modrinth_materialization"
+            ) as rollback,
+            self.assertRaisesRegex(IntegrationError, "root download failed"),
+        ):
+            ModIntegration.materialize(
+                mod, build, "VERSION", 7, "uploads"
+            )
+
+        context = rollback.call_args.args[0]
+        self.assertEqual(context["created_mods"], {10})
+        self.assertEqual(context["created_versions"], {42})
+        self.assertEqual(context["dependency_edges"], [(9, 10)])
 
 
 if __name__ == "__main__":

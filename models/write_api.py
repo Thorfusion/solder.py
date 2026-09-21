@@ -4,8 +4,11 @@ from contextlib import contextmanager
 
 from mysql.connector import IntegrityError, errorcode
 
-from .compatibility import version_is_compatible
+from .compatibility import minecraft_version_storage, version_is_compatible
+from .advanced_optional import AdvancedOptional
+from .build import Build
 from .database import Database
+from .modpack import Modpack
 from .modversion import Modversion
 
 
@@ -13,6 +16,7 @@ _WRITABLE_FIELDS = {
     "modpacks": {
         "name", "slug", "user_id", "recommended", "latest", "order",
         "hidden", "private", "pinned", "enable_optionals", "enable_server",
+        "optional_mode",
     },
     "builds": {
         "modpack_id", "version", "minecraft", "forge", "modloader",
@@ -25,7 +29,8 @@ _WRITABLE_FIELDS = {
     },
     "modversions": {
         "mod_id", "version", "mcversion", "modloader", "md5", "jarmd5",
-        "filesize", "integration_version_id",
+        "jarfilesize", "filesize",
+        "integration_version_id",
     },
     "clients": {"name", "uuid"},
 }
@@ -81,10 +86,26 @@ class WriteApiStore:
 
     @classmethod
     def get_modversion(cls, mod_id, version):
-        return cls._one(
-            "SELECT * FROM modversions WHERE mod_id = %s AND version = %s",
+        row = cls._one(
+            """SELECT modversions.*,
+                      modversion_download_overrides.jar_url
+                          AS jar_url_override,
+                      (SELECT GROUP_CONCAT(
+                                  compatibility.minecraft_version
+                                  ORDER BY compatibility.minecraft_version
+                                  SEPARATOR ',')
+                         FROM modversion_minecraft_versions compatibility
+                        WHERE compatibility.modversion_id = modversions.id)
+                          AS minecraft_versions_csv
+               FROM modversions
+               LEFT JOIN modversion_download_overrides
+                   ON modversion_download_overrides.modversion_id =
+                      modversions.id
+               WHERE modversions.mod_id = %s
+                 AND modversions.version = %s""",
             (mod_id, version),
         )
+        return Modversion.hydrate_minecraft_row(row)
 
     @classmethod
     def get_client(cls, uuid):
@@ -151,18 +172,6 @@ class WriteApiStore:
             (modpack_id, modpack_id, modpack_id, user_id),
         )
 
-    @staticmethod
-    def _revoke_modpack_access(cur, modpack_id):
-        cur.execute(
-            """UPDATE user_permissions
-               SET modpacks = TRIM(BOTH ',' FROM REPLACE(
-                   CONCAT(',', COALESCE(modpacks, ''), ','),
-                   CONCAT(',', %s, ','),
-                   ','
-               ))""",
-            (modpack_id,),
-        )
-
     @classmethod
     def create_modpack(cls, values, user_id):
         try:
@@ -204,6 +213,7 @@ class WriteApiStore:
                     "enable_server": values.get(
                         "enable_server", source.get("enable_server", 0)
                     ),
+                    "optional_mode": source.get("optional_mode", 0),
                 }
                 modpack_id = cls._insert(cur, "modpacks", new_values)
                 cls._grant_modpack_access(cur, user_id, modpack_id)
@@ -218,23 +228,29 @@ class WriteApiStore:
                     build["modpack_id"] = modpack_id
                     new_build_id = cls._insert(cur, "builds", build)
                     cur.execute(
-                        """SELECT modversion_id, optional
+                        """SELECT id, modversion_id, optional
                            FROM build_modversion WHERE build_id = %s
                            ORDER BY id""",
                         (old_build_id,),
                     )
                     memberships = cur.fetchall() or []
+                    membership_ids = {}
                     if memberships:
-                        cur.executemany(
-                            """INSERT INTO build_modversion
-                                      (modversion_id, build_id, optional)
-                               VALUES (%s, %s, %s)""",
-                            [
-                                (membership["modversion_id"], new_build_id,
-                                 membership.get("optional", 0))
-                                for membership in memberships
-                            ],
-                        )
+                        for membership in memberships:
+                            cur.execute(
+                                """INSERT INTO build_modversion
+                                          (modversion_id, build_id, optional)
+                                   VALUES (%s, %s, %s)""",
+                                (
+                                    membership["modversion_id"],
+                                    new_build_id,
+                                    membership.get("optional", 0),
+                                ),
+                            )
+                            membership_ids[membership["id"]] = cur.lastrowid
+                    AdvancedOptional.clone_build(
+                        cur, old_build_id, new_build_id, membership_ids
+                    )
                 cur.execute("SELECT * FROM modpacks WHERE id = %s", (modpack_id,))
                 return cur.fetchone()
         except IntegrityError as error:
@@ -246,16 +262,10 @@ class WriteApiStore:
             cur.execute("SELECT id FROM builds WHERE modpack_id = %s", (modpack_id,))
             build_ids = [row["id"] for row in (cur.fetchall() or [])]
             if build_ids:
-                placeholders = ", ".join(["%s"] * len(build_ids))
-                # Only the number of bound placeholders is dynamic.
-                cur.execute(
-                    f"DELETE FROM build_modversion WHERE build_id IN ({placeholders})",  # nosec B608
-                    tuple(build_ids),
-                )
+                for build_id in build_ids:
+                    Build.delete_related_rows(cur, build_id)
             cur.execute("DELETE FROM builds WHERE modpack_id = %s", (modpack_id,))
-            cur.execute("DELETE FROM client_modpack WHERE modpack_id = %s", (modpack_id,))
-            cur.execute("DELETE FROM user_modpack WHERE modpack_id = %s", (modpack_id,))
-            WriteApiStore._revoke_modpack_access(cur, modpack_id)
+            Modpack.delete_related_rows(cur, modpack_id)
             cur.execute("DELETE FROM modpacks WHERE id = %s", (modpack_id,))
 
     @classmethod
@@ -271,11 +281,26 @@ class WriteApiStore:
             build_id = cls._insert(cur, "builds", {"modpack_id": modpack_id, **values})
             if clone_source:
                 cur.execute(
-                    """INSERT INTO build_modversion
-                              (modversion_id, build_id, optional)
-                       SELECT modversion_id, %s, optional
-                       FROM build_modversion WHERE build_id = %s""",
-                    (build_id, clone_source["id"]),
+                    """SELECT id, modversion_id, optional
+                       FROM build_modversion
+                       WHERE build_id = %s ORDER BY id""",
+                    (clone_source["id"],),
+                )
+                membership_ids = {}
+                for membership in cur.fetchall() or []:
+                    cur.execute(
+                        """INSERT INTO build_modversion
+                                  (modversion_id, build_id, optional)
+                           VALUES (%s, %s, %s)""",
+                        (
+                            membership["modversion_id"],
+                            build_id,
+                            membership.get("optional", 0),
+                        ),
+                    )
+                    membership_ids[membership["id"]] = cur.lastrowid
+                AdvancedOptional.clone_build(
+                    cur, clone_source["id"], build_id, membership_ids
                 )
             cur.execute("SELECT * FROM builds WHERE id = %s", (build_id,))
             return cur.fetchone()
@@ -300,7 +325,7 @@ class WriteApiStore:
     @staticmethod
     def delete_build(build_id):
         with _transaction() as cur:
-            cur.execute("DELETE FROM build_modversion WHERE build_id = %s", (build_id,))
+            Build.delete_related_rows(cur, build_id)
             cur.execute("DELETE FROM builds WHERE id = %s", (build_id,))
 
     @staticmethod
@@ -310,6 +335,8 @@ class WriteApiStore:
             modversion.get("modloader"),
             build["minecraft"],
             build.get("modloader") or ("FORGE" if build.get("forge") else None),
+            modversion.get("minecraft_versions_csv")
+            or modversion.get("minecraft_versions"),
         )
 
     @classmethod
@@ -391,15 +418,32 @@ class WriteApiStore:
     def remove_build_mod(build_id, mod_id):
         with _transaction() as cur:
             cur.execute(
-                """DELETE build_modversion FROM build_modversion
+                """SELECT build_modversion.id,
+                          build_optional_group_items.group_id
+                   FROM build_modversion
                    INNER JOIN modversions
                        ON build_modversion.modversion_id = modversions.id
+                   LEFT JOIN build_optional_group_items
+                       ON build_optional_group_items.build_modversion_id =
+                          build_modversion.id
                    WHERE build_modversion.build_id = %s
-                     AND modversions.mod_id = %s""",
+                     AND modversions.mod_id = %s
+                   LIMIT 1 FOR UPDATE""",
                 (build_id, mod_id),
             )
-            if cur.rowcount == 0:
+            membership = cur.fetchone()
+            if membership is None:
                 raise WriteApiProblem("Mod not in this build.", 404)
+            cur.execute(
+                "DELETE FROM build_optional_group_items "
+                "WHERE build_modversion_id = %s",
+                (membership["id"],),
+            )
+            AdvancedOptional.normalize_group(cur, membership.get("group_id"))
+            cur.execute(
+                "DELETE FROM build_modversion WHERE id = %s",
+                (membership["id"],),
+            )
 
     @classmethod
     def create_mod(cls, values, dependency_identifiers=None):
@@ -440,12 +484,40 @@ class WriteApiStore:
             cur.execute("SELECT id FROM modversions WHERE mod_id = %s", (mod_id,))
             version_ids = [row["id"] for row in (cur.fetchall() or [])]
             if version_ids:
+                AdvancedOptional.delete_modversion_memberships(cur, version_ids)
                 placeholders = ", ".join(["%s"] * len(version_ids))
                 # Only the number of bound placeholders is dynamic.
                 cur.execute(
                     f"DELETE FROM build_modversion WHERE modversion_id IN ({placeholders})",  # nosec B608
                     tuple(version_ids),
                 )
+            cur.execute(
+                """DELETE modversion_download_overrides
+                   FROM modversion_download_overrides
+                   INNER JOIN modversions
+                       ON modversions.id =
+                          modversion_download_overrides.modversion_id
+                   WHERE modversions.mod_id = %s""",
+                (mod_id,),
+            )
+            cur.execute(
+                """DELETE modversion_download_sources
+                   FROM modversion_download_sources
+                   INNER JOIN modversions
+                       ON modversions.id =
+                          modversion_download_sources.modversion_id
+                   WHERE modversions.mod_id = %s""",
+                (mod_id,),
+            )
+            cur.execute(
+                """DELETE modversion_minecraft_versions
+                   FROM modversion_minecraft_versions
+                   INNER JOIN modversions
+                       ON modversions.id =
+                          modversion_minecraft_versions.modversion_id
+                   WHERE modversions.mod_id = %s""",
+                (mod_id,),
+            )
             cur.execute("DELETE FROM modversions WHERE mod_id = %s", (mod_id,))
             cur.execute(
                 "DELETE FROM mod_dependencies WHERE mod_id = %s OR dependency_mod_id = %s",
@@ -521,6 +593,39 @@ class WriteApiStore:
 
     @classmethod
     def create_modversion(cls, mod_id, values):
+        values = dict(values)
+        stored_mcversion, minecraft_versions = minecraft_version_storage(
+            values.pop("mcversion", None)
+        )
+        values["mcversion"] = stored_mcversion
+        override_specified = "jar_url_override" in values
+        jar_url_override = values.pop("jar_url_override", None)
+        if override_specified:
+            try:
+                jar_url_override = Modversion.normalize_jar_url_override(
+                    jar_url_override
+                )
+                if jar_url_override is not None:
+                    values["jarfilesize"] = Modversion.verify_jar_url_override(
+                        jar_url_override, values.get("jarmd5")
+                    )
+            except ValueError as error:
+                raise WriteApiProblem(str(error)) from error
+        if jar_url_override and not Modversion.JAR_MD5_PATTERN.fullmatch(
+            str(values.get("jarmd5") or "").strip()
+        ):
+            raise WriteApiProblem(
+                "A JAR override requires a verified JAR MD5."
+            )
+        if (
+            values.get("jarfilesize") is not None
+            and Modversion.JAR_MD5_PATTERN.fullmatch(
+                str(values.get("jarmd5") or "").strip()
+            ) is None
+        ):
+            raise WriteApiProblem(
+                "A JAR filesize requires a valid JAR MD5."
+            )
         try:
             with _transaction() as cur:
                 cur.execute(
@@ -533,19 +638,116 @@ class WriteApiStore:
                 version_id = cls._insert(
                     cur, "modversions", {"mod_id": mod_id, **values}
                 )
+                Modversion._store_minecraft_versions(
+                    cur, version_id, minecraft_versions, replace=False
+                )
+                if override_specified:
+                    Modversion._store_jar_url_override(
+                        cur, version_id, jar_url_override
+                    )
                 Modversion.promote_parent_mod_for_jar_md5(
                     cur, mod_id, values.get("jarmd5")
                 )
-                cur.execute("SELECT * FROM modversions WHERE id = %s", (version_id,))
-                return cur.fetchone()
+                cur.execute(
+                    """SELECT modversions.*,
+                              modversion_download_overrides.jar_url
+                                  AS jar_url_override,
+                              (SELECT GROUP_CONCAT(
+                                          compatibility.minecraft_version
+                                          ORDER BY compatibility.minecraft_version
+                                          SEPARATOR ',')
+                                 FROM modversion_minecraft_versions compatibility
+                                WHERE compatibility.modversion_id = modversions.id)
+                                  AS minecraft_versions_csv
+                       FROM modversions
+                       LEFT JOIN modversion_download_overrides
+                           ON modversion_download_overrides.modversion_id =
+                              modversions.id
+                       WHERE modversions.id = %s""",
+                    (version_id,),
+                )
+                return Modversion.hydrate_minecraft_row(cur.fetchone())
         except IntegrityError as error:
             cls._duplicate(error, "Version already exists for this mod.")
 
     @classmethod
     def update_modversion(cls, modversion, values):
+        values = dict(values)
+        minecraft_versions = None
+        if "mcversion" in values:
+            stored_mcversion, minecraft_versions = minecraft_version_storage(
+                values["mcversion"]
+            )
+        override_specified = "jar_url_override" in values
+        jar_url_override = values.pop("jar_url_override", None)
+        if override_specified:
+            try:
+                jar_url_override = Modversion.normalize_jar_url_override(
+                    jar_url_override
+                )
+            except ValueError as error:
+                raise WriteApiProblem(str(error)) from error
+        effective_override = (
+            jar_url_override
+            if override_specified
+            else modversion.get("jar_url_override")
+        )
+        effective_jar_md5 = values.get("jarmd5", modversion.get("jarmd5"))
+        verified_override = bool(
+            effective_override
+            and (override_specified or "jarmd5" in values)
+        )
+        if verified_override:
+            try:
+                values["jarfilesize"] = Modversion.verify_jar_url_override(
+                    effective_override, effective_jar_md5
+                )
+            except ValueError as error:
+                raise WriteApiProblem(str(error)) from error
         with _transaction() as cur:
             compatibility = dict(modversion)
             compatibility.update(values)
+            if effective_override and not Modversion.JAR_MD5_PATTERN.fullmatch(
+                str(compatibility.get("jarmd5") or "").strip()
+            ):
+                raise WriteApiProblem(
+                    "A JAR override requires a verified JAR MD5."
+                )
+            if (
+                compatibility.get("jarfilesize") is not None
+                and Modversion.JAR_MD5_PATTERN.fullmatch(
+                    str(compatibility.get("jarmd5") or "").strip()
+                ) is None
+            ):
+                raise WriteApiProblem(
+                    "A JAR filesize requires a valid JAR MD5."
+                )
+            cur.execute(
+                """SELECT modversions.jarmd5,
+                          modversion_download_overrides.jar_url
+                              AS jar_url_override
+                   FROM modversions
+                   LEFT JOIN modversion_download_overrides
+                       ON modversion_download_overrides.modversion_id =
+                          modversions.id
+                   WHERE modversions.id = %s FOR UPDATE""",
+                (modversion["id"],),
+            )
+            locked = cur.fetchone()
+            if locked is None:
+                raise WriteApiProblem(
+                    "The selected mod version no longer exists.", 404
+                )
+            if verified_override:
+                locked_md5 = str(locked.get("jarmd5") or "").strip().lower()
+                expected_md5 = str(
+                    modversion.get("jarmd5") or ""
+                ).strip().lower()
+                if locked_md5 != expected_md5:
+                    raise WriteApiProblem(
+                        "The stored JAR MD5 changed during override verification.",
+                        409,
+                    )
             cur.execute(
                 """SELECT builds.minecraft, builds.forge, builds.modloader
                    FROM build_modversion
@@ -559,14 +761,39 @@ class WriteApiStore:
                         "The updated compatibility would exclude a build using this version.",
                         409,
                     )
+            if minecraft_versions is not None:
+                values["mcversion"] = stored_mcversion
             cls._update(cur, "modversions", modversion["id"], values)
+            if minecraft_versions is not None:
+                Modversion._store_minecraft_versions(
+                    cur, modversion["id"], minecraft_versions
+                )
+            if override_specified:
+                Modversion._store_jar_url_override(
+                    cur, modversion["id"], jar_url_override
+                )
             Modversion.promote_parent_mod_for_jar_md5(
                 cur, modversion["mod_id"], values.get("jarmd5")
             )
             cur.execute(
-                "SELECT * FROM modversions WHERE id = %s", (modversion["id"],)
+                """SELECT modversions.*,
+                          modversion_download_overrides.jar_url
+                              AS jar_url_override,
+                          (SELECT GROUP_CONCAT(
+                                      compatibility.minecraft_version
+                                      ORDER BY compatibility.minecraft_version
+                                      SEPARATOR ',')
+                             FROM modversion_minecraft_versions compatibility
+                            WHERE compatibility.modversion_id = modversions.id)
+                              AS minecraft_versions_csv
+                   FROM modversions
+                   LEFT JOIN modversion_download_overrides
+                       ON modversion_download_overrides.modversion_id =
+                          modversions.id
+                   WHERE modversions.id = %s""",
+                (modversion["id"],),
             )
-            return cur.fetchone()
+            return Modversion.hydrate_minecraft_row(cur.fetchone())
 
     @staticmethod
     def delete_modversion(modversion_id):
@@ -581,6 +808,21 @@ class WriteApiStore:
                     f"Mod version is in use by {count} build(s) and cannot be deleted.",
                     409,
                 )
+            cur.execute(
+                "DELETE FROM modversion_download_overrides "
+                "WHERE modversion_id = %s",
+                (modversion_id,),
+            )
+            cur.execute(
+                "DELETE FROM modversion_download_sources "
+                "WHERE modversion_id = %s",
+                (modversion_id,),
+            )
+            cur.execute(
+                "DELETE FROM modversion_minecraft_versions "
+                "WHERE modversion_id = %s",
+                (modversion_id,),
+            )
             cur.execute("DELETE FROM modversions WHERE id = %s", (modversion_id,))
 
     @classmethod

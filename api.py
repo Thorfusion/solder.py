@@ -1,9 +1,10 @@
 import hashlib
 import json
+import logging
 from threading import RLock
 
 from cachetools import cached, TTLCache
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 
 from models.common import (
     cache_size,
@@ -12,14 +13,26 @@ from models.common import (
     solderpy_version,
     write_api,
 )
+from models.compatibility import compatibility_values
 from models.api_token import ApiToken
+from models.bootstrap_manifest import (
+    BOOTSTRAP_SCHEMA_VERSION,
+    BootstrapManifest,
+    BootstrapManifestError,
+)
 from models.key import Key
+from models.cache_revision import CacheRevision
 from models.mod import Mod
+from models.modversion import Modversion
 from models.mod_dependency import ModDependency
 from models.modpack import Modpack
+from models.advanced_optional import AdvancedOptional
+from models.platform_export_override import PlatformExportOverride
+from models.technic_solderpy_loader import TechnicSolderPyLoader
 
 api = Blueprint("api", __name__)
 _api_caches = []
+logger = logging.getLogger(__name__)
 
 
 def _api_cached(key):
@@ -46,7 +59,12 @@ def _cache_key(*path_parts):
     )
     principal = _read_principal()
     bearer_identity = principal.cache_identity if principal else None
-    return (*path_parts, query_arguments, bearer_identity)
+    return (
+        0 if current_app.testing else CacheRevision.current(),
+        *path_parts,
+        query_arguments,
+        bearer_identity,
+    )
 
 
 def _read_principal():
@@ -194,10 +212,25 @@ def _mod_manifest_entry(
                 "side": getattr(modversion, "side", "BOTH"),
                 "type": getattr(modversion, "modtype", "MOD"),
                 "modtype": getattr(modversion, "modtype", "MOD"),
+                "minecraft": _optional_string_attribute(
+                    getattr(modversion, "mcversion", None)
+                ),
                 "modloader": _optional_string_attribute(
                     getattr(modversion, "modloader", None)
                 ),
-                "optional": bool(getattr(modversion, "optional", 0)),
+                "minecraft_versions": list(
+                    getattr(modversion, "minecraft_versions", ())
+                    or compatibility_values(
+                        getattr(modversion, "mcversion", None)
+                    )
+                ),
+                "modloaders": list(
+                    compatibility_values(
+                        getattr(modversion, "modloader", None),
+                        modloaders=True,
+                    )
+                ),
+                "optional": int(getattr(modversion, "optional", 0) or 0) == 1,
                 "dependencies": dependencies or [],
             }
         )
@@ -217,6 +250,37 @@ def _mod_manifest_entries(modversions, build_id, expanded=False, extended=False)
         )
         for modversion in modversions
     ]
+
+
+def _technic_solderpy_loader_manifest(
+    modversions, build, modpack, *, target, expanded=False, extended=False
+):
+    """Let SolderPy Loader own packages for one configured Technic build."""
+    if target != "client":
+        return modversions, []
+    configuration = TechnicSolderPyLoader.get_active(build.id)
+    if configuration is None:
+        return modversions, []
+    if (
+        getattr(configuration, "delivery_mode", TechnicSolderPyLoader.LOADER_DELIVERY)
+        == TechnicSolderPyLoader.TECHNIC_DELIVERY
+    ):
+        # This list already contains only the normal Technic/basic selection.
+        # SolderPy Loader receives optional and excluded packages separately.
+        retained = modversions
+    else:
+        # Technic must still install its modloader and the initial bootstrap.
+        # The loader fetches every other package from the dedicated bootstrap
+        # API, so leaving normal entries here would install them twice.
+        retained = [
+            modversion
+            for modversion in modversions
+            if str(getattr(modversion, "modtype", "") or "").upper()
+            in {"LAUNCHER", "BOOTSTRAP", "MCIL"}
+        ]
+    return retained, configuration.manifest_entries(
+        public_repo_url, expanded=expanded, extended=extended
+    )
 
 
 def _manifest_changes(previous, current, from_version, to_version):
@@ -262,6 +326,9 @@ def api_info():
             "version": "v" + solderpy_version,
             "stream": "DEV",
             "capabilities": {
+                "advanced_optionals": True,
+                "bootstrap_manifest": True,
+                "bootstrap_schema": BOOTSTRAP_SCHEMA_VERSION,
                 "build_channels": True,
                 "build_comparison": True,
                 "optional_manifests": True,
@@ -396,9 +463,18 @@ def modpack_slug_build(slugstring: str, buildstring: str):
     modversions = build.get_modversions_api(
         target=target, include_optional=include_optional
     )
+    modversions, bootstrap_entries = _technic_solderpy_loader_manifest(
+        modversions,
+        build,
+        current_modpack,
+        target=target,
+        expanded=expanded,
+        extended=extended,
+    )
     moddata = _mod_manifest_entries(
         modversions, build.id, expanded=expanded, extended=extended
     )
+    moddata.extend(bootstrap_entries)
     manifest = {
         "id": build.id,
         "minecraft": build.minecraft,
@@ -436,12 +512,23 @@ def modpack_slug_build(slugstring: str, buildstring: str):
         previous_versions = previous_build.get_modversions_api(
             target=target, include_optional=include_optional
         )
+        previous_versions, previous_bootstrap_entries = (
+            _technic_solderpy_loader_manifest(
+                previous_versions,
+                previous_build,
+                current_modpack,
+                target=target,
+                expanded=expanded,
+                extended=True,
+            )
+        )
         previous_data = _mod_manifest_entries(
             previous_versions,
             previous_build.id,
             expanded=expanded,
             extended=True,
         )
+        previous_data.extend(previous_bootstrap_entries)
         manifest["changes"] = _manifest_changes(
             previous_data, moddata, previous_build.version, build.version
         )
@@ -450,6 +537,181 @@ def modpack_slug_build(slugstring: str, buildstring: str):
     if extended:
         response.set_etag(manifest["manifest_hash"])
     return response
+
+
+@api.route("/api/modpack/<slugstring>/<buildstring>/bootstrap")
+def modpack_bootstrap(slugstring: str, buildstring: str):
+    """Return the complete build model for a dedicated bootstrap client.
+
+    This deliberately does not use the Technic/SolderPy Loader transformation:
+    a Solder-aware client needs every stored package and the source advanced
+    selection rules so that it can make the choice itself.
+    """
+    cid = request.args.get("cid")
+    api_key = _has_valid_api_key()
+    principal = _read_principal()
+    current_modpack = _get_accessible_modpack(
+        slugstring, cid, api_key, principal
+    )
+    if not current_modpack:
+        return jsonify({"error": "Modpack does not exist"}), 404
+
+    privileged = api_key or _principal_can_access(principal, current_modpack)
+    build = _get_build_by_version_or_channel(
+        current_modpack, buildstring, cid, privileged
+    )
+    if not build:
+        return jsonify({"error": "Build does not exist"}), 404
+
+    target = (request.args.get("target") or "client").casefold()
+    source_mode = (request.args.get("source") or "hybrid").casefold()
+    platform = (request.args.get("platform") or "").casefold()
+    ownership_mode = (request.args.get("ownership") or "server").casefold()
+    if (
+        target not in {"client", "server"}
+        or source_mode not in {"hybrid", "solder"}
+        or ownership_mode not in {"server", "explicit"}
+        or platform not in {
+            "",
+            "modrinth",
+            "curseforge",
+            "prism",
+            "technic",
+        }
+    ):
+        return jsonify({"error": "Invalid bootstrap options"}), 400
+    if target == "server" and not current_modpack.enable_server:
+        return jsonify({"error": "Server manifests are not enabled"}), 404
+
+    def render_manifest(selected_build):
+        packages = selected_build.get_modversions_api(
+            target=target,
+            include_optional=True,
+            include_excluded=True,
+            include_download_overrides=True,
+            include_download_sources=True,
+        )
+        groups = AdvancedOptional.get_active_groups(selected_build.id)
+        grouped_memberships = {
+            item.build_modversion_id
+            for group in groups
+            for item in group.items
+        }
+        install_owners = {}
+        technic_configuration = (
+            TechnicSolderPyLoader.get_active(selected_build.id)
+            if platform == "technic"
+            else None
+        )
+        technic_native = bool(
+            technic_configuration
+            and technic_configuration.delivery_mode
+            == TechnicSolderPyLoader.TECHNIC_DELIVERY
+        )
+        native_projects = (
+            {
+                str(override.modrinth_project_id)
+                for override in PlatformExportOverride.get_enabled()
+            }
+            if source_mode == "hybrid" and platform == "curseforge"
+            else set()
+        )
+        for package in packages:
+            membership_id = getattr(package, "membership_id", None)
+            modtype = str(
+                getattr(package, "modtype", "MOD") or "MOD"
+            ).upper()
+            owner = "loader"
+            if modtype in {"BOOTSTRAP", "MCIL", "LAUNCHER"}:
+                owner = "ignored"
+            elif membership_id not in grouped_memberships:
+                provider = str(
+                    getattr(package, "integration_provider", "") or ""
+                ).upper()
+                project_id = str(
+                    getattr(package, "integration_project_id", "") or ""
+                )
+                version_id = getattr(package, "integration_version_id", None)
+                optional_state = int(
+                    getattr(package, "optional", 0) or 0
+                )
+                if technic_native and optional_state == 0:
+                    owner = "launcher"
+                elif (
+                    ownership_mode != "explicit"
+                    and
+                    source_mode == "hybrid"
+                    and platform == "modrinth"
+                    and provider == "MODRINTH"
+                    and project_id
+                    and version_id
+                    and optional_state != 2
+                ):
+                    owner = "launcher"
+                elif (
+                    ownership_mode != "explicit"
+                    and
+                    source_mode == "hybrid"
+                    and platform == "curseforge"
+                    and provider == "MODRINTH"
+                    and project_id in native_projects
+                ):
+                    owner = "launcher"
+            install_owners[membership_id] = owner
+
+        # Bootstrap reads never contact upstream providers or mutate storage.
+        # Native URLs and hashes are persisted during management-side imports.
+        return BootstrapManifest.render(
+            current_modpack,
+            selected_build,
+            packages,
+            groups,
+            public_repo_url,
+            ModDependency.get_for_build_api(selected_build.id),
+            target=target,
+            source_mode=source_mode,
+            install_owners=install_owners,
+        )
+
+    try:
+        manifest = render_manifest(build)
+        from_version = request.args.get("from")
+        if from_version:
+            previous_build = _get_build_by_version_or_channel(
+                current_modpack, from_version, cid, privileged
+            )
+            if not previous_build:
+                return (
+                    jsonify({"error": "Comparison build does not exist"}),
+                    404,
+                )
+            previous_manifest = render_manifest(previous_build)
+            manifest["changes"] = BootstrapManifest.changes(
+                previous_manifest, manifest
+            )
+    except BootstrapManifestError:
+        # Stored integrity failures are not safe to expose to anonymous API
+        # users, but should still produce a stable machine-readable response.
+        return jsonify({"error": "Invalid bootstrap manifest data"}), 422
+
+    response = jsonify(manifest)
+    response_etag = manifest["manifest_hash"]
+    if "changes" in manifest:
+        response_etag = hashlib.sha256(
+            (
+                response_etag
+                + ":"
+                + manifest["changes"]["from_manifest_hash"]
+            ).encode("ascii")
+        ).hexdigest()
+    response.set_etag(response_etag)
+    response.cache_control.no_cache = True
+    response.cache_control.must_revalidate = True
+    if cid or request.args.get("k") or request.headers.get("Authorization"):
+        response.cache_control.private = True
+    else:
+        response.cache_control.public = True
+    return response.make_conditional(request)
 
 
 @api.route("/api/mod")

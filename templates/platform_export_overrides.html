@@ -1,0 +1,136 @@
+{%extends "layout.html"%} {% set active_page = "platform_export_overrides" %}
+{%block head%}<title>Modrinth-CurseForge sync - solder.py</title>{%endblock%}
+{%block main%}
+<div class="container-fluid">
+    <h2>Modrinth-CurseForge sync</h2>
+    <p class="text-muted">
+        Match the same downloader project on Modrinth and CurseForge so exported
+        packs can install the native file from their target platform. Override
+        Solder API only must also be enabled before a mapping can bypass a Solder API only
+        export.
+    </p>
+    <div class="alert alert-secondary">
+        <h3 class="h6">How CurseForge matching works</h3>
+        <p>
+            The mapping stores only the manually entered Modrinth and CurseForge
+            project IDs. No CurseForge file metadata or matched file ID is saved.
+            When exporting, solder.py resolves the exact Modrinth version selected
+            in the build, asks CurseForge for compatible JARs, and tries these matches
+            in order:
+        </p>
+        <ol class="mb-0">
+            <li>the same SHA-1;</li>
+            <li>the same filename and filesize; then</li>
+            <li>the Modrinth version number in the CurseForge filename or display name.</li>
+        </ol>
+    </div>
+    <div class="alert alert-info">
+        CurseForge is not used for Technic launcher downloads. Technic continues
+        to download the normal Solder packages from the Solder API and repository.
+    </div>
+    {%if not curseforge_api_configured%}
+    <div class="alert alert-warning">
+        CURSEFORGE_API_KEY is not configured. Modrinth exports can still resolve these
+        projects, but CurseForge exports cannot resolve files until the key is set.
+    </div>
+    {%endif%}
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>Project</th>
+                    <th>Modrinth</th>
+                    <th>CurseForge</th>
+                    <th>Side</th>
+                    <th>Enabled</th>
+                    <th>Override Solder API only</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {%for override in overrides%}
+                <tr>
+                    <td>
+                        {{override.name}}
+                        {%if override.built_in%}<span class="badge bg-secondary">built in</span>{%endif%}
+                    </td>
+                    <td><a href="https://modrinth.com/mod/{{override.modrinth_project_id}}">{{override.modrinth_project_id}}</a></td>
+                    <td>{{override.curseforge_project_id}}</td>
+                    <td>{{override.side|title}}</td>
+                    <td>
+                        <input class="form-check-input" type="checkbox" value="" id="override_enabled_{{override.id}}" aria-label="Enable {{override.name}}" onclick="submitecheckedpress('override_id', '{{override.id}}', 'override_enabled', 'override_enabled_{{override.id}}', 'set_override_enabled')" {%if override.enabled%}checked{%endif%}>
+                    </td>
+                    <td>
+                        <input class="form-check-input" type="checkbox" value="" id="override_solder_only_{{override.id}}" aria-label="Allow {{override.name}} to override Solder API only exports" onclick="submitecheckedpress('override_id', '{{override.id}}', 'override_solder_only', 'override_solder_only_{{override.id}}', 'set_override_solder_only')" {%if override.override_solder_only%}checked{%endif%}>
+                    </td>
+                    <td>
+                        {%if not override.built_in%}
+                        <form method="post" action="{{url_for('asite.platform_export_overrides')}}">
+                            <input type="hidden" name="override_id" value="{{override.id}}">
+                            <button class="btn btn-sm btn-danger" type="submit" name="delete_override" value="1">Delete</button>
+                        </form>
+                        {%else%}
+                        <span class="text-muted">Default mapping</span>
+                        {%endif%}
+                    </td>
+                </tr>
+                {%else%}
+                <tr><td colspan="7">No Modrinth-CurseForge mappings are configured.</td></tr>
+                {%endfor%}
+            </tbody>
+        </table>
+    </div>
+    <form method="post" action="{{url_for('asite.platform_export_overrides')}}">
+        <input type="text" class="form-control invisible" name="override_enabled" id="override_enabled" readonly>
+        <input type="text" class="form-control invisible" name="override_solder_only" id="override_solder_only" readonly>
+        <input type="text" class="form-control invisible" name="override_id" id="override_id" readonly>
+        <input class="btn btn-primary invisible" type="submit" name="set_override_enabled" id="set_override_enabled" value="Save">
+        <input class="btn btn-primary invisible" type="submit" name="set_override_solder_only" id="set_override_solder_only" value="Save Solder API only override">
+    </form>
+</div>
+{%endblock%}
+{%block aside%}
+<h3 class="h5">Add mapping</h3>
+<form method="post" action="{{url_for('asite.platform_export_overrides')}}">
+    <div class="mb-3">
+        <label class="form-label" for="override_name">Name</label>
+        <input class="form-control" type="text" name="name" id="override_name" maxlength="255" placeholder="Filled from Modrinth when empty">
+    </div>
+    <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" value="1" name="override_solder_only" id="new_override_solder_only">
+        <label class="form-check-label" for="new_override_solder_only">Override Solder API only exports</label>
+    </div>
+    <div class="mb-3">
+        <label class="form-label" for="modrinth_project">Modrinth project</label>
+        <input class="form-control" type="text" name="modrinth_project" id="modrinth_project" required placeholder="URL, slug, or project ID">
+    </div>
+    <div class="mb-3">
+        <label class="form-label" for="curseforge_project_id">CurseForge project ID</label>
+        <input class="form-control" type="number" name="curseforge_project_id" id="curseforge_project_id" min="1" required>
+        <div class="form-text">Use the numeric Project ID shown on the CurseForge project page.</div>
+    </div>
+    <div class="mb-3">
+        <label class="form-label" for="override_side">Side</label>
+        <select class="form-select" name="side" id="override_side">
+            <option value="BOTH">Client and server</option>
+            <option value="CLIENT">Client only</option>
+            <option value="SERVER">Server only</option>
+        </select>
+    </div>
+    <p class="text-muted small">New mappings are disabled until you enable them in the list.</p>
+    <button class="btn btn-success" type="submit" name="create_override" value="1">Add mapping</button>
+</form>
+<hr>
+<h3 class="h5">Mapping list</h3>
+<div class="d-grid gap-2 mb-3">
+    <a class="btn btn-secondary" href="{{url_for('asite.export_platform_sync')}}">Export list</a>
+</div>
+<form method="post" action="{{url_for('asite.platform_export_overrides')}}" enctype="multipart/form-data">
+    <div class="mb-2">
+        <label class="form-label" for="sync_manifest">Import list</label>
+        <input class="form-control" type="file" name="sync_manifest" id="sync_manifest" accept="application/json,.json" required>
+    </div>
+    <button class="btn btn-primary w-100" type="submit" name="import_sync_manifest" value="1">Import list</button>
+</form>
+<script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
+{%endblock%}

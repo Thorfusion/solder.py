@@ -217,6 +217,15 @@ class ModDependency:
             conn.close()
 
     @staticmethod
+    def ensure(mod_id, dependency_mod_id):
+        """Create a dependency relationship, or reuse the existing one."""
+        try:
+            ModDependency.add(mod_id, dependency_mod_id)
+        except DuplicateDependencyError:
+            return False
+        return True
+
+    @staticmethod
     def delete(dependency_id, mod_id):
         conn = Database.get_connection()
         cur = conn.cursor()

@@ -24,6 +24,11 @@ class ApiTests(unittest.TestCase):
         self.get_mod_dependencies = patch.object(
             api_module.ModDependency, "get_by_mod_api", return_value=[]
         ).start()
+        self.get_technic_loader = patch.object(
+            api_module.TechnicSolderPyLoader,
+            "get_active",
+            return_value=None,
+        ).start()
         self.addCleanup(patch.stopall)
 
         # cachetools caches route responses at module scope. Clearing between
@@ -46,9 +51,12 @@ class ApiTests(unittest.TestCase):
             response.get_json(),
             {
                 "api": "solder.py",
-                "version": "v1.9.0",
+                "version": "v1.10.0",
                 "stream": "DEV",
                 "capabilities": {
+                    "advanced_optionals": True,
+                    "bootstrap_manifest": True,
+                    "bootstrap_schema": 1,
                     "build_channels": True,
                     "build_comparison": True,
                     "optional_manifests": True,
@@ -329,6 +337,264 @@ class ApiTests(unittest.TestCase):
         )
         build.get_modversions_api.assert_called_once_with(
             target="client", include_optional=False
+        )
+
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_technic_manifest_keeps_launcher_modpack_jar_package(
+        self, _get_key, get_modpack
+    ):
+        modpack = Mock()
+        build = Mock(
+            id=7,
+            minecraft="1.7.10",
+            min_java="1.8",
+            java_runtime=None,
+            min_memory=2048,
+            forge="10.13.4.1614",
+            modloader="FORGE",
+        )
+        build.get_modversions_api.return_value = [
+            SimpleNamespace(
+                id=9,
+                mod_id=3,
+                modname="modpack",
+                version="1.0",
+                md5="abc123",
+                filesize=1234,
+                modtype="LAUNCHER",
+            )
+        ]
+        modpack.get_build_api.return_value = build
+        get_modpack.return_value = modpack
+
+        response = self.client.get(
+            "/api/modpack/legacy-pack/1.0?cid=client-123"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["forge"], "10.13.4.1614")
+        self.assertEqual(payload["mods"][0]["name"], "modpack")
+        self.assertEqual(
+            payload["mods"][0]["url"],
+            "https://cdn.example.test/mods/modpack/modpack-1.0.zip",
+        )
+
+    @patch.object(api_module.TechnicSolderPyLoader, "get_active")
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_technic_solderpy_loader_delegates_all_managed_packages(
+        self, _get_key, get_modpack, get_loader
+    ):
+        grouped = SimpleNamespace(
+            id=9,
+            mod_id=3,
+            modname="choice",
+            version="1.0",
+            md5="a" * 32,
+            filesize=100,
+            membership_id=41,
+            modtype="MOD",
+        )
+        ordinary = SimpleNamespace(
+            id=10,
+            mod_id=4,
+            modname="ordinary",
+            version="2.0",
+            md5="b" * 32,
+            filesize=200,
+            membership_id=42,
+            modtype="MOD",
+        )
+        modloader = SimpleNamespace(
+            id=11,
+            mod_id=5,
+            modname="modpack",
+            version="forge",
+            md5="d" * 32,
+            filesize=400,
+            membership_id=43,
+            modtype="LAUNCHER",
+        )
+        build = Mock(
+            id=7,
+            minecraft="1.7.10",
+            min_java="1.8",
+            java_runtime=None,
+            min_memory=2048,
+            forge="10.13.4.1614",
+            modloader="FORGE",
+        )
+        build.get_modversions_api.return_value = [grouped, ordinary, modloader]
+        modpack = Mock(optional_mode=1)
+        modpack.get_build_api.return_value = build
+        get_modpack.return_value = modpack
+        configuration = Mock()
+        configuration.delivery_mode = (
+            api_module.TechnicSolderPyLoader.LOADER_DELIVERY
+        )
+        configuration.manifest_entries.return_value = [
+            {
+                "id": -14,
+                "name": "solderpy-loader-bootstrap",
+                "version": "0.1.0",
+                "md5": "c" * 32,
+                "filesize": 300,
+                "url": "https://cdn.example.test/mods/_solderpy/bootstrap.zip",
+            }
+        ]
+        get_loader.return_value = configuration
+
+        response = self.client.get("/api/modpack/legacy-pack/1.0")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [entry["name"] for entry in response.get_json()["mods"]],
+            ["modpack", "solderpy-loader-bootstrap"],
+        )
+        configuration.manifest_entries.assert_called_once_with(
+            "https://cdn.example.test/mods/",
+            expanded=False,
+            extended=False,
+        )
+
+    @patch.object(api_module.TechnicSolderPyLoader, "get_active")
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_technic_delivery_keeps_required_packages_in_normal_manifest(
+        self, _get_key, get_modpack, get_loader
+    ):
+        required = SimpleNamespace(
+            id=10,
+            mod_id=4,
+            modname="ordinary",
+            version="2.0",
+            md5="b" * 32,
+            filesize=200,
+            modtype="MOD",
+        )
+        modloader = SimpleNamespace(
+            id=11,
+            mod_id=5,
+            modname="modpack",
+            version="forge",
+            md5="d" * 32,
+            filesize=400,
+            modtype="LAUNCHER",
+        )
+        build = Mock(
+            id=7,
+            minecraft="1.7.10",
+            min_java="1.8",
+            java_runtime=None,
+            min_memory=2048,
+            forge="10.13.4.1614",
+            modloader="FORGE",
+        )
+        build.get_modversions_api.return_value = [required, modloader]
+        modpack = Mock(optional_mode=1)
+        modpack.get_build_api.return_value = build
+        get_modpack.return_value = modpack
+        configuration = Mock(
+            delivery_mode=(
+                api_module.TechnicSolderPyLoader.TECHNIC_DELIVERY
+            )
+        )
+        configuration.manifest_entries.return_value = [
+            {
+                "id": -14,
+                "name": "solderpy-loader-bootstrap",
+                "version": "0.1.0",
+                "md5": "c" * 32,
+                "filesize": 300,
+                "url": "https://cdn.example.test/mods/_solderpy/bootstrap.zip",
+            }
+        ]
+        get_loader.return_value = configuration
+
+        response = self.client.get("/api/modpack/legacy-pack/1.0")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [entry["name"] for entry in response.get_json()["mods"]],
+            ["ordinary", "modpack", "solderpy-loader-bootstrap"],
+        )
+
+    @patch.object(api_module.BootstrapManifest, "render")
+    @patch.object(api_module.TechnicSolderPyLoader, "get_active")
+    @patch.object(
+        api_module.AdvancedOptional, "get_active_groups", return_value=[]
+    )
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_technic_bootstrap_manifest_keeps_the_complete_package_graph(
+        self, _get_key, get_modpack, _get_groups, get_loader, render
+    ):
+        packages = [
+            SimpleNamespace(optional=0, membership_id=1, modtype="MOD"),
+            SimpleNamespace(optional=1, membership_id=2, modtype="MOD"),
+            SimpleNamespace(optional=2, membership_id=3, modtype="MOD"),
+        ]
+        build = Mock(id=7, minecraft="1.20.1", modloader="FORGE")
+        build.get_modversions_api.return_value = packages
+        modpack = SimpleNamespace(
+            enable_server=1,
+            get_build_api=Mock(return_value=build),
+        )
+        get_modpack.return_value = modpack
+        get_loader.return_value = SimpleNamespace(
+            delivery_mode=api_module.TechnicSolderPyLoader.TECHNIC_DELIVERY
+        )
+        render.return_value = {"manifest_hash": "a" * 64}
+
+        response = self.client.get(
+            "/api/modpack/stable/42/bootstrap?platform=technic&source=solder"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [package.optional for package in render.call_args.args[2]],
+            [0, 1, 2],
+        )
+        self.assertEqual(
+            render.call_args.kwargs["install_owners"],
+            {1: "launcher", 2: "loader", 3: "loader"},
+        )
+
+    @patch.object(api_module.BootstrapManifest, "render")
+    @patch.object(
+        api_module.AdvancedOptional, "get_active_groups", return_value=[]
+    )
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_explicit_export_ownership_does_not_guess_native_files(
+        self, _get_key, get_modpack, _get_groups, render
+    ):
+        package = SimpleNamespace(
+            optional=0,
+            membership_id=1,
+            modtype="MOD",
+            integration_provider="MODRINTH",
+            integration_project_id="project",
+            integration_version_id="version",
+        )
+        build = Mock(id=7, minecraft="1.20.1", modloader="FORGE")
+        build.get_modversions_api.return_value = [package]
+        get_modpack.return_value = SimpleNamespace(
+            enable_server=1,
+            get_build_api=Mock(return_value=build),
+        )
+        render.return_value = {"manifest_hash": "a" * 64}
+
+        response = self.client.get(
+            "/api/modpack/stable/42/bootstrap"
+            "?platform=modrinth&source=hybrid&ownership=explicit"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            render.call_args.kwargs["install_owners"], {1: "loader"}
         )
 
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
@@ -624,6 +890,222 @@ class ApiTests(unittest.TestCase):
         )
         self.assertEqual(
             optional_response.get_json(), {"error": "Invalid manifest options"}
+        )
+
+    @patch.object(api_module.AdvancedOptional, "get_active_groups")
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_bootstrap_manifest_exposes_complete_advanced_selection_model(
+        self,
+        _get_key,
+        get_modpack,
+        get_groups,
+    ):
+        def package(
+            identifier,
+            membership_id,
+            slug,
+            state,
+            modtype="MOD",
+        ):
+            return SimpleNamespace(
+                id=identifier,
+                mod_id=identifier,
+                membership_id=membership_id,
+                modname=slug,
+                pretty_name=slug.title(),
+                author="CI",
+                description=f"{slug} description",
+                link=f"https://example.test/{slug}",
+                version="1.0",
+                mcversion="1.20.1",
+                modloader="FORGE",
+                side="BOTH",
+                modtype=modtype,
+                md5=str(identifier) * 32,
+                jarmd5=str(identifier) * 32,
+                jarfilesize=identifier * 90,
+                filesize=identifier * 100,
+                optional=state,
+                integration_provider=None,
+                integration_project_id=None,
+                integration_version_id=None,
+            )
+
+        packages = [
+            package(1, 11, "core", 0),
+            package(2, 12, "pretty-world", 0),
+            package(3, 13, "fast-world", 2),
+            package(4, 14, "modpack", 0, "LAUNCHER"),
+        ]
+        packages[0].integration_provider = "MODRINTH"
+        packages[0].integration_project_id = "project-id"
+        packages[0].integration_version_id = "version-id"
+        modrinth_url = (
+            "https://cdn.modrinth.com/data/project-id/versions/"
+            "version-id/core.jar"
+        )
+        packages[0].download_source_provider = "MODRINTH"
+        packages[0].download_source_url = modrinth_url
+        packages[1].integration_provider = "MAVEN"
+        packages[1].integration_project_id = "7"
+        packages[1].integration_version_id = "maven-version-id"
+        packages[1].jar_url_override = "https://override.example/ui.jar"
+        maven_url = "https://maven.example/releases/ui.jar"
+        packages[1].download_source_provider = "MAVEN"
+        packages[1].download_source_url = maven_url
+        build = Mock(
+            id=7,
+            version="42",
+            minecraft="1.20.1",
+            min_java="17",
+            java_runtime="java-runtime-gamma",
+            min_memory=4096,
+            forge="47.3.0",
+            modloader="FORGE",
+        )
+        build.get_modversions_api.return_value = packages
+        modpack = SimpleNamespace(
+            id=2,
+            slug="stable",
+            name="Stable Pack",
+            optional_mode=1,
+            enable_server=1,
+            get_build_api=Mock(return_value=build),
+        )
+        get_modpack.return_value = modpack
+        get_groups.return_value = [
+            SimpleNamespace(
+                id=5,
+                name="World style",
+                description="Choose one world style.",
+                selection_type=1,
+                is_single=True,
+                sort_order=3,
+                items=[
+                    SimpleNamespace(
+                        build_modversion_id=12,
+                        modversion_id=2,
+                        mod_slug="pretty-world",
+                        pretty_name="Pretty World",
+                        version="1.0",
+                        optional_state=0,
+                        selected_by_default=True,
+                        sort_order=1,
+                    ),
+                    SimpleNamespace(
+                        build_modversion_id=13,
+                        modversion_id=3,
+                        mod_slug="fast-world",
+                        pretty_name="Fast World",
+                        version="1.0",
+                        optional_state=2,
+                        selected_by_default=False,
+                        sort_order=2,
+                    ),
+                ],
+            )
+        ]
+        self.get_build_dependencies.return_value = {
+            2: [
+                {
+                    "id": 1,
+                    "name": "core",
+                    "pretty_name": "Core",
+                    "side": "BOTH",
+                    "modtype": "MOD",
+                }
+            ]
+        }
+
+        response = self.client.get(
+            "/api/modpack/stable/42/bootstrap?cid=client-123"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["schema"], "solder.py/bootstrap")
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(payload["optional_mode"]["name"], "advanced")
+        self.assertEqual(payload["groups"][0]["key"], "World style")
+        self.assertEqual(payload["groups"][0]["minimum"], 1)
+        self.assertEqual(payload["groups"][0]["maximum"], 1)
+        by_name = {package["name"]: package for package in payload["packages"]}
+        self.assertEqual(by_name["fast-world"]["selection"]["state"], 2)
+        self.assertEqual(
+            by_name["fast-world"]["selection"]["state_name"], "excluded"
+        )
+        self.assertEqual(
+            by_name["pretty-world"]["dependencies"][0]["name"], "core"
+        )
+        self.assertTrue(by_name["core"]["url"].endswith("core-1.0.jar"))
+        self.assertEqual(by_name["core"]["download"]["format"], "jar")
+        self.assertEqual(by_name["core"]["download"]["filesize"], 90)
+        self.assertEqual(
+            by_name["core"]["download"]["sources"][0],
+            {"provider": "modrinth", "url": modrinth_url},
+        )
+        self.assertEqual(
+            by_name["core"]["download"]["sources"][1]["provider"],
+            "solder",
+        )
+        self.assertEqual(
+            by_name["pretty-world"]["download"]["sources"][0],
+            {
+                "provider": "override",
+                "url": "https://override.example/ui.jar",
+            },
+        )
+        self.assertEqual(
+            by_name["pretty-world"]["download"]["sources"][1],
+            {"provider": "maven", "url": maven_url},
+        )
+        self.assertFalse(by_name["modpack"]["bootstrap_managed"])
+        self.assertEqual(
+            payload["selection_policy"]["required_memberships"], [11]
+        )
+        self.assertIn(12, payload["selection_policy"]["default_memberships"])
+        self.assertEqual(len(payload["manifest_hash"]), 64)
+        self.assertEqual(response.headers["ETag"], f'"{payload["manifest_hash"]}"')
+        self.assertIn("private", response.headers["Cache-Control"])
+        build.get_modversions_api.assert_called_once_with(
+            target="client",
+            include_optional=True,
+            include_excluded=True,
+            include_download_overrides=True,
+            include_download_sources=True,
+        )
+
+        conditional = self.client.get(
+            "/api/modpack/stable/42/bootstrap?cid=client-123",
+            headers={"If-None-Match": response.headers["ETag"]},
+        )
+        self.assertEqual(conditional.status_code, 304)
+
+    def test_bootstrap_read_path_has_no_upstream_backfill_helpers(self):
+        self.assertFalse(
+            hasattr(api_module, "_backfill_bootstrap_modrinth_downloads")
+        )
+        self.assertFalse(hasattr(api_module, "_bootstrap_maven_downloads"))
+
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_bootstrap_manifest_rejects_invalid_target(
+        self, _get_key, get_modpack
+    ):
+        modpack = SimpleNamespace(
+            enable_server=1,
+            get_build_api=Mock(return_value=Mock()),
+        )
+        get_modpack.return_value = modpack
+
+        response = self.client.get(
+            "/api/modpack/stable/42/bootstrap?target=proxy"
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.get_json(), {"error": "Invalid bootstrap options"}
         )
 
     @patch.object(api_module.Mod, "get_all_api")

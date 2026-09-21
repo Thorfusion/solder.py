@@ -57,6 +57,17 @@ class DistributionPackage:
     side: str
     modtype: str
     optional: bool
+    optional_state: int = 0
+    membership_id: int | None = None
+    integration_provider: str | None = None
+    integration_project_id: str | None = None
+    integration_version_id: str | None = None
+    download_source_provider: str | None = None
+    download_source_url: str | None = None
+    download_source_filename: str | None = None
+    download_source_sha1: str | None = None
+    download_source_sha512: str | None = None
+    download_source_filesize: int | None = None
 
     @property
     def jar_ready(self) -> bool:
@@ -72,6 +83,20 @@ class DistributionPackage:
     @property
     def zip_filename(self) -> str:
         return f"{self.mod_slug}-{self.version}.zip"
+
+    @property
+    def is_native_modrinth(self) -> bool:
+        """Return whether an MRPack can fetch this exact JAR from Modrinth."""
+        return bool(
+            self.modtype == "MOD"
+            and str(self.integration_provider or "").upper() == "MODRINTH"
+            and self.integration_project_id
+            and self.integration_version_id
+        )
+
+    @property
+    def excluded_from_basic(self) -> bool:
+        return self.optional_state == 2
 
 
 class DistributionExport:
@@ -116,13 +141,27 @@ class DistributionExport:
 
     @classmethod
     def load_packages(
-        cls, build_id: int, optional: bool | None = None
+        cls,
+        build_id: int,
+        optional: bool | None = None,
+        *,
+        include_excluded: bool = False,
     ) -> list[DistributionPackage]:
         rows = cls._package_rows(build_id)
         packages = [cls._package_from_row(row) for row in rows]
+        if not include_excluded:
+            packages = [
+                package for package in packages
+                if not package.excluded_from_basic
+            ]
         if optional is None:
             return packages
-        return [package for package in packages if package.optional is optional]
+        requested_state = 1 if optional else 0
+        return [
+            package
+            for package in packages
+            if package.optional_state == requested_state
+        ]
 
     @classmethod
     def load_package(
@@ -130,6 +169,7 @@ class DistributionExport:
     ) -> DistributionPackage:
         cls._validate_slug(mod_slug, "mod slug")
         rows = cls._package_rows(build_id, mod_slug)
+        rows = [row for row in rows if int(row.get("optional") or 0) != 2]
         if not rows:
             raise DistributionBuildNotFound(
                 "The requested mod is not in this build."
@@ -148,19 +188,40 @@ class DistributionExport:
         cursor = conn.cursor(dictionary=True)
         try:
             query = """SELECT modversions.id,
+                              build_modversion.id AS membership_id,
                               modversions.version,
                               modversions.md5,
                               modversions.jarmd5,
+                              modversions.jarfilesize,
                               mods.name AS mod_slug,
                               mods.pretty_name,
                               mods.description,
                               mods.side,
                               mods.modtype,
+                              mods.integration_provider,
+                              mods.integration_project_id,
+                              modversions.integration_version_id,
+                              modversion_download_sources.provider
+                                  AS download_source_provider,
+                              modversion_download_sources.url
+                                  AS download_source_url,
+                              modversion_download_sources.filename
+                                  AS download_source_filename,
+                              modversion_download_sources.sha1
+                                  AS download_source_sha1,
+                              modversion_download_sources.sha512
+                                  AS download_source_sha512,
+                              modversion_download_sources.filesize
+                                  AS download_source_filesize,
                               build_modversion.optional
                        FROM build_modversion
                        INNER JOIN modversions
                            ON modversions.id = build_modversion.modversion_id
                        INNER JOIN mods ON mods.id = modversions.mod_id
+                       LEFT JOIN modversion_download_sources
+                           ON modversion_download_sources.modversion_id =
+                              modversions.id
+                          AND modversion_download_sources.provider = 'MODRINTH'
                        WHERE build_modversion.build_id = %s"""
             parameters = [build_id]
             if mod_slug is not None:
@@ -177,6 +238,11 @@ class DistributionExport:
     def _package_from_row(cls, row: dict) -> DistributionPackage:
         cls._validate_slug(row["mod_slug"], "mod slug")
         cls._validate_component(row["version"], "mod version")
+        optional_state = int(row.get("optional") or 0)
+        if optional_state not in {0, 1, 2}:
+            raise DistributionExportError(
+                "The build contains an invalid optional delivery state."
+            )
         return DistributionPackage(
             id=row["id"],
             mod_slug=row["mod_slug"],
@@ -187,7 +253,19 @@ class DistributionExport:
             jar_md5=(str(row.get("jarmd5") or "").strip().lower() or None),
             side=str(row.get("side") or "BOTH").upper(),
             modtype=str(row.get("modtype") or "MOD").upper(),
-            optional=bool(row.get("optional")),
+            optional=optional_state == 1,
+            optional_state=optional_state,
+            membership_id=row.get("membership_id"),
+            integration_provider=row.get("integration_provider"),
+            integration_project_id=row.get("integration_project_id"),
+            integration_version_id=row.get("integration_version_id"),
+            download_source_provider=row.get("download_source_provider"),
+            download_source_url=row.get("download_source_url"),
+            download_source_filename=row.get("download_source_filename"),
+            download_source_sha1=row.get("download_source_sha1"),
+            download_source_sha512=row.get("download_source_sha512"),
+            download_source_filesize=row.get("download_source_filesize")
+            or row.get("jarfilesize"),
         )
 
     @staticmethod
@@ -232,7 +310,7 @@ class DistributionExport:
         except DistributionExportError as error:
             raise DistributionExportError(
                 "APP_URL must be configured as the public solder.py HTTP or "
-                "HTTPS URL before exporting a remote FileDirector config."
+                "HTTPS URL before exporting remote configuration."
             ) from error
 
     @classmethod
@@ -256,7 +334,10 @@ class PackwizExport:
 
     @classmethod
     def mod_toml(
-        cls, package: DistributionPackage, public_repo_url: str | None
+        cls,
+        package: DistributionPackage,
+        public_repo_url: str | None,
+        native_file=None,
     ) -> bytes:
         if not package.jar_ready:
             raise DistributionExportError(
@@ -265,8 +346,12 @@ class PackwizExport:
         side = package.side.lower()
         if side not in {"client", "server", "both"}:
             side = "both"
-        url = DistributionExport.artifact_url(
-            public_repo_url, package, package.jar_filename
+        url = (
+            native_file.download_url
+            if native_file is not None
+            else DistributionExport.artifact_url(
+                public_repo_url, package, package.jar_filename
+            )
         )
         lines = [
             f"name = {cls._toml_string(package.pretty_name)}",
@@ -298,7 +383,9 @@ class PackwizExport:
         cls,
         packages: list[DistributionPackage],
         public_repo_url: str | None,
+        native_files=None,
     ) -> tuple[bytes, int]:
+        native_files = native_files or {}
         lines = ['hash-format = "sha256"']
         excluded = 0
         seen_slugs = set()
@@ -311,7 +398,11 @@ class PackwizExport:
                     "The build contains more than one version of a mod."
                 )
             seen_slugs.add(package.mod_slug)
-            metadata = cls.mod_toml(package, public_repo_url)
+            metadata = cls.mod_toml(
+                package,
+                public_repo_url,
+                native_files.get(package.integration_version_id),
+            )
             lines.extend(
                 [
                     "",
@@ -349,32 +440,61 @@ class PackwizExport:
                     "Set the build's modloader version before exporting it "
                     "to Packwiz."
                 )
-            lines.append(
-                f"{loader_key} = {cls._toml_string(build.modloader_version)}"
-            )
+            loader_version = str(build.modloader_version)
+            minecraft_prefix = f"{build.minecraft}-"
+            if loader_version.startswith(minecraft_prefix):
+                loader_version = loader_version[len(minecraft_prefix) :]
+            lines.append(f"{loader_key} = {cls._toml_string(loader_version)}")
         return ("\n".join(lines) + "\n").encode("utf-8")
 
 
 class FileDirectorExport:
     """Render FileDirector URL bundles and remote config pointers."""
 
-    EXCLUDED_TYPES = {"MCIL", "LAUNCHER"}
+    EXCLUDED_TYPES = {"BOOTSTRAP", "MCIL", "LAUNCHER"}
 
     @classmethod
     def bundle(
         cls,
         packages: list[DistributionPackage],
         public_repo_url: str | None,
+        native_files=None,
+        optional_groups=(),
     ) -> bytes:
+        native_files = native_files or {}
+        grouped_items = {}
+        for group in optional_groups or ():
+            for item in group.items:
+                grouped_items[item.build_modversion_id] = (group, item)
+        def package_order(indexed):
+            index, package = indexed
+            grouped = grouped_items.get(getattr(package, "membership_id", None))
+            if grouped is None:
+                return 1, index, 0, 0, 0
+            group, item = grouped
+            return 0, group.sort_order, group.id, item.sort_order, item.id
+
+        ordered_packages = sorted(enumerate(packages), key=package_order)
         entries = []
-        for package in packages:
+        for _index, package in ordered_packages:
+            grouped = grouped_items.get(getattr(package, "membership_id", None))
+            optional_state = int(
+                getattr(package, "optional_state", int(bool(package.optional)))
+            )
+            if optional_state == 2 and grouped is None:
+                continue
             if package.modtype in cls.EXCLUDED_TYPES:
                 continue
             if package.jar_ready:
                 filename = package.jar_filename
+                native_file = native_files.get(package.integration_version_id)
                 entry = {
-                    "url": DistributionExport.artifact_url(
-                        public_repo_url, package, filename
+                    "url": (
+                        native_file.download_url
+                        if native_file is not None
+                        else DistributionExport.artifact_url(
+                            public_repo_url, package, filename
+                        )
                     ),
                     "fileName": filename,
                     "metadata": {
@@ -399,12 +519,19 @@ class FileDirectorExport:
                 }
             if package.side in {"CLIENT", "SERVER"}:
                 entry.setdefault("metadata", {})["side"] = package.side
-            if package.optional:
+            if package.optional or grouped is not None:
                 policy = entry.setdefault("installationPolicy", {})
+                if grouped is None:
+                    optional_key = "$"
+                    selected_by_default = False
+                else:
+                    group, item = grouped
+                    optional_key = group.name if group.is_single else "$"
+                    selected_by_default = item.selected_by_default
                 policy.update(
                     {
-                        "optionalKey": package.mod_slug,
-                        "selectedByDefault": False,
+                        "optionalKey": optional_key,
+                        "selectedByDefault": selected_by_default,
                         "name": package.pretty_name,
                         "description": package.description,
                     }

@@ -35,8 +35,7 @@
                 <td>
                     <div class="maxcont">
                         <a href="../modpackbuild/{{mod.id}}"><button type="button" class="btn btn-primary buttonwidth">Manage</button></a>
-                        <a href="{{ url_for('asite.export_mcinstance', id=mod.id) }}"><button type="button" class="btn btn-secondary buttonwidthmcil">Export
-                                MCIL</button></a>
+                        <a href="{{ url_for('asite.modpackbuild', id=mod.id, export=1) }}"><button type="button" class="btn btn-secondary buttonwidthmcil">Export</button></a>
                     </div>
                 </td>
             </tr>
@@ -107,7 +106,7 @@
                 <input type="text" class="form-control" name="min_java" id="min_java" maxlength="255" placeholder="For example: 1.8.0_51">
             </div>
             <div class="grid2">
-                <label for="java_runtime" class="form-label">Mojang Java Runtime <span class="badge bg-warning text-dark">Advanced</span></label>
+                <label for="java_runtime" class="form-label">Mojang Java Runtime</label>
                 <select class="form-select" name="java_runtime" id="java_runtime" aria-describedby="java_runtime_help">
                     <option value="">Automatic (no override)</option>
                     {%for runtime, label in java_runtime_options%}

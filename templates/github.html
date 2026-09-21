@@ -1,0 +1,61 @@
+{%extends "layout.html"%} {% set active_page = "github" %}
+{%block head%}
+<title>GitHub configs - solder.py</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/table.css') }}" />
+{%endblock%}
+{%block main%}
+<div class="container-fluid">
+    <h2>GitHub configs</h2>
+    <p class="text-muted">Link an existing CONFIG entry to a public GitHub repository. Tags become versioned config choices; no repository is downloaded until a version is synced or selected for a build.</p>
+
+    <h4>Link config repository</h4>
+    {%if available_configs%}
+    <form method="post" action="{{url_for('asite.github')}}" class="row g-3 mb-4">
+        <div class="col-md-5">
+            <label for="mod_id" class="form-label">Config entry</label>
+            <select class="form-select" name="mod_id" id="mod_id" required>
+                {%for mod in available_configs%}<option value="{{mod.id}}">{{mod.pretty_name}} ({{mod.name}})</option>{%endfor%}
+            </select>
+        </div>
+        <div class="col-md-5">
+            <label for="repository" class="form-label">GitHub repository</label>
+            <input class="form-control" name="repository" id="repository" placeholder="owner/repository or https://github.com/owner/repository" required>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-success w-100" type="submit" name="link_repository" value="1">Link GitHub</button>
+        </div>
+    </form>
+    {%else%}
+    <p>Create a manual mod-library entry with type <strong>Config</strong>, or disconnect an existing integration, before linking another repository.</p>
+    {%endif%}
+
+    <hr>
+    <h4>Configured repositories</h4>
+    {%if configured_configs%}
+    <table class="table table-striped table-hover maxheighttable table-sm">
+        <thead class="table-light sticky-md-top"><tr><th>Config</th><th>Repository</th><th>Owner</th><th></th></tr></thead>
+        <tbody>
+        {%for item in configured_configs%}
+        <tr>
+            <td>{{item.mod.pretty_name}} ({{item.mod.name}})</td>
+            <td>
+                {%if item.project%}<a href="{{item.project.link}}" target="_blank" rel="noopener noreferrer">{{item.project.author}}/{{item.project.slug}}</a>
+                {%else%}GitHub repository #{{item.mod.integration_project_id}}{%endif%}
+            </td>
+            <td>{%if item.project%}{{item.project.author}}{%else%}<span class="text-muted">Unavailable</span>{%endif%}</td>
+            <td><a class="btn btn-secondary" href="{{url_for('asite.modversion', id=item.mod.id)}}">Manage versions</a></td>
+        </tr>
+        {%if item.error%}<tr><td colspan="4" class="text-danger">{{item.error}}</td></tr>{%endif%}
+        {%endfor%}
+        </tbody>
+    </table>
+    {%else%}
+    <p>No GitHub config repositories have been linked.</p>
+    {%endif%}
+</div>
+{%endblock%}
+{%block aside%}
+<h5>GitHub config help</h5>
+<p>Use tags for automatic version discovery. Use an explicit branch, tag, or commit from the config's management page for a manual version.</p>
+<a class="btn btn-outline-secondary" href="{{url_for('asite.help_document', document='github-config')}}">Open guide</a>
+{%endblock%}

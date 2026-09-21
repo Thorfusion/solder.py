@@ -1,5 +1,6 @@
 import io
 import json
+from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -20,6 +21,25 @@ def upload(payload):
 
 
 class IntegrationManifestTests(unittest.TestCase):
+    def test_detailed_ai_example_is_a_valid_import_manifest(self):
+        example = (
+            Path(__file__).resolve().parents[1]
+            / "static"
+            / "examples"
+            / "integration-manifest.json"
+        )
+        parsed = IntegrationManifest.parse(
+            io.BytesIO(example.read_bytes())
+        )
+        payload = json.loads(example.read_text(encoding="utf-8"))
+
+        self.assertEqual(len(parsed.mods), 4)
+        self.assertIn("provider_rules", payload["instructions"])
+        self.assertEqual(
+            {entry["minecraft"]["mode"] for entry in payload["mods"][1:]},
+            {"FIXED", "EMBEDDED", "MANUAL"},
+        )
+
     def test_exports_configured_integrations_in_the_import_schema(self):
         connection = Mock()
         cursor = connection.cursor.return_value

@@ -14,7 +14,11 @@ import zipfile
 
 import requests
 
-from .compatibility import normalize_modloader, version_is_compatible
+from .compatibility import (
+    normalize_modloader,
+    resolved_minecraft_versions,
+    version_is_compatible,
+)
 from .database import Database
 from .mod import Mod, UploadVerificationError
 from .modversion import Modversion
@@ -39,6 +43,27 @@ class MCInstanceJarError(MCInstanceExportError):
 
 
 @dataclass(frozen=True)
+class JarOnlyMigrationResult:
+    """Summary from classifying legacy NONE packages as raw-JAR mods."""
+
+    scanned_mods: int
+    scanned_versions: int
+    converted_mods: int
+    converted_versions: int
+    failures: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class _PreparedJarArtifact:
+    version_id: int
+    jar_md5: str
+    jar_filesize: int
+    staged_path: Path
+    final_path: Path
+    object_key: str
+
+
+@dataclass(frozen=True)
 class MCInstanceBuild:
     id: int
     version: str
@@ -48,6 +73,21 @@ class MCInstanceBuild:
     modpack_name: str
     modpack_slug: str
     modloader: str | None = None
+    is_published: bool = False
+    private: bool = False
+    min_java: str | None = None
+
+    @property
+    def pack_name(self):
+        return self.modpack_name
+
+    @property
+    def pack_slug(self):
+        return self.modpack_slug
+
+    @property
+    def modloader_version(self):
+        return self.forge
 
 
 @dataclass(frozen=True)
@@ -62,8 +102,57 @@ class MCInstancePackage:
     side: str
     modtype: str
     optional: bool
+    id: int | None = None
+    optional_state: int = 0
+    membership_id: int | None = None
     modloader: str | None = None
     minecraft: str | None = None
+    minecraft_versions: tuple[str, ...] = ()
+    integration_provider: str | None = None
+    integration_project_id: str | None = None
+    integration_version_id: str | None = None
+    download_source_provider: str | None = None
+    download_source_url: str | None = None
+    download_source_filename: str | None = None
+    download_source_sha1: str | None = None
+    download_source_sha512: str | None = None
+    download_source_filesize: int | None = None
+
+    @property
+    def mod_slug(self):
+        return self.name
+
+    @property
+    def zip_md5(self):
+        return self.md5
+
+    @property
+    def jar_md5(self):
+        return self.jarmd5
+
+    @property
+    def jar_ready(self):
+        return bool(
+            str(self.modtype or "").upper() == "MOD"
+            and _MD5_RE.fullmatch(str(self.jarmd5 or "").strip())
+        )
+
+    @property
+    def jar_filename(self):
+        return f"{self.name}-{self.version}.jar"
+
+    @property
+    def zip_filename(self):
+        return f"{self.name}-{self.version}.zip"
+
+    @property
+    def is_native_modrinth(self) -> bool:
+        return bool(
+            str(self.modtype or "").upper() == "MOD"
+            and str(self.integration_provider or "").upper() == "MODRINTH"
+            and self.integration_project_id
+            and self.integration_version_id
+        )
 
 
 class MCInstanceJar:
@@ -72,6 +161,13 @@ class MCInstanceJar:
     @staticmethod
     def is_ready(jarmd5):
         return bool(_MD5_RE.fullmatch(str(jarmd5 or "").strip()))
+
+    @classmethod
+    def has_complete_metadata(cls, jarmd5, jarfilesize):
+        try:
+            return cls.is_ready(jarmd5) and int(jarfilesize) > 0
+        except (TypeError, ValueError):
+            return False
 
     @classmethod
     def create(
@@ -85,76 +181,309 @@ class MCInstanceJar:
     ):
         if mod is None or version is None or str(version.mod_id) != str(mod.id):
             raise MCInstanceJarError("The selected mod version no longer exists.")
-        if str(mod.modtype or "").upper() != "MOD":
-            raise MCInstanceJarError("Only MOD packages can be converted to MCIL JARs.")
-        if cls.is_ready(version.jarmd5):
-            return str(version.jarmd5).strip().lower()
-
-        MCInstanceExport._validate_artifact_component(mod.name, "mod slug")
-        MCInstanceExport._validate_artifact_component(version.version, "mod version")
-        expected_zip_md5 = str(version.md5 or "").strip().lower()
-        if not _MD5_RE.fullmatch(expected_zip_md5):
+        modtype = str(mod.modtype or "").upper()
+        if modtype not in {"MOD", "LAUNCHER"}:
             raise MCInstanceJarError(
-                "This version needs a valid ZIP MD5 before its MCIL JAR can be created. "
-                "Rehash the version first."
+                "Only MOD and LAUNCHER packages can provide raw JARs."
             )
-
         root = Path(local_repo_root).resolve()
-        destination_folder = (root / mod.name).resolve()
-        try:
-            destination_folder.relative_to(root)
-        except ValueError as error:
-            raise MCInstanceJarError("The mod has an invalid repository path.") from error
+        destination_folder = cls._destination_folder(root, mod.name)
         destination_folder.mkdir(parents=True, exist_ok=True)
-
-        zip_filename = f"{mod.name}-{version.version}.zip"
         jar_filename = f"{mod.name}-{version.version}.jar"
-        source_zip = destination_folder / zip_filename
-        final_jar = destination_folder / jar_filename
+        existing_jar = destination_folder / jar_filename
+        expected_jar_md5 = (
+            str(version.jarmd5).strip().lower()
+            if cls.is_ready(version.jarmd5)
+            else None
+        )
+
+        if existing_jar.is_file() and expected_jar_md5:
+            if existing_jar.stat().st_size > _MAX_PACKAGE_SIZE:
+                raise MCInstanceJarError(
+                    "The stored JAR exceeds the 512 MiB verification limit."
+                )
+            try:
+                Mod.verify_file_md5(
+                    existing_jar, expected_jar_md5, "the stored JAR"
+                )
+            except UploadVerificationError as error:
+                raise MCInstanceJarError(str(error)) from error
+            jar_filesize = existing_jar.stat().st_size
+            Modversion.update_modversion_jarmd5(
+                version.id, expected_jar_md5, jar_filesize
+            )
+            return expected_jar_md5
 
         try:
             with tempfile.TemporaryDirectory(
                 prefix=".solder-mcil-", dir=destination_folder
             ) as staging_directory:
-                staged_zip = Path(staging_directory, zip_filename)
-                if source_zip.is_file():
-                    if source_zip.stat().st_size > _MAX_PACKAGE_SIZE:
-                        raise MCInstanceJarError(
-                            "The stored ZIP exceeds the 512 MiB conversion limit."
-                        )
-                    shutil.copyfile(source_zip, staged_zip)
-                else:
-                    cls._download_package(
-                        repository_url, mod.name, zip_filename, staged_zip
+                prepared = cls._prepare_jar_artifact(
+                    mod.name,
+                    version.id,
+                    version.version,
+                    version.md5,
+                    repository_url,
+                    root,
+                    Path(staging_directory),
+                    allow_any_jar=modtype == "LAUNCHER",
+                )
+                if (
+                    expected_jar_md5
+                    and prepared.jar_md5 != expected_jar_md5
+                ):
+                    raise MCInstanceJarError(
+                        "The JAR extracted from the stored ZIP does not match "
+                        "the stored JAR MD5."
                     )
-
-                try:
-                    Mod.verify_file_md5(staged_zip, expected_zip_md5, "the stored ZIP")
-                    Mod.extract_jar_from_zip(
-                        staged_zip,
-                        output_name=jar_filename,
-                    )
-                except UploadVerificationError as error:
-                    raise MCInstanceJarError(str(error)) from error
-
-                staged_jar = Path(staging_directory, jar_filename)
-                jar_md5 = Mod.file_md5(staged_jar)
-                os.replace(staged_jar, final_jar)
+                os.replace(prepared.staged_path, prepared.final_path)
 
             if r2_client is not None and r2_bucket:
                 r2_client.upload_file(
-                    str(final_jar),
+                    str(prepared.final_path),
                     r2_bucket,
-                    f"mods/{mod.name}/{jar_filename}",
+                    prepared.object_key,
                     ExtraArgs={"ContentType": "application/jar"},
                 )
 
-            Modversion.update_modversion_jarmd5(version.id, jar_md5)
-            return jar_md5
+            Modversion.update_modversion_jarmd5(
+                version.id, prepared.jar_md5, prepared.jar_filesize
+            )
+            return prepared.jar_md5
         except MCInstanceJarError:
             raise
         except OSError as error:
             raise MCInstanceJarError("The MCIL JAR could not be stored.") from error
+
+    @staticmethod
+    def _destination_folder(root, mod_name):
+        MCInstanceExport._validate_artifact_component(mod_name, "mod slug")
+        destination_folder = (root / mod_name).resolve()
+        try:
+            destination_folder.relative_to(root)
+        except ValueError as error:
+            raise MCInstanceJarError("The mod has an invalid repository path.") from error
+        return destination_folder
+
+    @classmethod
+    def _prepare_jar_artifact(
+        cls,
+        mod_name,
+        version_id,
+        version_name,
+        expected_md5,
+        repository_url,
+        root,
+        staging_directory,
+        *,
+        require_only_jar=False,
+        allow_any_jar=False,
+    ):
+        MCInstanceExport._validate_artifact_component(version_name, "mod version")
+        expected_zip_md5 = str(expected_md5 or "").strip().lower()
+        if not _MD5_RE.fullmatch(expected_zip_md5):
+            raise MCInstanceJarError(
+                "This version needs a valid ZIP MD5 before its JAR can be created. "
+                "Verify the ZIP first."
+            )
+
+        destination_folder = cls._destination_folder(root, mod_name)
+        zip_filename = f"{mod_name}-{version_name}.zip"
+        jar_filename = f"{mod_name}-{version_name}.jar"
+        source_zip = destination_folder / zip_filename
+        staging_directory.mkdir(parents=True, exist_ok=True)
+        staged_zip = staging_directory / zip_filename
+
+        if source_zip.is_file():
+            if source_zip.stat().st_size > _MAX_PACKAGE_SIZE:
+                raise MCInstanceJarError(
+                    "The stored ZIP exceeds the 512 MiB conversion limit."
+                )
+            shutil.copyfile(source_zip, staged_zip)
+        else:
+            cls._download_package(
+                repository_url, mod_name, zip_filename, staged_zip
+            )
+
+        try:
+            Mod.verify_file_md5(staged_zip, expected_zip_md5, "the stored ZIP")
+            Mod.extract_jar_from_zip(
+                staged_zip,
+                output_name=jar_filename,
+                require_only_jar=require_only_jar,
+                allow_any_jar=allow_any_jar,
+            )
+        except UploadVerificationError as error:
+            raise MCInstanceJarError(str(error)) from error
+
+        staged_jar = staging_directory / jar_filename
+        return _PreparedJarArtifact(
+            version_id=int(version_id),
+            jar_md5=Mod.file_md5(staged_jar),
+            jar_filesize=staged_jar.stat().st_size,
+            staged_path=staged_jar,
+            final_path=destination_folder / jar_filename,
+            object_key=f"mods/{mod_name}/{jar_filename}",
+        )
+
+    @staticmethod
+    def _load_none_mod_versions():
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                """SELECT mods.id AS mod_id, mods.name AS mod_name,
+                          modversions.id AS version_id,
+                          modversions.version AS version_name,
+                          modversions.md5 AS zip_md5
+                   FROM mods
+                   LEFT JOIN modversions ON modversions.mod_id = mods.id
+                   WHERE COALESCE(mods.modtype, 'NONE') = 'NONE'
+                   ORDER BY mods.id ASC, modversions.id ASC"""
+            )
+            return cur.fetchall() or []
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
+    def _commit_none_mod(mod_id, prepared):
+        """Commit all JAR hashes only if the NONE mod was unchanged while scanned."""
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                "SELECT modtype FROM mods WHERE id = %s FOR UPDATE",
+                (mod_id,),
+            )
+            mod_row = cur.fetchone()
+            if mod_row is None or str(mod_row.get("modtype") or "NONE").upper() != "NONE":
+                raise MCInstanceJarError(
+                    "The mod changed while it was being scanned; run the scan again."
+                )
+
+            cur.execute(
+                "SELECT id FROM modversions WHERE mod_id = %s ORDER BY id FOR UPDATE",
+                (mod_id,),
+            )
+            current_ids = [int(row["id"]) for row in (cur.fetchall() or [])]
+            prepared_ids = sorted(item.version_id for item in prepared)
+            if current_ids != prepared_ids:
+                raise MCInstanceJarError(
+                    "The mod versions changed while they were being scanned; "
+                    "run the scan again."
+                )
+
+            for item in prepared:
+                cur.execute(
+                    """UPDATE modversions
+                       SET jarmd5 = %s, jarfilesize = %s
+                       WHERE id = %s""",
+                    (item.jar_md5, item.jar_filesize, item.version_id),
+                )
+            cur.execute(
+                """UPDATE mods SET modtype = 'MOD'
+                   WHERE id = %s AND COALESCE(modtype, 'NONE') = 'NONE'""",
+                (mod_id,),
+            )
+            if cur.rowcount != 1:
+                raise MCInstanceJarError(
+                    "The mod changed while it was being scanned; run the scan again."
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+
+    @classmethod
+    def promote_jar_only_none_mods(
+        cls,
+        repository_url,
+        local_repo_root="./mods/",
+        r2_client=None,
+        r2_bucket=None,
+    ):
+        """Convert NONE mods whose every ZIP contains only one ``mods/*.jar``."""
+        rows = cls._load_none_mod_versions()
+        grouped = {}
+        for row in rows:
+            entry = grouped.setdefault(
+                int(row["mod_id"]),
+                {"name": row["mod_name"], "versions": []},
+            )
+            if row.get("version_id") is not None:
+                entry["versions"].append(row)
+
+        root = Path(local_repo_root).resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        scanned_versions = sum(len(entry["versions"]) for entry in grouped.values())
+        converted_mods = 0
+        converted_versions = 0
+        failures = []
+
+        for mod_id, entry in grouped.items():
+            mod_name = entry["name"]
+            versions = entry["versions"]
+            if not versions:
+                failures.append(f"{mod_name}: the mod has no versions.")
+                continue
+            try:
+                prepared = []
+                with tempfile.TemporaryDirectory(
+                    prefix=".solder-none-scan-", dir=root
+                ) as staging_root:
+                    for row in versions:
+                        prepared.append(
+                            cls._prepare_jar_artifact(
+                                mod_name,
+                                row["version_id"],
+                                row["version_name"],
+                                row["zip_md5"],
+                                repository_url,
+                                root,
+                                Path(staging_root, str(row["version_id"])),
+                                require_only_jar=True,
+                            )
+                        )
+
+                    if r2_client is not None and r2_bucket:
+                        try:
+                            for item in prepared:
+                                r2_client.upload_file(
+                                    str(item.staged_path),
+                                    r2_bucket,
+                                    item.object_key,
+                                    ExtraArgs={"ContentType": "application/jar"},
+                                )
+                        except Exception as error:
+                            raise MCInstanceJarError(
+                                "A converted JAR could not be uploaded to object storage."
+                            ) from error
+
+                    for item in prepared:
+                        item.final_path.parent.mkdir(parents=True, exist_ok=True)
+                        os.replace(item.staged_path, item.final_path)
+
+                cls._commit_none_mod(mod_id, prepared)
+                converted_mods += 1
+                converted_versions += len(prepared)
+            except MCInstanceJarError as error:
+                failures.append(f"{mod_name}: {error}")
+            except OSError:
+                failures.append(f"{mod_name}: a converted JAR could not be stored.")
+            except Exception:
+                failures.append(f"{mod_name}: the database update failed.")
+
+        return JarOnlyMigrationResult(
+            scanned_mods=len(grouped),
+            scanned_versions=scanned_versions,
+            converted_mods=converted_mods,
+            converted_versions=converted_versions,
+            failures=tuple(failures),
+        )
 
     @staticmethod
     def _download_package(repository_location, mod_name, filename, destination):
@@ -225,6 +554,9 @@ class MCInstanceExport:
                           builds.minecraft,
                           builds.forge,
                           builds.modloader AS build_modloader,
+                          builds.is_published,
+                          builds.private,
+                          builds.min_java,
                           modpacks.id AS modpack_id,
                           modpacks.name AS modpack_name,
                           modpacks.slug AS modpack_slug,
@@ -234,11 +566,35 @@ class MCInstanceExport:
                           mods.description,
                           mods.side,
                           mods.modtype,
+                          mods.integration_provider,
+                          mods.integration_project_id,
+                          build_modversion.id AS membership_id,
+                          modversions.id AS modversion_id,
                           modversions.version AS mod_version,
                           modversions.mcversion AS mod_minecraft,
+                          (SELECT GROUP_CONCAT(
+                                      compatibility.minecraft_version
+                                      ORDER BY compatibility.minecraft_version
+                                      SEPARATOR ',')
+                             FROM modversion_minecraft_versions compatibility
+                            WHERE compatibility.modversion_id = modversions.id)
+                              AS mod_minecraft_versions,
                           modversions.md5,
                           modversions.jarmd5,
                           modversions.modloader,
+                          modversions.integration_version_id,
+                          modversion_download_sources.provider
+                              AS download_source_provider,
+                          modversion_download_sources.url
+                              AS download_source_url,
+                          modversion_download_sources.filename
+                              AS download_source_filename,
+                          modversion_download_sources.sha1
+                              AS download_source_sha1,
+                          modversion_download_sources.sha512
+                              AS download_source_sha512,
+                          modversion_download_sources.filesize
+                              AS download_source_filesize,
                           build_modversion.optional
                    FROM builds
                    INNER JOIN modpacks ON builds.modpack_id = modpacks.id
@@ -247,6 +603,10 @@ class MCInstanceExport:
                    LEFT JOIN modversions
                        ON build_modversion.modversion_id = modversions.id
                    LEFT JOIN mods ON modversions.mod_id = mods.id
+                   LEFT JOIN modversion_download_sources
+                       ON modversion_download_sources.modversion_id =
+                          modversions.id
+                      AND modversion_download_sources.provider = 'MODRINTH'
                    WHERE builds.id = %s
                    ORDER BY mods.name ASC, modversions.id ASC""",
                 (build_id,),
@@ -271,9 +631,13 @@ class MCInstanceExport:
             modloader=first.get("build_modloader") or (
                 "FORGE" if first["forge"] else None
             ),
+            is_published=bool(first.get("is_published")),
+            private=bool(first.get("private")),
+            min_java=first.get("min_java"),
         )
         packages = [
             MCInstancePackage(
+                id=row["modversion_id"],
                 mod_id=row["mod_id"],
                 name=row["mod_name"],
                 pretty_name=row["pretty_name"] or row["mod_name"],
@@ -283,9 +647,24 @@ class MCInstanceExport:
                 jarmd5=row["jarmd5"],
                 side=row["side"] or "BOTH",
                 modtype=row["modtype"] or "MOD",
-                optional=bool(row["optional"]),
+                optional=int(row["optional"] or 0) == 1,
+                optional_state=int(row["optional"] or 0),
+                membership_id=row.get("membership_id"),
                 modloader=row.get("modloader"),
                 minecraft=row.get("mod_minecraft"),
+                minecraft_versions=resolved_minecraft_versions(
+                    row.get("mod_minecraft"),
+                    row.get("mod_minecraft_versions"),
+                ),
+                integration_provider=row.get("integration_provider"),
+                integration_project_id=row.get("integration_project_id"),
+                integration_version_id=row.get("integration_version_id"),
+                download_source_provider=row.get("download_source_provider"),
+                download_source_url=row.get("download_source_url"),
+                download_source_filename=row.get("download_source_filename"),
+                download_source_sha1=row.get("download_source_sha1"),
+                download_source_sha512=row.get("download_source_sha512"),
+                download_source_filesize=row.get("download_source_filesize"),
             )
             for row in rows
             if row["mod_id"] is not None
@@ -295,15 +674,38 @@ class MCInstanceExport:
     @classmethod
     def create(cls, build_id, public_repo_url, local_repo_root="./mods/"):
         build, packages = cls.load(build_id)
-        return cls.render(build, packages, public_repo_url, local_repo_root)
+        from .advanced_optional import AdvancedOptional
+
+        return cls.render(
+            build,
+            packages,
+            public_repo_url,
+            local_repo_root,
+            optional_groups=AdvancedOptional.get_active_groups(build_id),
+        )
 
     @classmethod
-    def render(cls, build, packages, public_repo_url, local_repo_root="./mods/"):
+    def render(
+        cls,
+        build,
+        packages,
+        public_repo_url,
+        local_repo_root="./mods/",
+        *,
+        include_modloader=True,
+        native_files=None,
+        optional_groups=(),
+    ):
         if not public_repo_url:
             raise MCInstanceExportError(
                 "PUBLIC_REPO_LOCATION must be configured before exporting MCInstance files."
             )
 
+        native_files = native_files or {}
+        grouped_items = {}
+        for group in optional_groups or ():
+            for item in group.items:
+                grouped_items[item.build_modversion_id] = (group, item)
         archive_buffer = tempfile.SpooledTemporaryFile(
             max_size=_SPOOL_MEMORY_LIMIT,
             mode="w+b",
@@ -323,7 +725,10 @@ class MCInstanceExport:
             with zipfile.ZipFile(
                 archive_buffer, "w", compression=zipfile.ZIP_DEFLATED
             ) as target:
-                target.writestr("metadata.packconfig", cls._metadata(build))
+                target.writestr(
+                    "metadata.packconfig",
+                    cls._metadata(build, include_modloader=include_modloader),
+                )
                 for directory in (
                     "overrides/",
                     "client-overrides/",
@@ -332,8 +737,18 @@ class MCInstanceExport:
                     target.writestr(directory, b"")
 
                 for package in packages:
+                    grouped = grouped_items.get(
+                        getattr(package, "membership_id", None)
+                    )
+                    optional_choice = package.optional or grouped is not None
+                    if (
+                        int(getattr(package, "optional_state", int(package.optional)))
+                        == 2
+                        and grouped is None
+                    ):
+                        continue
                     modtype = package.modtype.upper()
-                    if modtype in {"MCIL", "LAUNCHER"}:
+                    if modtype in {"BOOTSTRAP", "MCIL", "LAUNCHER"}:
                         continue
 
                     if not version_is_compatible(
@@ -341,13 +756,14 @@ class MCInstanceExport:
                         package.modloader,
                         build.minecraft,
                         build.modloader,
+                        package.minecraft_versions,
                     ):
                         raise MCInstanceExportError(
                             f'Package "{package.pretty_name}" is not compatible '
                             "with the build's modloader."
                         )
 
-                    if package.optional and cls._side(package.side) == "SERVER":
+                    if optional_choice and cls._side(package.side) == "SERVER":
                         raise MCInstanceExportError(
                             f'Optional package "{package.pretty_name}" is server-only. '
                             "MCInstanceLoader 2.7 only presents optional choices on clients."
@@ -362,13 +778,15 @@ class MCInstanceExport:
                                 resource_name,
                                 raw_hash,
                                 public_repo_url,
+                                native_files.get(package.integration_version_id),
+                                optional=optional_choice,
                             )
                         )
-                        if package.optional:
-                            optionals.append((package, resource_name))
+                        if optional_choice:
+                            optionals.append((package, resource_name, grouped))
                         continue
 
-                    if package.optional:
+                    if optional_choice:
                         raise MCInstanceExportError(
                             f'Optional package "{package.pretty_name}" needs a verified raw JAR. '
                             "MCInstanceLoader cannot toggle the contents of a bundled Solder ZIP."
@@ -383,7 +801,10 @@ class MCInstanceExport:
                     )
 
                 target.writestr("resources.packconfig", "\n".join(resources))
-                target.writestr("optionals.packconfig", cls._optionals(optionals))
+                target.writestr(
+                    "optionals.packconfig",
+                    cls._optionals(optionals, optional_groups),
+                )
         except Exception:
             archive_buffer.close()
             raise
@@ -397,20 +818,23 @@ class MCInstanceExport:
         return " ".join(str(value or "").replace("#", "-").splitlines()).strip()
 
     @classmethod
-    def _metadata(cls, build):
+    def _metadata(cls, build, include_modloader=True):
         modloader = normalize_modloader(build.modloader)
         if modloader is None:
             modloader = "FORGE"
-        return "\n".join(
+        lines = ["[file]", "formatVersion = 1", ""]
+        if include_modloader:
+            lines.extend(
+                (
+                    "[modloader]",
+                    f"type = {modloader.lower()}",
+                    f"version = {cls._clean(build.forge)}",
+                    f"minecraftVersion = {cls._clean(build.minecraft)}",
+                    "",
+                )
+            )
+        lines.extend(
             (
-                "[file]",
-                "formatVersion = 1",
-                "",
-                "[modloader]",
-                f"type = {modloader.lower()}",
-                f"version = {cls._clean(build.forge)}",
-                f"minecraftVersion = {cls._clean(build.minecraft)}",
-                "",
                 "[pack]",
                 f"name = {cls._clean(build.modpack_name)}",
                 "author = solder.py",
@@ -419,13 +843,26 @@ class MCInstanceExport:
                 "",
             )
         )
+        return "\n".join(lines)
 
     @classmethod
-    def _resource(cls, package, resource_name, raw_hash, public_repo_url):
+    def _resource(
+        cls,
+        package,
+        resource_name,
+        raw_hash,
+        public_repo_url,
+        native_file=None,
+        optional=None,
+    ):
         cls._validate_artifact_component(package.name, "mod slug")
         cls._validate_artifact_component(package.version, "mod version")
         jar_name = f"{package.name}-{package.version}.jar"
-        url = cls._artifact_url(public_repo_url, package.name, jar_name)
+        url = (
+            native_file.download_url
+            if native_file is not None
+            else cls._artifact_url(public_repo_url, package.name, jar_name)
+        )
         side = cls._side(package.side).lower()
         lines = [
             f"[{resource_name}]",
@@ -433,33 +870,96 @@ class MCInstanceExport:
             f"destination = mods/{jar_name}",
             f"url = {url}",
             f"side = {side}",
-            f"optional = {'true' if package.optional else 'false'}",
+            "optional = "
+            + (
+                "true"
+                if (package.optional if optional is None else optional)
+                else "false"
+            ),
             f"MD5 = {raw_hash}",
             "",
         ]
         return "\n".join(lines)
 
     @classmethod
-    def _optionals(cls, optionals):
+    def _optionals(cls, optionals, optional_groups=()):
         if not optionals:
             return ""
 
-        lines = [
-            "[solder-optionals]",
-            "title = Optional mods",
-            "minchoices = 0",
-            f"maxchoices = {len(optionals)}",
-        ]
-        for index, (package, resource_name) in enumerate(optionals, 1):
+        from .advanced_optional import SINGLE
+
+        rendered_by_group = {}
+        ungrouped = []
+        for package, resource_name, grouped in optionals:
+            if grouped is None:
+                ungrouped.append((package, resource_name, False))
+            else:
+                group, item = grouped
+                rendered_by_group.setdefault(group.id, []).append(
+                    (
+                        package,
+                        resource_name,
+                        item.selected_by_default,
+                        item.sort_order,
+                        item.id,
+                    )
+                )
+
+        lines = []
+        for group in optional_groups or ():
+            choices = rendered_by_group.get(group.id, [])
+            if not choices:
+                continue
+            choices.sort(key=lambda choice: (choice[3], choice[4]))
+            if group.selection_type == SINGLE:
+                if sum(1 for choice in choices if choice[2]) != 1:
+                    raise MCInstanceExportError(
+                        f'Optional group "{group.name}" must have exactly one default.'
+                    )
+                minimum = maximum = 1
+            else:
+                minimum, maximum = 0, len(choices)
             lines.extend(
                 (
-                    f"option{index}.name = {cls._clean(package.pretty_name)}",
-                    f"option{index}.description = {cls._clean(package.description)}",
-                    "option%d.default = false" % index,
-                    f"option{index}.resources = {resource_name}",
+                    f"[solder-optionals-{group.id}]",
+                    f"title = {cls._clean(group.name)}",
+                    f"minchoices = {minimum}",
+                    f"maxchoices = {maximum}",
                 )
             )
-        lines.append("")
+            for index, choice in enumerate(choices, 1):
+                package, resource_name, default = choice[:3]
+                lines.extend(
+                    (
+                        f"option{index}.name = {cls._clean(package.pretty_name)}",
+                        f"option{index}.description = {cls._clean(package.description)}",
+                        f"option{index}.default = {'true' if default else 'false'}",
+                        f"option{index}.resources = {resource_name}",
+                    )
+                )
+            lines.append("")
+
+        if ungrouped:
+            lines.extend(
+                (
+                    "[solder-optionals]",
+                    "title = Optional mods",
+                    "minchoices = 0",
+                    f"maxchoices = {len(ungrouped)}",
+                )
+            )
+            for index, (package, resource_name, default) in enumerate(
+                ungrouped, 1
+            ):
+                lines.extend(
+                    (
+                        f"option{index}.name = {cls._clean(package.pretty_name)}",
+                        f"option{index}.description = {cls._clean(package.description)}",
+                        f"option{index}.default = {'true' if default else 'false'}",
+                        f"option{index}.resources = {resource_name}",
+                    )
+                )
+            lines.append("")
         return "\n".join(lines)
 
     @classmethod
@@ -470,6 +970,7 @@ class MCInstanceExport:
         local_repo_root,
         public_repo_url,
         written_paths,
+        destination_prefixes=None,
     ):
         cls._validate_artifact_component(package.name, "mod slug")
         cls._validate_artifact_component(package.version, "mod version")
@@ -485,11 +986,14 @@ class MCInstanceExport:
                         f'The stored ZIP for "{package.pretty_name}" does not match its MD5.'
                     )
 
-            prefix = {
+            prefixes = destination_prefixes or {
                 "BOTH": "overrides",
                 "CLIENT": "client-overrides",
                 "SERVER": "server-overrides",
-            }[cls._side(package.side)]
+            }
+            prefix = prefixes.get(cls._side(package.side))
+            if prefix is None:
+                return
 
             try:
                 source = zipfile.ZipFile(package_file, "r")
@@ -518,7 +1022,11 @@ class MCInstanceExport:
                             raise MCInstanceExportError(
                                 f'The stored package for "{package.pretty_name}" contains a symbolic link.'
                             )
-                        destination = f"{prefix}/{relative.as_posix()}"
+                        destination = (
+                            f"{prefix}/{relative.as_posix()}"
+                            if prefix
+                            else relative.as_posix()
+                        )
                         if destination in written_paths:
                             raise MCInstanceExportError(
                                 f'Multiple packages export the same path: "{destination}".'
@@ -613,7 +1121,16 @@ class MCInstanceExport:
             mode="w+b",
         )
         try:
-            with requests.get(url, stream=True, timeout=(5, 60)) as response:
+            with requests.get(
+                url,
+                stream=True,
+                allow_redirects=False,
+                timeout=(5, 60),
+            ) as response:
+                if 300 <= response.status_code < 400:
+                    raise MCInstanceExportError(
+                        "The package repository returned an unexpected redirect."
+                    )
                 response.raise_for_status()
                 content_length = int(response.headers.get("content-length", 0))
                 if content_length > _MAX_PACKAGE_SIZE:

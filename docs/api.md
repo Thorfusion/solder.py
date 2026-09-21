@@ -18,10 +18,13 @@ The optional authenticated write routes are documented separately in the
 [write API reference](write-api.md). Unknown API routes and unsupported methods
 return JSON rather than the management interface's HTML error page.
 
-Packwiz and FileDirector are public file formats rather than Technic JSON API
-routes. Their paths, visibility rules, and enable switches are covered in the
-[distribution-format guide](distribution-formats.md). They are registered on
-the read-only application and remain available when `API_ONLY=True`.
+Packwiz, FileDirector, and Modpack Director are public file formats rather
+than Technic JSON API routes. Authenticated build management can also create Modrinth and CurseForge
+archives that bootstrap their non-native files from Solder. Their paths,
+visibility rules, and enable switches are covered in the
+[distribution-format guide](distribution-formats.md). Public Director
+bootstrap files are registered on the read-only application and remain
+available when `API_ONLY=True`.
 
 Values placed in a path or query string must be URL encoded.
 
@@ -73,9 +76,12 @@ Example response:
 ```json
 {
   "api": "solder.py",
-  "version": "v1.9.0",
+  "version": "v1.10.0",
   "stream": "DEV",
   "capabilities": {
+    "advanced_optionals": true,
+    "bootstrap_manifest": true,
+    "bootstrap_schema": 1,
     "build_channels": true,
     "build_comparison": true,
     "optional_manifests": true,
@@ -157,6 +163,8 @@ Example response:
   "recommended": "2.0",
   "latest": "2.1",
   "capabilities": {
+    "advanced_optionals": true,
+    "bootstrap_manifest": true,
     "optional": true,
     "server": true
   },
@@ -222,6 +230,15 @@ manifest shape:
 The default target is the client and optional packages are excluded. The mods
 are returned in deterministic natural-name order. `java` is a free-form string,
 so complete Java versions such as `1.8.0_51` are preserved unchanged.
+
+When a public build explicitly enables SolderPy Loader for Technic, solder.py
+adds one internal `solderpy-loader-bootstrap` entry containing SolderPy Loader,
+Relauncher, and the build configuration. `LAUNCHER` and `BOOTSTRAP` entries
+remain in the Technic response; every other package is supplied by the
+dedicated bootstrap API before mod discovery. If that integration becomes
+inactive, ordinary Technic manifest delivery applies again. Activating it also
+disables the modpack's legacy optional shadow build so Technic receives only
+one optional-delivery mechanism.
 
 `java_runtime` is the nullable per-build Mojang runtime override supported by
 current Technic Launcher releases. Accepted component names are `jre-legacy`
@@ -372,6 +389,34 @@ installed package if it wants to remove obsolete extracted files safely.
 The manifest hash identifies the target manifest and does not include the
 optional `changes` block.
 
+## Get a dedicated bootstrap manifest
+
+```http
+GET /api/modpack/{slug}/{build}/bootstrap
+GET /api/modpack/{slug}/recommended/bootstrap?from={installed_build}
+GET /api/modpack/{slug}/latest/bootstrap?target=server
+```
+
+This additive solder.py endpoint is intended for a dedicated Solder-aware
+bootstrap mod. Unlike the Technic manifest, it returns every target-compatible
+package state (`0` required, `1` optional, and `2` excluded), named advanced
+optional groups, defaults, dependencies, stable download instructions, and
+whether the bootstrap should manage each package. It always returns the source
+build data, even when the normal Technic response delegates delivery to
+SolderPy Loader.
+
+`MOD` packages prefer their canonical raw `.jar` repository URL and verified
+JAR MD5. Their download instruction uses `format: "jar"` and supplies the
+target path under `mods/`. If a legacy mod has no verified raw JAR, its normal
+Solder ZIP is returned instead so the build remains usable, at the cost of ZIP
+extraction during bootstrap. Non-mod content continues to use its Solder ZIP.
+
+The route supports `cid`, `k`, `target`, and `from`, as documented in the
+[dedicated bootstrap API guide](bootstrap-api.md). It returns an `ETag` and
+honors `If-None-Match`. Clients must discover `bootstrap_manifest` and support
+the reported `bootstrap_schema` before using it. The ordinary
+`/api/modpack/{slug}/{build}` response remains unchanged for Technic clients.
+
 ## List mods
 
 ```http
@@ -472,6 +517,14 @@ is unchanged.
 
 ## Metadata values
 
+A mod version may target more than one Minecraft version or modloader. A
+single Minecraft version remains in the legacy-compatible
+`minecraft`/`mcversion` field; a multi-version row uses the stable value
+`MULTI`. Read `minecraft_versions` for the concrete compatibility list.
+`modloader` retains its comma-separated compatibility string and
+`modloaders` exposes the same values as an array. A null/empty set remains
+universal.
+
 `side` is one of:
 
 - `CLIENT`
@@ -484,8 +537,23 @@ is unchanged.
 - `LAUNCHER`
 - `RES`
 - `CONFIG`
-- `MCIL`
+- `BOOTSTRAP`
 - `NONE`
+
+`LAUNCHER` is the legacy Technic modloader/bootstrap package type. Its stored
+and API value remains `LAUNCHER` for Technic compatibility. These entries remain
+ordinary downloadable entries in the default Technic manifest. For legacy
+packs such as Minecraft 1.7.10, this is commonly the Solder ZIP containing
+`bin/modpack.jar` or `bin/version.json`; Technic Launcher downloads it from the
+entry's repository URL. The build-level `forge` value declares the loader
+version alongside it. MRPack and CurseForge archive exports intentionally
+exclude this Technic-specific package because those launchers install their
+declared loader.
+
+`BOOTSTRAP` identifies an initial downloader/bootstrap package that must be
+installed by the launcher and must not replace itself through the bootstrap
+API. Existing database values named `MCIL` are migrated to `BOOTSTRAP`; MCIL
+remains the name of the MCInstance Loader export format, not a package type.
 
 ## Errors
 
@@ -503,6 +571,7 @@ Common status codes:
 | `400` | Invalid `target`/`optional` value or conflicting build variant arguments. |
 | `404` | Resource absent or inaccessible, comparison build absent, or requested pack capability disabled. |
 | `405` | HTTP method is not supported by the route. |
+| `422` | Stored data cannot be represented by the bootstrap manifest contract. |
 
 ## Caching
 
@@ -512,8 +581,10 @@ cache key, so client, server, optional and credentialed responses cannot share a
 cache entry accidentally.
 
 Extended manifests include a stable digest and `ETag`, allowing consumers to
-detect unchanged content. The API does not currently promise conditional `304`
-responses, so clients should be prepared to receive the JSON body each time.
+detect unchanged content. The dedicated bootstrap endpoint honors
+`If-None-Match` and may return `304 Not Modified`; other read routes do not
+currently promise conditional responses, so clients should be prepared to
+receive their JSON body each time.
 
 ## Suggested server update flow
 

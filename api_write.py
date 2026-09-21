@@ -5,7 +5,7 @@ import re
 from urllib.parse import urlparse
 
 import boto3
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 from mysql.connector import IntegrityError
 
 from api import clear_api_caches
@@ -15,6 +15,7 @@ from models.build import (
     InvalidJavaRuntimeError,
     normalize_java_runtime,
 )
+from models.cache_revision import CacheRevision
 from models.common import (
     R2_ACCESS_KEY,
     R2_BUCKET,
@@ -24,7 +25,14 @@ from models.common import (
     UPLOAD_FOLDER,
     md5_repo_url,
 )
-from models.compatibility import InvalidModloaderError, normalize_modloader
+from models.compatibility import (
+    compatibility_values,
+    InvalidModloaderError,
+    minecraft_version_storage,
+    normalize_minecraft_versions,
+    normalize_modloader,
+    normalize_modloaders,
+)
 from models.integration import (
     IntegrationError,
     MAVEN,
@@ -43,7 +51,7 @@ from models.maven import (
     MavenVersion,
 )
 from models.mcinstance import MCInstanceExportError, MCInstanceJar
-from models.mod import Mod
+from models.mod import Mod, normalize_modtype
 from models.mod_dependency import ModDependency
 from models.modversion import Modversion
 from models.write_api import WriteApiProblem, WriteApiStore
@@ -54,7 +62,7 @@ _MISSING = object()
 _SLUG = re.compile(r"^[A-Za-z0-9_-]+$")
 _MD5 = re.compile(r"^[0-9a-fA-F]{32}$")
 _SIDES = {"CLIENT", "SERVER", "BOTH"}
-_MOD_TYPES = {"MOD", "LAUNCHER", "RES", "CONFIG", "MCIL", "NONE"}
+_MOD_TYPES = {"MOD", "LAUNCHER", "RES", "CONFIG", "BOOTSTRAP", "MCIL", "NONE"}
 
 R2 = boto3.client(
     "s3",
@@ -120,10 +128,12 @@ def _boolean(data, field, default=_MISSING):
     _validation(field, f"The {field} field must be true or false.")
 
 
-def _integer(data, field, default=_MISSING, minimum=None):
+def _integer(data, field, default=_MISSING, minimum=None, nullable=False):
     if field not in data:
         return default
     value = data[field]
+    if value is None and nullable:
+        return None
     if isinstance(value, (bool, float)):
         _validation(field, f"The {field} field must be an integer.")
     if isinstance(value, str) and not re.fullmatch(r"[+-]?\d+", value.strip()):
@@ -181,11 +191,12 @@ def _md5(data, field, *, required=False, nullable=False):
     return value.lower()
 
 
-def _loader(data, field="modloader", default=_MISSING):
+def _loader(data, field="modloader", default=_MISSING, *, multiple=False):
     if field not in data:
         return default
     try:
-        return normalize_modloader(data[field])
+        normalizer = normalize_modloaders if multiple else normalize_modloader
+        return normalizer(data[field])
     except InvalidModloaderError as error:
         _validation(field, str(error))
 
@@ -309,9 +320,18 @@ def _mod_json(row):
 def _modversion_json(row):
     fields = (
         "id", "mod_id", "version", "mcversion", "modloader", "md5", "jarmd5",
-        "filesize", "integration_version_id", "created_at", "updated_at",
+        "jarfilesize", "jar_url_override", "filesize",
+        "integration_version_id", "created_at", "updated_at",
     )
-    return {field: row.get(field) for field in fields}
+    result = {field: row.get(field) for field in fields}
+    result["minecraft_versions"] = list(
+        row.get("minecraft_versions")
+        or compatibility_values(result["mcversion"])
+    )
+    result["modloaders"] = list(
+        compatibility_values(result["modloader"], modloaders=True)
+    )
+    return result
 
 
 def _client_json(row):
@@ -345,6 +365,8 @@ def handle_integration_problem(error):
 
 
 def _written(payload, status=200):
+    if not current_app.testing:
+        CacheRevision.bump()
     clear_api_caches()
     return _response(payload, status)
 
@@ -581,11 +603,12 @@ def _mod_values(data, *, partial=False):
         "side",
         _enum(data, "side", _SIDES, _MISSING if partial else "BOTH"),
     )
-    _include(
-        values,
-        "modtype",
-        _enum(data, "modtype", _MOD_TYPES, _MISSING if partial else "MOD"),
+    modtype = _enum(
+        data, "modtype", _MOD_TYPES, _MISSING if partial else "MOD"
     )
+    if modtype is not _MISSING:
+        modtype = normalize_modtype(modtype)
+    _include(values, "modtype", modtype)
     return values
 
 
@@ -622,9 +645,41 @@ def _modversion_values(data, *, partial=False):
         _include(values, "version", _string(data, "version", required=True))
     _include(values, "md5", _md5(data, "md5", required=not partial))
     _include(values, "jarmd5", _md5(data, "jarmd5", nullable=True))
+    _include(
+        values,
+        "jarfilesize",
+        _integer(data, "jarfilesize", minimum=0, nullable=True),
+    )
+    if "jarmd5" in values and "jarfilesize" not in values:
+        # A changed JAR hash invalidates the size recorded for the old JAR.
+        values["jarfilesize"] = None
+    if (
+        not partial
+        and values.get("jarfilesize") is not None
+        and not values.get("jarmd5")
+    ):
+        _validation("jarfilesize", "A JAR filesize requires a JAR MD5.")
+    if "jar_url_override" in data:
+        override = _string(
+            data,
+            "jar_url_override",
+            nullable=True,
+            maximum=2048,
+        )
+        try:
+            override = Modversion.normalize_jar_url_override(override)
+        except ValueError as error:
+            _validation("jar_url_override", str(error))
+        _include(values, "jar_url_override", override)
     _include(values, "filesize", _integer(data, "filesize", minimum=0))
-    _include(values, "mcversion", _string(data, "mcversion", nullable=True))
-    _include(values, "modloader", _loader(data))
+    if "mcversion" in data:
+        try:
+            minecraft = normalize_minecraft_versions(data["mcversion"])
+            minecraft_version_storage(minecraft)
+        except ValueError as error:
+            _validation("mcversion", str(error))
+        _include(values, "mcversion", minecraft)
+    _include(values, "modloader", _loader(data, multiple=True))
     return values
 
 
@@ -636,9 +691,15 @@ def create_modversion(slug):
         raise ApiRequestProblem(
             "Provider-managed versions must be imported through the integration API."
         )
-    row = WriteApiStore.create_modversion(
-        mod["id"], _modversion_values(_payload())
-    )
+    values = _modversion_values(_payload())
+    if values.get("jar_url_override") and not Modversion.JAR_MD5_PATTERN.fullmatch(
+        str(values.get("jarmd5") or "")
+    ):
+        _validation(
+            "jar_url_override",
+            "A JAR override requires a verified JAR MD5.",
+        )
+    row = WriteApiStore.create_modversion(mod["id"], values)
     return _written(_modversion_json(row), 201)
 
 
@@ -647,8 +708,20 @@ def update_modversion(slug, version):
     _permission("mods_manage")
     mod = _mod(slug)
     current = _modversion(mod, version)
+    values = _modversion_values(_payload(), partial=True)
+    effective_override = values.get(
+        "jar_url_override", current.get("jar_url_override")
+    )
+    effective_jar_md5 = values.get("jarmd5", current.get("jarmd5"))
+    if effective_override and not Modversion.JAR_MD5_PATTERN.fullmatch(
+        str(effective_jar_md5 or "")
+    ):
+        _validation(
+            "jar_url_override",
+            "A JAR override requires a verified JAR MD5.",
+        )
     row = WriteApiStore.update_modversion(
-        current, _modversion_values(_payload(), partial=True)
+        current, values
     )
     return _written(_modversion_json(row))
 
@@ -791,6 +864,9 @@ def _maven_artifact_json(artifact):
         "mod_id": artifact.mod_id,
         "created_at": artifact.created_at,
         "updated_at": artifact.updated_at,
+        "solderpy_loader_direct": bool(
+            getattr(artifact, "solderpy_loader_direct", False)
+        ),
     }
 
 
@@ -889,6 +965,10 @@ def create_maven_artifact():
             None if (link := _url(data, "link")) is _MISSING else link,
             _enum(data, "side", _SIDES, "BOTH"),
         )
+        if _boolean(data, "solderpy_loader_direct", False):
+            artifact = MavenArtifact.update_solderpy_loader_direct(
+                artifact.id, True
+            )
         versions = MavenCatalog.refresh(artifact)
         mod, _created = ModIntegration.import_project(
             MAVEN, str(artifact.id), g.write_principal.user_id
@@ -938,22 +1018,44 @@ def update_maven_artifact(artifact_id):
     _permission("mods_manage")
     artifact = _maven_artifact(artifact_id)
     data = _payload()
-    version_mode = _enum(
-        data, "version_mode", set(MAVEN_VERSION_MODES), artifact.version_mode
+    if any(
+        field in data
+        for field in (
+            "version_mode",
+            "version_pattern",
+            "fixed_minecraft",
+            "modloader",
+        )
+    ):
+        version_mode = _enum(
+            data,
+            "version_mode",
+            set(MAVEN_VERSION_MODES),
+            artifact.version_mode,
+        )
+        version_pattern = _string(data, "version_pattern")
+        fixed_minecraft = _string(data, "fixed_minecraft", nullable=True)
+        artifact = MavenArtifact.update_rule(
+            artifact.id,
+            version_mode,
+            artifact.version_pattern
+            if version_pattern is _MISSING
+            else (version_pattern or DEFAULT_VERSION_PATTERN),
+            artifact.fixed_minecraft
+            if fixed_minecraft is _MISSING
+            else (fixed_minecraft or None),
+            _loader(data, default=artifact.modloader),
+        )
+    current_direct_downloads = bool(
+        getattr(artifact, "solderpy_loader_direct", False)
     )
-    version_pattern = _string(data, "version_pattern")
-    fixed_minecraft = _string(data, "fixed_minecraft", nullable=True)
-    artifact = MavenArtifact.update_rule(
-        artifact.id,
-        version_mode,
-        artifact.version_pattern
-        if version_pattern is _MISSING
-        else (version_pattern or DEFAULT_VERSION_PATTERN),
-        artifact.fixed_minecraft
-        if fixed_minecraft is _MISSING
-        else (fixed_minecraft or None),
-        _loader(data, default=artifact.modloader),
+    direct_downloads = _boolean(
+        data, "solderpy_loader_direct", current_direct_downloads
     )
+    if direct_downloads != current_direct_downloads:
+        artifact = MavenArtifact.update_solderpy_loader_direct(
+            artifact.id, direct_downloads
+        )
     return _written({"artifact": _maven_artifact_json(artifact)})
 
 
@@ -1069,5 +1171,7 @@ def create_mcil_jar(slug, version):
 def refresh_minecraft_versions():
     # solder.py uses free-form Minecraft version fields and has no remote
     # version-list cache. Keep the Technic endpoint as a compatible no-op.
+    if not current_app.testing:
+        CacheRevision.bump()
     clear_api_caches()
     return _response({"success": "Minecraft versions cache refreshed."})

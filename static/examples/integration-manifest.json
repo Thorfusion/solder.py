@@ -1,12 +1,31 @@
 {
   "format": "solder.py-integration-manifest",
   "version": 1,
+  "instructions": {
+    "purpose": "Resolve every requested mod to a stable Modrinth project ID or exact Maven coordinates. Do not guess an ID from a display name.",
+    "provider_rules": [
+      "Use provider=modrinth when a distributable Modrinth mod project exists. Prefer its stable project ID over its slug.",
+      "Use provider=maven only for a public standard Maven repository and an artifact that may legally be downloaded and rehosted.",
+      "Do not add CurseForge-only projects, direct download URLs, local files, GitHub repositories, credentials, version files, or duplicate mods.",
+      "name, description, author, link, and side describe the mod and should be accurate. side must be CLIENT, SERVER, or BOTH.",
+      "For Maven, group_id and artifact_id are required; classifier is optional; extension must be jar; modloader may be FORGE, NEOFORGE, FABRIC, QUILT, LITELOADER, VANILLA, or omitted.",
+      "Maven minecraft.mode EMBEDDED requires pattern with {minecraft} and {version} exactly once. FIXED requires version. MANUAL leaves every upstream release for an administrator to map later.",
+      "Return valid UTF-8 JSON with this exact format and version. solder.py ignores this instructions object and other unknown fields."
+    ],
+    "metadata_rules": {
+      "name": "Human-readable mod name, up to 255 characters",
+      "description": "Short factual description, up to 255 characters",
+      "author": "Project owner or accepted team members, up to 255 characters",
+      "link": "Canonical HTTPS project page",
+      "side": "CLIENT, SERVER, or BOTH"
+    }
+  },
   "mods": [
     {
       "provider": "modrinth",
       "project_id": "AANobbMI",
       "name": "Sodium",
-      "description": "Modern rendering optimization mod",
+      "description": "Rendering optimization mod for Minecraft clients",
       "author": "CaffeineMC",
       "link": "https://modrinth.com/mod/sodium",
       "side": "CLIENT"
@@ -14,21 +33,61 @@
     {
       "provider": "maven",
       "repository": {
-        "name": "GTNH",
+        "name": "GTNH Releases",
         "url": "https://nexus.gtnewhorizons.com/repository/releases/"
       },
       "group_id": "com.github.GTNewHorizons",
       "artifact_id": "ExampleArtifact",
       "classifier": "",
-      "name": "Example Mod",
-      "description": "Replace this example with the resolved project metadata",
-      "author": "Example author",
+      "extension": "jar",
+      "name": "Example GTNH Mod",
+      "description": "Replace this entry with verified artifact metadata",
+      "author": "GT New Horizons",
       "link": "https://github.com/GTNewHorizons/ExampleArtifact",
       "side": "BOTH",
       "modloader": "FORGE",
       "minecraft": {
         "mode": "FIXED",
         "version": "1.7.10"
+      }
+    },
+    {
+      "provider": "maven",
+      "repository": {
+        "name": "Example Releases",
+        "url": "https://maven.example.com/releases/"
+      },
+      "group_id": "com.example.mods",
+      "artifact_id": "example-embedded-mod",
+      "extension": "jar",
+      "name": "Example Embedded-Version Mod",
+      "description": "Upstream versions use the form 1.20.1-2.4.0",
+      "author": "Example Team",
+      "link": "https://example.com/example-embedded-mod",
+      "side": "BOTH",
+      "modloader": "FORGE",
+      "minecraft": {
+        "mode": "EMBEDDED",
+        "pattern": "{minecraft}-{version}"
+      }
+    },
+    {
+      "provider": "maven",
+      "repository": {
+        "name": "Example Releases",
+        "url": "https://maven.example.com/releases/"
+      },
+      "group_id": "com.example.mods",
+      "artifact_id": "example-manual-mod",
+      "classifier": "universal",
+      "extension": "jar",
+      "name": "Example Manually-Mapped Mod",
+      "description": "An administrator will assign Minecraft versions after metadata is loaded",
+      "author": "Example Team",
+      "link": "https://example.com/example-manual-mod",
+      "side": "SERVER",
+      "minecraft": {
+        "mode": "MANUAL"
       }
     }
   ]

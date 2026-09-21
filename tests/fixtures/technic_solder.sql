@@ -1,5 +1,5 @@
 -- SANITIZED TEST FIXTURE: contains no source data or credentials.
--- Schema provenance: TechnicPack/TechnicSolder v1.3.1 (262d2ae4693b8ce73b0e122d8f2c3a447fd57afe).
+-- Schema provenance: TechnicPack/TechnicSolder v1.4.0 (1a431bc29801f3520bdcd455e36ba3eec4457678).
 -- Generated from the official migrations against MySQL 8.4.
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -28,6 +28,7 @@ CREATE TABLE `builds` (
   `is_published` tinyint(1) NOT NULL DEFAULT '0',
   `private` tinyint(1) NOT NULL DEFAULT '0',
   `min_java` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `java_runtime` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `min_memory` int DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `builds_modpack_id_index` (`modpack_id`)

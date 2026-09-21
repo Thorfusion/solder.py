@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 from pathlib import Path
 import tomllib
@@ -15,6 +16,11 @@ configure_test_environment()
 
 import distribution_api as routes  # noqa: E402
 from models.database import Database  # noqa: E402
+from models.advanced_optional import (  # noqa: E402
+    AdvancedOptionalGroup,
+    AdvancedOptionalItem,
+    SINGLE,
+)
 from models.distribution import (  # noqa: E402
     DistributionBuild,
     DistributionExport,
@@ -24,6 +30,10 @@ from models.distribution import (  # noqa: E402
     PackwizExport,
 )
 from models.distribution_settings import DistributionSettings  # noqa: E402
+from models.platform_export_override import (  # noqa: E402
+    PlatformExportOverride,
+    PlatformExportOverrideError,
+)
 
 
 JAR_MD5 = "0123456789abcdef0123456789abcdef"
@@ -51,7 +61,20 @@ def package(
     side="BOTH",
     modtype="MOD",
     jar_md5=JAR_MD5,
+    integration_provider=None,
+    integration_project_id=None,
+    integration_version_id=None,
+    download_source_provider=None,
+    download_source_url=None,
+    download_source_filename=None,
+    download_source_sha1=None,
+    download_source_sha512=None,
+    download_source_filesize=None,
+    optional_state=None,
+    membership_id=None,
 ):
+    if optional_state is None:
+        optional_state = 1 if optional else 0
     return DistributionPackage(
         id=11,
         mod_slug=slug,
@@ -63,10 +86,81 @@ def package(
         side=side,
         modtype=modtype,
         optional=optional,
+        optional_state=optional_state,
+        membership_id=membership_id,
+        integration_provider=integration_provider,
+        integration_project_id=integration_project_id,
+        integration_version_id=integration_version_id,
+        download_source_provider=download_source_provider,
+        download_source_url=download_source_url,
+        download_source_filename=download_source_filename,
+        download_source_sha1=download_source_sha1,
+        download_source_sha512=download_source_sha512,
+        download_source_filesize=download_source_filesize,
     )
 
 
 class DistributionRendererTests(unittest.TestCase):
+    def test_hybrid_resolution_reuses_saved_modrinth_metadata(self):
+        selected = package(
+            integration_provider="MODRINTH",
+            integration_project_id="project",
+            integration_version_id="version",
+            download_source_provider="MODRINTH",
+            download_source_url=(
+                "https://cdn.modrinth.com/data/project/versions/version/mod.jar"
+            ),
+            download_source_filename="mod.jar",
+            download_source_sha1="a" * 40,
+            download_source_sha512="b" * 128,
+            download_source_filesize=123,
+        )
+        with patch(
+            "models.platform_export.ModrinthProvider.get_versions"
+        ) as lookup:
+            resolved = routes.PlatformPackExport.native_modrinth_files(
+                build(), [selected]
+            )
+
+        lookup.assert_not_called()
+        self.assertEqual(resolved["version"].filename, "mod.jar")
+        self.assertEqual(resolved["version"].size, 123)
+
+    def test_filedirector_named_group_includes_basic_excluded_choice(self):
+        selected = package(optional_state=2, membership_id=44)
+        group = AdvancedOptionalGroup(
+            id=3,
+            build_id=7,
+            name="Choose a map",
+            description="",
+            selection_type=SINGLE,
+            sort_order=0,
+            items=[
+                AdvancedOptionalItem(
+                    id=9,
+                    group_id=3,
+                    build_modversion_id=44,
+                    selected_by_default=True,
+                    sort_order=0,
+                    optional_state=2,
+                )
+            ],
+        )
+
+        content = FileDirectorExport.bundle(
+            [selected], REPOSITORY, optional_groups=[group]
+        )
+        entry = json.loads(content)["url"][0]
+
+        self.assertEqual(entry["installationPolicy"]["optionalKey"], "Choose a map")
+        self.assertTrue(entry["installationPolicy"]["selectedByDefault"])
+
+    def test_filedirector_omits_ungrouped_basic_excluded_package(self):
+        content = FileDirectorExport.bundle(
+            [package(optional_state=2, membership_id=44)], REPOSITORY
+        )
+        self.assertEqual(json.loads(content)["url"], [])
+
     def test_packwiz_hash_chain_side_optional_and_loader_are_valid_toml(self):
         selected = package(optional=True, side="CLIENT")
         mod_content = PackwizExport.mod_toml(selected, REPOSITORY)
@@ -129,6 +223,39 @@ class DistributionRendererTests(unittest.TestCase):
         ):
             PackwizExport.pack_toml(selected_build, b' hash-format = "sha256"')
 
+    def test_packwiz_removes_minecraft_prefix_from_loader_version(self):
+        selected_build = DistributionBuild(
+            **{
+                **build().__dict__,
+                "minecraft": "1.7.10",
+                "modloader_version": "1.7.10-10.13.4.1614",
+            }
+        )
+        content = PackwizExport.pack_toml(
+            selected_build, b'hash-format = "sha256"\n'
+        )
+        self.assertEqual(
+            tomllib.loads(content.decode())["versions"]["forge"],
+            "10.13.4.1614",
+        )
+
+    def test_hybrid_renderers_use_modrinth_url_with_stored_jar_md5(self):
+        selected = package(integration_version_id="version")
+        native = SimpleNamespace(
+            download_url="https://cdn.modrinth.com/data/project/versions/version/mod.jar"
+        )
+        mod_content = PackwizExport.mod_toml(selected, REPOSITORY, native)
+        bundle_content = FileDirectorExport.bundle(
+            [selected], REPOSITORY, native_files={"version": native}
+        )
+
+        mod_data = tomllib.loads(mod_content.decode())
+        bundle_entry = json.loads(bundle_content)["url"][0]
+        self.assertEqual(mod_data["download"]["url"], native.download_url)
+        self.assertEqual(mod_data["download"]["hash"], JAR_MD5)
+        self.assertEqual(bundle_entry["url"], native.download_url)
+        self.assertEqual(bundle_entry["metadata"]["hash"], {"MD5": JAR_MD5})
+
     def test_filedirector_preserves_side_and_extracts_solder_zips(self):
         content = FileDirectorExport.bundle(
             [
@@ -169,7 +296,7 @@ class DistributionRendererTests(unittest.TestCase):
         self.assertEqual(
             entry["installationPolicy"],
             {
-                "optionalKey": "example-mod",
+                "optionalKey": "$",
                 "selectedByDefault": False,
                 "name": "Example Mod",
                 "description": "An example mod",
@@ -218,25 +345,58 @@ class DistributionSettingsTests(unittest.TestCase):
             values = DistributionSettings.get_all()
 
         self.assertTrue(values[DistributionSettings.PACKWIZ])
+        self.assertFalse(values[DistributionSettings.MCIL])
+        self.assertFalse(values[DistributionSettings.SOLDERPY_LOADER])
         self.assertFalse(values[DistributionSettings.FILEDIRECTOR])
+        self.assertFalse(values[DistributionSettings.MODPACK_DIRECTOR])
+        self.assertFalse(values[DistributionSettings.PRISM])
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
 
-    def test_settings_update_both_values_in_one_transaction(self):
+    def test_settings_update_all_values_in_one_transaction(self):
         connection = Mock()
         cursor = connection.cursor.return_value
         with patch(
             "models.distribution_settings.Database.get_connection",
             return_value=connection,
         ):
-            DistributionSettings.update_exports(True, False)
+            DistributionSettings.update_exports(
+                packwiz=True,
+                filedirector=False,
+                modpack_director=True,
+                mrpack=True,
+                curseforge=False,
+                mcil=True,
+                solderpy_loader=True,
+                prism=True,
+            )
 
-        self.assertEqual(cursor.execute.call_count, 2)
+        self.assertEqual(cursor.execute.call_count, 8)
         first_parameters = cursor.execute.call_args_list[0].args[1]
         second_parameters = cursor.execute.call_args_list[1].args[1]
-        self.assertEqual(first_parameters, ("packwiz_enabled", "1", "1"))
+        third_parameters = cursor.execute.call_args_list[2].args[1]
+        fourth_parameters = cursor.execute.call_args_list[3].args[1]
+        fifth_parameters = cursor.execute.call_args_list[4].args[1]
+        sixth_parameters = cursor.execute.call_args_list[5].args[1]
+        seventh_parameters = cursor.execute.call_args_list[6].args[1]
+        eighth_parameters = cursor.execute.call_args_list[7].args[1]
+        self.assertEqual(first_parameters, ("mcil_enabled", "1", "1"))
         self.assertEqual(
-            second_parameters, ("filedirector_enabled", "0", "0")
+            second_parameters, ("solderpy_loader_enabled", "1", "1")
+        )
+        self.assertEqual(third_parameters, ("packwiz_enabled", "1", "1"))
+        self.assertEqual(
+            fourth_parameters, ("filedirector_enabled", "0", "0")
+        )
+        self.assertEqual(
+            fifth_parameters, ("modpack_director_enabled", "1", "1")
+        )
+        self.assertEqual(sixth_parameters, ("mrpack_enabled", "1", "1"))
+        self.assertEqual(
+            seventh_parameters, ("curseforge_export_enabled", "0", "0")
+        )
+        self.assertEqual(
+            eighth_parameters, ("prism_export_enabled", "1", "1")
         )
         connection.commit.assert_called_once_with()
         connection.rollback.assert_not_called()
@@ -249,6 +409,156 @@ class DistributionSettingsTests(unittest.TestCase):
         self.assertIn("ON UPDATE CURRENT_TIMESTAMP", schema)
 
 
+class PlatformExportOverrideTests(unittest.TestCase):
+    def test_schema_seeds_tx_loader_disabled(self):
+        schema = Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL
+        default = Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL
+
+        self.assertIn("platform_export_overrides", schema)
+        self.assertIn("UNIQUE KEY", schema)
+        self.assertIn("eh8us8FY", default)
+        self.assertIn("706505", default)
+        self.assertIn("'CLIENT', 0, 0, 1", default)
+
+    def test_enabled_overrides_are_loaded_as_typed_rows(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [
+            {
+                "id": 1,
+                "name": "TX Loader",
+                "modrinth_project_id": "eh8us8FY",
+                "curseforge_project_id": 706505,
+                "side": "CLIENT",
+                "enabled": 1,
+                "built_in": 1,
+            }
+        ]
+        with patch(
+            "models.platform_export_override.Database.get_connection",
+            return_value=connection,
+        ):
+            overrides = PlatformExportOverride.get_enabled()
+
+        self.assertEqual(len(overrides), 1)
+        self.assertEqual(overrides[0].modrinth_project_id, "eh8us8FY")
+        self.assertTrue(overrides[0].enabled)
+        cursor.execute.assert_called_once_with(
+            "SELECT * FROM platform_export_overrides WHERE enabled = %s "
+            "ORDER BY built_in DESC, name, id",
+            (1,),
+        )
+
+    def test_custom_override_is_disabled_when_created(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        with patch(
+            "models.platform_export_override.Database.get_connection",
+            return_value=connection,
+        ):
+            PlatformExportOverride.create(
+                "Bootstrap", "project_1", "12345", "SERVER"
+            )
+
+        parameters = cursor.execute.call_args.args[1]
+        self.assertEqual(
+            parameters, ("Bootstrap", "project_1", 12345, "SERVER", 0)
+        )
+        connection.commit.assert_called_once_with()
+
+    def test_built_in_override_cannot_be_deleted(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.rowcount = 0
+        with (
+            patch(
+                "models.platform_export_override.Database.get_connection",
+                return_value=connection,
+            ),
+            self.assertRaisesRegex(
+                PlatformExportOverrideError, "Built-in"
+            ),
+        ):
+            PlatformExportOverride.delete(1)
+
+        connection.rollback.assert_called_once_with()
+
+    def test_sync_manifest_round_trip_fields_are_portable(self):
+        mapping = PlatformExportOverride(
+            id=1,
+            name="TX Loader",
+            modrinth_project_id="eh8us8FY",
+            curseforge_project_id=706505,
+            side="CLIENT",
+            enabled=True,
+            built_in=True,
+            override_solder_only=True,
+        )
+        with patch.object(
+            PlatformExportOverride, "get_all", return_value=[mapping]
+        ):
+            payload = json.loads(
+                PlatformExportOverride.render_manifest().read().decode("utf-8")
+            )
+
+        self.assertEqual(
+            payload["format"], "solder.py-modrinth-curseforge-sync"
+        )
+        self.assertEqual(payload["version"], 1)
+        self.assertEqual(payload["mappings"][0]["curseforge_project_id"], 706505)
+        self.assertTrue(payload["mappings"][0]["override_solder_only"])
+
+    def test_sync_manifest_updates_existing_and_adds_new_mapping(self):
+        payload = {
+            "format": "solder.py-modrinth-curseforge-sync",
+            "version": 1,
+            "mappings": [
+                {
+                    "name": "TX Loader",
+                    "modrinth_project_id": "eh8us8FY",
+                    "curseforge_project_id": 706505,
+                    "side": "CLIENT",
+                    "enabled": True,
+                    "override_solder_only": False,
+                },
+                {
+                    "name": "Bootstrap",
+                    "modrinth_project_id": "project_2",
+                    "curseforge_project_id": 12345,
+                    "side": "BOTH",
+                    "enabled": False,
+                    "override_solder_only": True,
+                },
+            ],
+        }
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.side_effect = [[{"id": 1}], []]
+        with patch(
+            "models.platform_export_override.Database.get_connection",
+            return_value=connection,
+        ):
+            result = PlatformExportOverride.import_manifest(
+                io.BytesIO(json.dumps(payload).encode("utf-8"))
+            )
+
+        self.assertEqual(result, (1, 1))
+        self.assertTrue(
+            any(
+                "UPDATE platform_export_overrides" in call.args[0]
+                for call in cursor.execute.call_args_list
+            )
+        )
+        self.assertTrue(
+            any(
+                "INSERT INTO platform_export_overrides" in call.args[0]
+                for call in cursor.execute.call_args_list
+            )
+        )
+        connection.commit.assert_called_once_with()
+        connection.rollback.assert_not_called()
+
+
 class DistributionDeploymentDocumentationTests(unittest.TestCase):
     def test_caddy_compose_routes_dynamic_exports_and_includes_mysql(self):
         readme = (
@@ -257,6 +567,7 @@ class DistributionDeploymentDocumentationTests(unittest.TestCase):
 
         self.assertIn("handle /packwiz/*", readme)
         self.assertIn("handle /filedirector/*", readme)
+        self.assertIn("handle /modpackdirector/*", readme)
         self.assertIn("reverse_proxy solderpy:5000", readme)
         self.assertIn("image: mysql:8.4", readme)
         self.assertIn("mysql_data:/var/lib/mysql", readme)
@@ -281,9 +592,13 @@ class DistributionRouteTests(unittest.TestCase):
             filedirector = self.client.get(
                 "/filedirector/example-pack/1.0/mods.bundle.json"
             )
+            modpack_director = self.client.get(
+                "/modpackdirector/example-pack/1.0/mods.bundle.json"
+            )
 
         self.assertEqual(packwiz.status_code, 404)
         self.assertEqual(filedirector.status_code, 404)
+        self.assertEqual(modpack_director.status_code, 404)
 
     def test_packwiz_channel_redirects_to_exact_build(self):
         with (
@@ -376,7 +691,60 @@ class DistributionRouteTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        load.assert_called_once_with(7, optional=None)
+        load.assert_called_once_with(
+            7, optional=None, include_excluded=True
+        )
+
+    def test_modpack_director_uses_the_compatible_bundle_schema(self):
+        with (
+            patch.object(
+                routes.DistributionSettings, "is_enabled", return_value=True
+            ) as enabled,
+            patch.object(
+                routes.DistributionExport, "load_build", return_value=build()
+            ),
+            patch.object(
+                routes.DistributionExport,
+                "load_packages",
+                return_value=[package()],
+            ),
+        ):
+            response = self.client.get(
+                "/modpackdirector/example-pack/1.0/mods.bundle.json"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.get_json()["url"]), 1)
+        enabled.assert_called_once_with(DistributionSettings.MODPACK_DIRECTOR)
+
+    def test_filedirector_modrinth_fallback_excludes_native_files(self):
+        native = package(
+            integration_provider="MODRINTH",
+            integration_project_id="project",
+            integration_version_id="version",
+        )
+        fallback = package("manual-mod")
+        with (
+            patch.object(
+                routes.DistributionSettings, "is_enabled", return_value=True
+            ),
+            patch.object(
+                routes.DistributionExport, "load_build", return_value=build()
+            ),
+            patch.object(
+                routes.DistributionExport,
+                "load_packages",
+                return_value=[native, fallback],
+            ),
+        ):
+            response = self.client.get(
+                "/filedirector/example-pack/1.0/modrinth-fallback.bundle.json"
+            )
+
+        self.assertEqual(response.status_code, 200)
+        entries = response.get_json()["url"]
+        self.assertEqual(len(entries), 1)
+        self.assertIn("manual-mod-2.0.jar", entries[0]["url"])
 
     def test_filedirector_remote_file_keeps_channel_url(self):
         with (
@@ -400,6 +768,81 @@ class DistributionRouteTests(unittest.TestCase):
                 "url": "https://solder.example.test/filedirector/example-pack/"
                 "recommended/mods.bundle.json"
             },
+        )
+
+    def test_modpack_director_remote_and_version_routes_use_own_namespace(self):
+        with (
+            patch.object(
+                routes.DistributionSettings, "is_enabled", return_value=True
+            ),
+            patch.object(
+                routes.DistributionExport,
+                "load_build",
+                return_value=build("recommended"),
+            ),
+        ):
+            remote = self.client.get(
+                "/modpackdirector/example-pack/recommended/mods.remote.json"
+            )
+            version = self.client.get(
+                "/modpackdirector/example-pack/recommended/version.txt"
+            )
+
+        self.assertEqual(
+            remote.get_json()["url"],
+            "https://solder.example.test/modpackdirector/example-pack/"
+            "recommended/mods.bundle.json",
+        )
+        self.assertEqual(version.get_data(as_text=True), "1.0\n")
+
+    def test_hybrid_hosted_routes_use_validated_modrinth_urls(self):
+        native_package = package(
+            integration_provider="MODRINTH",
+            integration_project_id="project",
+            integration_version_id="version",
+        )
+        native_file = SimpleNamespace(
+            download_url="https://cdn.modrinth.com/data/project/versions/version/mod.jar"
+        )
+        with (
+            patch.object(
+                routes.DistributionSettings, "is_enabled", return_value=True
+            ),
+            patch.object(
+                routes.DistributionExport, "load_build", return_value=build()
+            ),
+            patch.object(
+                routes.DistributionExport,
+                "load_package",
+                return_value=native_package,
+            ),
+            patch.object(
+                routes.DistributionExport,
+                "load_packages",
+                return_value=[native_package],
+            ),
+            patch.object(
+                routes.PlatformPackExport,
+                "stored_native_modrinth_files",
+                return_value={"version": native_file},
+            ),
+        ):
+            packwiz = self.client.get(
+                "/packwiz/example-pack/1.0/hybrid/mods/example-mod.pw.toml"
+            )
+            filedirector = self.client.get(
+                "/filedirector/example-pack/1.0/mods.bundle.json?source=hybrid"
+            )
+
+        self.assertEqual(packwiz.status_code, 200)
+        self.assertEqual(filedirector.status_code, 200)
+        self.assertEqual(
+            tomllib.loads(packwiz.text)["download"]["url"],
+            native_file.download_url,
+        )
+        self.assertEqual(
+            filedirector.get_json()["url"][0]["url"],
+            native_file.download_url,
         )
 
     def test_export_errors_are_logged_without_exposing_exception_text(self):

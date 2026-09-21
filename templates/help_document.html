@@ -1,0 +1,11 @@
+{%extends "layout.html"%} {% set active_page = "help" %}
+{%block head%}
+<title>{{document.title}} - solder.py</title>
+<link rel="stylesheet" href="{{ url_for('static',filename='css/help.css') }}" />
+{%endblock%}
+{%block main%}
+<div class="container-fluid help-document">
+    <p><a href="{{url_for('asite.help_index')}}">&larr; All help</a></p>
+    {{content|safe}}
+</div>
+{%endblock%}

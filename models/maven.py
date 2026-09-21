@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import logging
 import re
 import unicodedata
 from urllib.parse import quote, urljoin, urlparse
@@ -21,7 +22,8 @@ DEFAULT_VERSION_PATTERN = "{minecraft}-{version}"
 REQUEST_TIMEOUT = (5, 30)
 MAX_METADATA_SIZE = 2 * 1024 * 1024
 MAX_MAVEN_VERSIONS = 10000
-USER_AGENT = "solder.py/1.8.0 (+https://github.com/Thorfusion/solder.py)"
+USER_AGENT = "solder.py/1.10.0 (+https://github.com/Thorfusion/solder.py)"
+logger = logging.getLogger(__name__)
 
 _GROUP_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,190}")
 _COORDINATE_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,190}")
@@ -302,6 +304,7 @@ class MavenArtifact:
     mod_id: int | None = None
     created_at: object = None
     updated_at: object = None
+    solderpy_loader_direct: bool = False
 
     @classmethod
     def from_row(cls, row):
@@ -314,6 +317,7 @@ class MavenArtifact:
             row["slug"], row["title"], row.get("description") or "",
             row.get("author") or "", row.get("link") or "", row.get("side") or "BOTH",
             row.get("mod_id"), row.get("created_at"), row.get("updated_at"),
+            bool(row.get("solderpy_loader_direct")),
         )
 
     @staticmethod
@@ -522,6 +526,106 @@ class MavenArtifact:
             raise MavenError("The Maven artifact no longer exists.")
         MavenVersion.reapply_rule(artifact)
         return artifact
+
+    @classmethod
+    def update_solderpy_loader_direct(cls, artifact_db_id, enabled):
+        artifact = cls.get(artifact_db_id)
+        if artifact is None:
+            raise MavenError("The Maven artifact no longer exists.")
+        if enabled and urlparse(artifact.repository_url).scheme != "https":
+            raise MavenError(
+                "SolderPy Loader direct downloads require an HTTPS Maven repository."
+            )
+        conn = Database.get_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """UPDATE maven_artifacts SET solderpy_loader_direct = %s
+                   WHERE id = %s""",
+                (int(bool(enabled)), artifact_db_id),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+        return cls.get(artifact_db_id)
+
+    @classmethod
+    def solderpy_loader_downloads(cls, references, *, http=None):
+        """Resolve enabled Maven sources with one catalog query per manifest."""
+        requested = {
+            (str(project_id), str(version_id))
+            for project_id, version_id in references
+            if str(project_id).isdigit() and str(version_id)
+        }
+        if not requested:
+            return {}
+        artifact_ids = sorted({int(project_id) for project_id, _ in requested})
+        version_ids = sorted({version_id for _, version_id in requested})
+        artifact_placeholders = ", ".join(["%s"] * len(artifact_ids))
+        version_placeholders = ", ".join(["%s"] * len(version_ids))
+        conn = Database.get_connection()
+        cur = conn.cursor(dictionary=True)
+        try:
+            cur.execute(
+                f"""SELECT maven_artifacts.*,
+                            maven_repositories.name AS repository_name,
+                            maven_repositories.base_url AS repository_url,
+                            maven_versions.maven_artifact_id
+                                AS mapping_artifact_id,
+                            maven_versions.integration_version_id,
+                            maven_versions.upstream_version
+                     FROM maven_artifacts
+                     INNER JOIN maven_repositories
+                         ON maven_artifacts.repository_id =
+                            maven_repositories.id
+                     INNER JOIN maven_versions
+                         ON maven_versions.maven_artifact_id =
+                            maven_artifacts.id
+                     WHERE maven_artifacts.solderpy_loader_direct = 1
+                       AND maven_artifacts.id IN ({artifact_placeholders})
+                       AND maven_versions.integration_version_id
+                           IN ({version_placeholders})""",  # nosec B608
+                (*artifact_ids, *version_ids),
+            )
+            rows = cur.fetchall() or []
+        finally:
+            cur.close()
+            conn.close()
+
+        resolved = {}
+        for row in rows:
+            key = (
+                str(row["mapping_artifact_id"]),
+                str(row["integration_version_id"]),
+            )
+            if key not in requested:
+                continue
+            artifact = cls.from_row(row)
+            repository = MavenRepository(
+                artifact.repository_id,
+                artifact.repository_name,
+                artifact.repository_url,
+            )
+            upstream_version = str(row["upstream_version"])
+            try:
+                filename_version = MavenMetadataClient(
+                    repository, http=http
+                ).snapshot_value(artifact, upstream_version)
+            except MavenError:
+                logger.warning(
+                    "Could not resolve Maven bootstrap source for artifact %s.",
+                    artifact.id,
+                    exc_info=True,
+                )
+                continue
+            resolved[key] = artifact_file_url(
+                artifact, upstream_version, filename_version
+            )
+        return resolved
 
     @property
     def coordinates(self):

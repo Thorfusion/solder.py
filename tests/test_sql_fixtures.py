@@ -10,7 +10,8 @@ class SanitizedSqlFixtureTests(unittest.TestCase):
     def test_technic_fixture_comes_from_current_official_migrations(self):
         contents = (FIXTURES / "technic_solder.sql").read_text(encoding="utf-8")
 
-        self.assertIn("TechnicPack/TechnicSolder v1.3.1", contents)
+        self.assertIn("TechnicPack/TechnicSolder v1.4.0", contents)
+        self.assertIn("`java_runtime` varchar(255)", contents)
         self.assertIn(
             "Generated from the official migrations against MySQL 8.4", contents
         )

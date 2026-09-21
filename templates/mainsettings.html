@@ -3,7 +3,25 @@
 <link rel="stylesheet" href="{{ url_for('static',filename='css/index.css') }}" />
 {%endblock%}{%block main%}
 
-
+<section id="manual_md5_hashing" class="mb-4">
+    <h5>Manual MD5 hashing</h5>
+    <form method="post" action="" enctype="multipart/form-data">
+        <div class="mb-3">
+            <label for="file" class="form-label">ZIP / JAR file</label>
+            <input class="form-control" type="file" id="file" onchange="hashmd5()">
+        </div>
+        <div class="row g-3 mb-3">
+            <div class="col-md-6">
+                <label for="md5" class="form-label">MD5</label>
+                <input type="text" class="form-control" name="md5" id="md5" readonly>
+            </div>
+            <div class="col-md-6">
+                <label for="filesize" class="form-label">File size</label>
+                <input type="text" class="form-control" name="filesize" id="filesize" readonly>
+            </div>
+        </div>
+    </form>
+</section>
 
 <div class="wrappermod">
     <table class="table" id="table">
@@ -37,6 +55,10 @@
             <tr>
                 <td class="">DB_IS_UP:</td>
                 <td class="">{{DB_IS_UP}}</td>
+            </tr>
+            <tr>
+                <td class="">ENABLE_LEGACY_MODVERSION_ADDING:</td>
+                <td class="">{{legacy_modversion_adding}}</td>
             </tr>
             <thead class="table-light sticky-md-top">
                 <tr>
@@ -110,12 +132,33 @@
 
 {%block aside%}
 <section id="distribution_settings">
-    <h5>Public distribution formats</h5>
+    <h5>Distribution formats</h5>
     <p class="text-muted">
-        Expose public builds in API-only mode too. Both formats are disabled
-        by default.
+        Public metadata is available in API-only mode. Launcher archive
+        exports are available from the authenticated build editor. All formats
+        are disabled by default.
     </p>
     <form method="post" action="{{ url_for('asite.mainsettings') }}">
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                id="mcil_enabled" name="mcil_enabled"
+                {% if distribution_settings.mcil_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="mcil_enabled">
+                Enable MCInstance Loader exports
+            </label>
+        </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                id="solderpy_loader_enabled" name="solderpy_loader_enabled"
+                {% if distribution_settings.solderpy_loader_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="solderpy_loader_enabled">
+                Enable SolderPy Loader
+            </label>
+            <div class="form-text">
+                Makes SolderPy Loader available for Technic delivery and as a
+                Modrinth, CurseForge, or Prism bootstrap using the dedicated API.
+            </div>
+        </div>
         <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" role="switch"
                 id="packwiz_enabled" name="packwiz_enabled"
@@ -132,32 +175,71 @@
                 Enable FileDirector files
             </label>
         </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                id="modpack_director_enabled" name="modpack_director_enabled"
+                {% if distribution_settings.modpack_director_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="modpack_director_enabled">
+                Enable Modpack Director exports
+            </label>
+            <div class="form-text">
+                Generates compatible bundled or hosted configuration. The
+                official downloader is also available to CurseForge exports.
+            </div>
+        </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                id="mrpack_enabled" name="mrpack_enabled"
+                {% if distribution_settings.mrpack_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="mrpack_enabled">
+                Enable Modrinth MRPack exports
+            </label>
+        </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                id="curseforge_export_enabled" name="curseforge_export_enabled"
+                {% if distribution_settings.curseforge_export_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="curseforge_export_enabled">
+                Enable CurseForge exports
+            </label>
+            <div class="form-text">
+                {%if curseforge_api_configured%}CURSEFORGE_API_KEY is configured.{%else%}Set CURSEFORGE_API_KEY before enabling this format.{%endif%}
+            </div>
+        </div>
+        <div class="form-check form-switch mb-3">
+            <input class="form-check-input" type="checkbox" role="switch"
+                id="prism_export_enabled" name="prism_export_enabled"
+                {% if distribution_settings.prism_export_enabled %}checked{% endif %}>
+            <label class="form-check-label" for="prism_export_enabled">
+                Enable Prism Launcher instance exports
+            </label>
+        </div>
         <button class="btn btn-primary" type="submit" name="export_settings_submit" value="1">
             Save distribution settings
         </button>
     </form>
+    <p class="mt-3 mb-0">
+        <a href="{{url_for('asite.platform_export_overrides')}}">Manage Modrinth-CurseForge sync</a>
+    </p>
 </section>
 
 <hr>
 
-<section id="manual_md5_hashing">
-    <h5>Manual MD5 hashing</h5>
-    <form method="post" action="" enctype="multipart/form-data">
-        <div class="mb-3">
-            <label for="file" class="form-label">ZIP file</label>
-            <input class="form-control" type="file" id="file" onchange="hashmd5()">
-        </div>
-        <div class="mb-3">
-            <label for="md5" class="form-label">md5</label>
-            <input type="text" class="form-control" name="md5" id="md5" readonly>
-        </div>
-        <div class="mb-3">
-            <label for="filesize" class="form-label">filesize</label>
-            <input type="text" class="form-control" name="filesize" id="filesize" readonly>
-        </div>
+<section id="legacy_jar_migration">
+    <h5>Legacy JAR package scan</h5>
+    <p class="text-muted">
+        Scan mods whose type is NONE. A mod is changed to MOD only when every
+        one of its versions is a verified ZIP containing exactly one file:
+        a JAR beneath <code>mods/</code>. The extracted JAR is stored and its
+        MD5 is added to the version. Mixed packages are left unchanged.
+    </p>
+    <form method="post" action="{{ url_for('asite.mainsettings') }}">
+        <button class="btn btn-primary" type="submit"
+            name="convert_none_mods_submit" value="1">
+            Scan and convert JAR-only mods
+        </button>
     </form>
 </section>
-
 
 <script src="{{ url_for('static',filename='js/solderpy.js') }}"></script>
 <script src="{{ url_for('static',filename='js/md5.min.js') }}"></script>

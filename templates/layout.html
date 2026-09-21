@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="{{ 'dark' if night_mode else 'light' }}">
 
 <head>
     <meta charset="UTF-8" />
@@ -53,6 +53,9 @@
                         <a href="{{ url_for('asite.integrations') }}" class="nav-link text-white {{ 'active' if active_page == 'integrations' else '' }}">Modrinth</a>
                     </li>
                     <li>
+                        <a href="{{ url_for('asite.github') }}" class="nav-link text-white {{ 'active' if active_page == 'github' else '' }}">GitHub</a>
+                    </li>
+                    <li>
                         <a href="{{ url_for('asite.maven') }}" class="nav-link text-white {{ 'active' if active_page == 'maven' else '' }}">Maven</a>
                     </li>
                     <li class="nav-item dropdown">
@@ -62,11 +65,16 @@
                                 <li><a href="{{ url_for('asite.clientlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'clientlibrary' else '' }}">Clients</a></li>
                                 <li><a href="{{ url_for('asite.apikeylibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'apikeylibrary' else '' }}">API Keys</a></li>
                                 <li><a href="{{ url_for('asite.userlibrary') }}" class="nav-link text-white {{ 'active' if active_page == 'userlibrary' else '' }}">Users</a></li>
+                                <li><a href="{{ url_for('asite.platform_export_overrides') }}" class="nav-link text-white {{ 'active' if active_page == 'platform_export_overrides' else '' }}">Modrinth-Curse sync</a></li>
+                                <li><a href="{{ url_for('asite.publishing') }}" class="nav-link text-white {{ 'active' if active_page == 'publishing' else '' }}">Publishing</a></li>
                                 <li><a href="{{ url_for('asite.mainsettings') }}" class="nav-link text-white {{ 'active' if active_page == 'mainsettings' else '' }}">Env Settings</a></li>
                                 {%if write_api_enabled%}<li><a href="{{ url_for('asite.apitokens') }}" class="nav-link text-white {{ 'active' if active_page == 'apitokens' else '' }}">API Tokens</a></li>{%endif%}
-                                <li><a href="{{ url_for('asite.logout') }}" class="nav-link text-white {{ 'active' if active_page == 'logout' else '' }}">Logout</a></li>
+                                <li><form method="post" action="{{ url_for('asite.logout') }}"><button type="submit" class="btn nav-link text-white {{ 'active' if active_page == 'logout' else '' }}">Logout</button></form></li>
                             </ul>
                         </div>
+                    </li>
+                    <li>
+                        <a href="{{url_for('asite.help_index')}}" class="nav-link text-white {{ 'active' if active_page == 'help' else '' }}">Help</a>
                     </li>
 
                 </ul>
@@ -79,29 +87,25 @@
     </aside>
 
     <aside class="bg-light asideright">
-        {% with errors = get_flashed_messages(category_filter=["error"]) %}
-            {% if errors %}
-            <div class="alert alert-danger mx-auto" role="alert">
-                <p>{%- for msg in errors %}
-                {{ msg }}
-                {% endfor -%}</p>
-            </div>
-            {% endif %}
-        {% endwith %}
         {%block aside%}{% endblock %}
-        {% with errors = get_flashed_messages(category_filter=["success"]) %}
-            {% if errors %}
-            <div class="alert alert-success mx-auto" role="alert">
-                <p>{%- for msg in errors %}
-                {{ msg }}
-                {% endfor -%}</p>
-            </div>
-            {% endif %}
-        {% endwith %}
     </aside>
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-message-container" aria-live="polite" aria-atomic="true">
+            {% for category, message in messages %}
+            <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show shadow" role="{{ 'status' if category == 'success' else 'alert' }}" data-flash-message>
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
 </body>
 
-<script src="{{ url_for('static',filename='js/bootstrap.min.js') }}"></script>
+<script src="{{ url_for('static',filename='js/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static',filename='js/flash-messages.js') }}"></script>
+{%block scripts%}{%endblock%}
 
 </html>

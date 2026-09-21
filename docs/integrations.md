@@ -1,4 +1,4 @@
-# Modrinth and Maven integrations
+# Modrinth, GitHub config, and Maven integrations
 
 These integrations belong to the solder.py management interface. They do not
 change the public Technic-compatible read API or expose provider IDs and API
@@ -11,7 +11,8 @@ Upstream references: [Modrinth API](https://docs.modrinth.com/api/) and the
 
 1. Open **Browse mods** and search Modrinth for a Minecraft mod.
 2. Add the project. solder.py creates a linked mod-library entry but downloads
-   no version files.
+   no version files. If a manual mod already has the same slug, that existing
+   mod is linked instead; its local versions and build selections are kept.
 3. Open a modpack build and select that mod. The version dropdown requests only
    releases matching the build's exact Minecraft version and, when set, its
    modloader.
@@ -23,9 +24,94 @@ Upstream references: [Modrinth API](https://docs.modrinth.com/api/) and the
    the build. A later selection of the same provider version reuses it without
    another download.
 
+When the selected Modrinth version declares required dependencies, solder.py
+also imports or links those projects, materializes their compatible versions,
+and records them in the normal Solder dependency list. A dependency with an
+explicit Modrinth version ID uses that exact compatible release; a project-only
+dependency uses its newest release compatible with the build. Nested required
+dependencies are handled recursively. Optional, incompatible, and embedded
+Modrinth dependency types are not promoted to required Solder dependencies.
+
 Provider-managed mods cannot receive versions through the manual upload forms.
 Their already imported versions can still be rehashed, added to builds, or
 deleted like other Solder versions.
+
+A matching manual slug is converted only when it has no existing integration.
+solder.py changes the integration provider and project ID on the existing mod
+row; it does not replace the mod, its reviewed metadata, versions, repository
+files, dependencies, or build memberships. A slug already linked to Maven or a
+different Modrinth project produces an error instead of being reassigned.
+
+When the local slug differs, open the existing `MOD` entry and use **Link
+Modrinth**. Enter a Modrinth project URL, slug, or project ID. The local slug,
+metadata, versions, dependencies, repository files, and build memberships stay
+unchanged; only the existing provider fields are attached. **Disconnect
+Modrinth** removes that association without deleting materialized versions.
+
+## GitHub config repositories
+
+The dedicated [GitHub config repository guide](github-config.md) documents the
+complete management workflow, archive rules, `.solderpyignore`, submodules,
+storage, and troubleshooting.
+
+An existing mod whose type is `CONFIG` can be linked to a public GitHub
+repository from its management page. GitHub cannot be attached to `MOD`,
+`LAUNCHER`, or other package types. The stable numeric GitHub repository ID is
+stored in the existing `mods.integration_project_id` field, with `GITHUB` in
+`mods.integration_provider`; no GitHub-specific database table is used.
+
+There are two versioned workflows:
+
+- **Manual ref:** enter a branch, tag, or full commit SHA together with an
+  explicit config version, Minecraft version, and optional modloader. A branch
+  is therefore never allowed to overwrite an existing Solder version silently.
+- **Repository tags:** select **Sync latest tag**, or choose a compatible tag
+  from the config entry's version dropdown in a build. Tags are sorted by their
+  numeric components, materialized lazily, and recorded as immutable normal
+  Solder versions. **Update all mods** follows the newest available tag.
+
+solder.py downloads the exact resolved commit, strips GitHub's generated
+top-level archive directory, removes repository-only files such as `.github`,
+`.git*`, README, license, changelog, and documentation files, and writes the
+remaining instance-root files to a deterministic Solder ZIP. Pinned GitHub
+submodules are downloaded at their recorded commits and placed at their
+configured paths. Symbolic links, unsafe paths, oversized archives, duplicate
+paths, and excessive expanded content are rejected.
+
+Add a UTF-8 `.solderpyignore` file to the repository root when files that
+belong in source control should not be shipped to clients. Its rules are
+evaluated in order and use familiar gitignore-style syntax:
+
+```gitignore
+# Development and server-only files
+*.bak
+/servers.json
+generated/**
+!generated/client-defaults.cfg
+```
+
+`*`, `?`, `**`, root-relative `/patterns`, directory patterns, comments, and
+`!` re-inclusion are supported. A name without `/` matches at any depth. The
+file is not included in the generated ZIP. The root repository's rules also
+apply to files supplied by pinned submodules; a submodule may additionally
+provide its own `.solderpyignore`. Ignore rules cannot restore solder.py's
+built-in security and repository-metadata exclusions.
+
+A `.gitmodules` entry alone is not versioned content. The parent repository must
+also contain a pinned Git submodule entry at that path. Stale declarations with
+no pinned commit are not fetched from a moving default branch.
+
+The generated package is stored in the same local repository and optional
+S3/R2 bucket used by solder.py's upload extension. Its ZIP MD5 and file size are
+recorded in the ordinary `modversions` table. Technic-compatible API responses
+therefore continue to expose an ordinary Solder config package; this does not
+change Technic Solder's metadata-only/manual-MD5 model.
+
+Packwiz, FileDirector, and Modpack Director remain dynamic public solder.py
+routes. In the Docker setup, clients connect to Caddy and Caddy reverse-proxies
+`/packwiz/*`, `/filedirector/*`, and `/modpackdirector/*` to the API container;
+Caddy does not look for those generated responses in the static `/mods`
+directory.
 
 ## Maven repositories
 
@@ -78,14 +164,78 @@ JAR structure. Metadata and download redirects are confined to the configured
 repository origin. Standard timestamped `-SNAPSHOT` filenames are resolved from
 the version-level `maven-metadata.xml`.
 
+Enable **Use the Maven JAR URL directly** on an artifact when its repository is
+publicly reachable over HTTPS. Bootstrap manifests then give SolderPy Loader
+the exact Maven artifact URL followed by the Solder-hosted JAR fallback.
+Timestamped snapshots are resolved from version metadata when the manifest is
+generated. Both sources use the raw-JAR MD5 and size recorded during import.
+
+Every stored raw-JAR version also has an optional management-side HTTPS URL
+override. Open **Manage** beside that version to inspect its provider IDs,
+compatibility, hashes, timestamps, and build assignments or change the
+override. Its source priority is override, native Modrinth or enabled Maven,
+then Solder. The override filename may differ because the checksum covers file
+contents, not its name. Saving an override downloads it once on the server and
+requires its bytes to match the stored raw-JAR MD5; a mismatch leaves the
+previous override unchanged. Successful verification also records the JAR file
+size.
+
 ## Credentials
 
 Modrinth's public read endpoints do not need a key. solder.py does not store a
-provider credential for this integration.
+provider credential for this integration. Public GitHub repositories also work
+without credentials. Set the optional `GITHUB_TOKEN` environment variable to
+raise GitHub's API rate limit; private repositories are intentionally rejected
+because the generated Solder package is publicly distributable.
 
 The initial Maven implementation supports repositories readable without
 credentials. Do not put a username or token in the repository URL; URLs with
 embedded credentials are rejected.
+
+## CurseForge API terms and data handling
+
+CurseForge API access is governed by the
+[CurseForge third-party API terms](https://support.curseforge.com/support/solutions/articles/9000207405-curse-forge-3rd-party-api-terms-and-conditions).
+The key is issued to a specific developer and external application. Never
+commit it, put it in a generated archive, expose it to a browser or launcher,
+or share one installation's key with another operator. A self-hosted operator
+needs an independently approved key unless CurseForge gives written approval
+for another deployment model.
+
+Treat every value returned by a CurseForge API as request-scoped data. In
+particular, never persist or cache returned project or file metadata, file IDs,
+names, hashes, sizes, download URLs, timestamps, pagination data, or complete
+responses in MySQL, files, queues, logs, browser storage, or an application
+cache. This rule also applies to identifiers returned after an author upload.
+Publication history may retain solder.py's local build ID, archive digest,
+attempt status, and patch number, but not a remote identifier learned from a
+CurseForge response.
+
+The following data is not API-derived and may be stored:
+
+- a project ID manually entered by an administrator;
+- the installation's server-side API key;
+- a user's own author-upload token and manually entered publishing project ID;
+  and
+- local Solder build, package, audit, and archive-digest data.
+
+CurseForge manifest generation must therefore query compatible files at export
+time, match entirely in memory, place the chosen project and file ID only in
+the archive returned by that request, close the response, and discard the
+metadata. Do not retain a server-side copy of the generated manifest. Failed
+or ambiguous matching must stop the export rather than save candidates for
+later selection. solder.py must not download, mirror, proxy, or redistribute a
+CurseForge-hosted mod file; the native manifest leaves delivery to the
+CurseForge-compatible client.
+
+The terms also prohibit concealing API access through a proxy or VPN. Hosting
+the management interface behind a VPN is separate, but outbound CurseForge API
+traffic must not use a VPN or proxy to disguise the server's identity or
+location. Keep access administrator-triggered, honor API errors and quotas,
+and do not add background polling. CurseForge reviews applications for effects
+on author earnings, service load, and author distribution consent; describe
+the exact export-time behavior when
+[applying for a key](https://support.curseforge.com/support/solutions/articles/9000208346-about-the-curseforge-api-and-how-to-apply-for-a-key).
 
 ## Permissions
 
@@ -95,6 +245,12 @@ embedded credentials are rejected.
   `mods_create` is required to add an artifact from a configured repository.
 - `mods_manage` and `modpacks_manage` are required to list or materialize a
   provider version for a build.
+- `mods_manage` is required to link an existing mod to Modrinth or GitHub and
+  to manually synchronize a GitHub config ref or tag.
+- A managed mod's version page lists provider versions that have not yet been
+  stored locally. Importing one there uses its selected Minecraft version and
+  modloader, verifies and packages it through the same path used by the build
+  editor, and leaves already imported provider IDs out of the upstream table.
 - `mods_manage` is required to edit and refresh Maven version mappings.
 - The normal per-modpack permission check still applies.
 
@@ -141,7 +297,8 @@ requires `provider: "maven"`, a `repository` object containing `name` and
 Use `FIXED` with `version`, or `MANUAL` when releases will be mapped later.
 Both provider types accept reviewed `name`, `description`, `author`, `link`,
 and `side` (`BOTH`, `CLIENT`, or `SERVER`). Metadata is applied only when a new
-local mod is created; existing mods are never overwritten.
+local mod is created. A matching manual Modrinth slug is linked without
+overwriting its existing metadata.
 
 The complete file is validated before provider calls begin. Files are limited
 to 512 KiB. Maven entries require `mods_create`, `solder_env`, and the form's
@@ -162,6 +319,8 @@ provider fields are nullable. The provider metadata stays private to the
 management side; normal manifest data continues to use local Solder names,
 versions, URLs and hashes.
 
+GitHub config sources reuse these nullable provider fields and add no tables.
+
 Maven configuration is stored in three additive management-side tables:
 
 - `maven_repositories`
@@ -172,7 +331,15 @@ They do not change the Technic read API schema or response format.
 
 ## Upstream dependencies
 
-Provider version metadata may identify required upstream projects, but solder.py
-does not silently create or alter mod-wide dependency relationships during a
-lazy import. Configure required dependencies on the local mod page so their
-behavior remains explicit and consistent across all local versions.
+Materializing a Modrinth version imports its required upstream projects and
+stores the relationships in the existing `mod_dependencies` table. They are
+therefore visible and editable in the mod's **Required dependencies** list and
+are added transitively when the parent is added to a build. Existing projects,
+versions, and relationships are reused.
+
+Solder dependencies are mod-wide, while Modrinth reports them per version.
+Consequently, an automatically discovered requirement remains attached to the
+local mod for its other versions as well. Imports add or reuse requirements but
+do not silently delete an existing dependency merely because a later upstream
+version omits it. Review or remove such a relationship on the local mod page if
+the upstream project's requirements genuinely changed.

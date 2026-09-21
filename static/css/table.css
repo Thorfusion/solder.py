@@ -70,3 +70,28 @@
 .actionmcil {
   width: 12.4rem;
 }
+
+.build-name-cell {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.build-name-details {
+  min-width: 0;
+}
+
+.build-update-indicator {
+  align-items: center;
+  color: var(--bs-success, #198754);
+  display: inline-flex;
+  flex: 0 0 1.6rem;
+  font-family: Arial, sans-serif;
+  font-size: 1.55rem;
+  font-weight: 900;
+  justify-content: center;
+  line-height: 1;
+  margin-left: auto;
+  width: 1.6rem;
+}

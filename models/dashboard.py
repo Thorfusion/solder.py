@@ -222,10 +222,24 @@ class Dashboard:
                               SELECT 1 FROM modversions candidate
                               WHERE candidate.mod_id = current_version.mod_id
                                 AND candidate.id > current_version.id
-                                AND (candidate.mcversion = builds.minecraft
-                                     OR candidate.mcversion IS NULL)
+                                AND (
+                                     candidate.mcversion IS NULL
+                                     OR candidate.mcversion = builds.minecraft
+                                     OR FIND_IN_SET(builds.minecraft,
+                                                    candidate.mcversion) > 0
+                                     OR (
+                                         candidate.mcversion = 'MULTI'
+                                         AND EXISTS (
+                                             SELECT 1
+                                             FROM modversion_minecraft_versions compatibility
+                                             WHERE compatibility.modversion_id = candidate.id
+                                               AND compatibility.minecraft_version = builds.minecraft
+                                         )
+                                     )
+                                )
                                 AND (builds.modloader IS NULL
-                                     OR candidate.modloader = builds.modloader
+                                     OR FIND_IN_SET(builds.modloader,
+                                                    candidate.modloader) > 0
                                      OR candidate.modloader IS NULL)
                           )""",
                     params,
@@ -261,7 +275,18 @@ class Dashboard:
                         ))
                           AND (
                               (modversions.mcversion IS NOT NULL
-                               AND modversions.mcversion <> builds.minecraft)
+                               AND modversions.mcversion <> builds.minecraft
+                               AND FIND_IN_SET(builds.minecraft,
+                                               modversions.mcversion) = 0
+                               AND NOT (
+                                   modversions.mcversion = 'MULTI'
+                                   AND EXISTS (
+                                       SELECT 1
+                                       FROM modversion_minecraft_versions compatibility
+                                       WHERE compatibility.modversion_id = modversions.id
+                                         AND compatibility.minecraft_version = builds.minecraft
+                                   )
+                               ))
                               OR (builds.modloader IS NOT NULL
                                   AND modversions.modloader IS NOT NULL
                                   AND modversions.modloader <> builds.modloader)
@@ -401,18 +426,18 @@ class Dashboard:
                     """SELECT COUNT(*) AS item_count
                        FROM modversions
                        INNER JOIN mods ON modversions.mod_id = mods.id
-                       WHERE mods.modtype = 'MCIL'
+                       WHERE mods.modtype = 'BOOTSTRAP'
                          AND (modversions.jarmd5 IS NULL
                               OR modversions.jarmd5 NOT REGEXP
                                   '^[0-9A-Fa-f]{32}$')"""
                 )
-                mcil = cur.fetchone() or {}
-                if mcil.get("item_count"):
+                bootstrap = cur.fetchone() or {}
+                if bootstrap.get("item_count"):
                     data["attention"].append(
                         {
-                            "title": "MCIL packages need JAR data",
+                            "title": "Bootstrap packages need JAR data",
                             "detail": (
-                                f"{mcil['item_count']} MCIL mod version(s) are "
+                                f"{bootstrap['item_count']} bootstrap version(s) are "
                                 "not ready for direct JAR installation"
                             ),
                         }
@@ -424,7 +449,24 @@ class Dashboard:
                               CONCAT(mods.pretty_name, ' - ',
                                      modversions.version) AS title,
                               CONCAT(
-                                  COALESCE(modversions.mcversion, 'All Minecraft'),
+                                  COALESCE(
+                                      NULLIF(
+                                          CASE
+                                              WHEN modversions.mcversion = 'MULTI'
+                                              THEN (
+                                                  SELECT GROUP_CONCAT(
+                                                      compatibility.minecraft_version
+                                                      ORDER BY compatibility.minecraft_version
+                                                      SEPARATOR ',')
+                                                  FROM modversion_minecraft_versions compatibility
+                                                  WHERE compatibility.modversion_id = modversions.id
+                                              )
+                                              ELSE modversions.mcversion
+                                          END,
+                                          ''
+                                      ),
+                                      'All Minecraft'
+                                  ),
                                   CASE
                                       WHEN modversions.modloader IS NOT NULL
                                       THEN CONCAT(' / ', modversions.modloader)

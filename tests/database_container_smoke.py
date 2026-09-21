@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -62,6 +63,9 @@ def database_environment(
         "R2_REGION": "auto",
         "R2_SECRET_KEY": "smoke-test",
         "R2_URL": "https://example.invalid/mods/",
+        # The smoke endpoint is deliberately plain HTTP on loopback. Production
+        # keeps Secure cookies enabled behind its HTTPS reverse proxy.
+        "SESSION_COOKIE_SECURE": "false",
     }
     arguments: list[str] = []
     for key, value in values.items():
@@ -285,20 +289,30 @@ def verify_performance_indexes(database_container: str) -> None:
         ("build_modversion", "build_id,modversion_id"),
         ("build_modversion", "modversion_id,build_id"),
         ("builds", "modpack_id,version,is_published,private"),
+        ("builds", "modpack_id,id"),
         ("client_modpack", "modpack_id,client_id"),
         ("client_modpack", "client_id,modpack_id"),
         ("modversions", "mod_id,mcversion"),
         ("modversions", "mod_id,mcversion,modloader"),
         ("modversions", "mod_id,version"),
+        ("modversions", "mod_id,id"),
         ("mods", "integration_provider,integration_project_id"),
         ("modversions", "mod_id,integration_version_id"),
+        ("modversion_minecraft_versions", "minecraft_version,modversion_id"),
         ("maven_artifacts", "repository_id"),
         ("maven_versions", "maven_artifact_id,minecraft,modloader,enabled,available,metadata_order"),
+        ("build_optional_groups", "build_id,sort_order"),
+        ("build_optional_group_items", "group_id,sort_order"),
+        ("build_optional_group_items", "build_modversion_id"),
         ("user_permissions", "user_id"),
         ("user_modpack", "user_id,modpack_id"),
         ("user_modpack", "modpack_id,user_id"),
         ("clients", "uuid"),
         ("keys", "api_key"),
+        ("users", "username"),
+        ("sessions", "user_id"),
+        ("sessions", "expiry"),
+        ("modpack_publication_targets", "provider_account_id"),
     )
     for table, columns in expected_indexes:
         index_count = mysql(
@@ -315,6 +329,25 @@ def verify_performance_indexes(database_container: str) -> None:
             raise AssertionError(f"No index on {table} covers the columns {columns}")
 
 
+def verify_compatible_collations(database_container: str) -> None:
+    incompatible = mysql(
+        database_container,
+        "SELECT COALESCE(GROUP_CONCAT(CONCAT(TABLE_NAME, ':', "
+        "TABLE_COLLATION) ORDER BY TABLE_NAME SEPARATOR ','), '') "
+        "FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_TYPE = 'BASE TABLE' "
+        # 1.7.4's standalone migration ledger is never joined to application
+        # data and is intentionally outside Database.APPLICATION_TABLES.
+        "AND TABLE_NAME <> 'migrations' "
+        "AND TABLE_COLLATION <> 'utf8mb4_unicode_ci';",
+    )
+    if incompatible:
+        raise AssertionError(
+            f"Application tables use incompatible collations: {incompatible}"
+        )
+
+
 def verify_technic_migration(database_container: str) -> None:
     expected_columns = (
         ("build_modversion", "optional"),
@@ -328,6 +361,7 @@ def verify_technic_migration(database_container: str) -> None:
         ("mods", "integration_project_id"),
         ("modpacks", "enable_optionals"),
         ("modpacks", "enable_server"),
+        ("modpacks", "optional_mode"),
         ("modpacks", "pinned"),
         ("modpacks", "user_id"),
         ("modpacks", "url"),
@@ -341,10 +375,15 @@ def verify_technic_migration(database_container: str) -> None:
         ("modpacks", "logo_url"),
         ("modpacks", "background_url"),
         ("modversions", "jarmd5"),
+        ("modversions", "jarfilesize"),
         ("modversions", "mcversion"),
         ("modversions", "modloader"),
         ("modversions", "integration_version_id"),
+        ("maven_artifacts", "solderpy_loader_direct"),
+        ("platform_export_overrides", "override_solder_only"),
+        ("technic_solderpy_loader_builds", "delivery_mode"),
         ("user_permissions", "solder_env"),
+        ("users", "night_mode"),
         ("users", "two_factor_confirmed_at"),
         ("users", "two_factor_recovery_codes"),
         ("users", "two_factor_secret"),
@@ -376,12 +415,19 @@ def verify_technic_migration(database_container: str) -> None:
         database_container,
         "SELECT COUNT(*) FROM information_schema.TABLES "
         f"WHERE TABLE_SCHEMA = '{DATABASE}' "
-        "AND TABLE_NAME IN ('sessions', 'user_modpack', 'mod_dependencies', "
-        "'solder_settings', "
+        "AND TABLE_NAME IN ('sessions', 'login_attempts', 'user_modpack', 'mod_dependencies', "
+        "'solder_settings', 'platform_export_overrides', "
+        "'build_optional_groups', 'build_optional_group_items', "
+        "'technic_solderpy_loader_builds', "
+        "'modversion_download_overrides', "
+        "'modversion_download_sources', "
+        "'modversion_minecraft_versions', "
+        "'publishing_provider_accounts', "
+        "'modpack_publication_targets', 'modpack_publication_runs', "
         "'personal_access_tokens', 'password_reset_tokens', "
         "'maven_repositories', 'maven_artifacts', 'maven_versions');",
     )
-    if int(table_count) != 9:
+    if int(table_count) != 20:
         raise AssertionError(
             "Migration did not preserve the current Technic tables and create "
             "the solder.py tables"
@@ -476,6 +522,15 @@ def verify_fresh_schema(database_container: str) -> None:
     if java_runtime_column_count != "1":
         raise AssertionError("Fresh schema did not create java_runtime")
 
+    night_mode_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND "
+        "TABLE_NAME = 'users' AND COLUMN_NAME = 'night_mode';",
+    )
+    if night_mode_column_count != "1":
+        raise AssertionError("Fresh schema did not create user night mode")
+
     integration_schema_count = mysql(
         database_container,
         "SELECT COUNT(*) FROM information_schema.COLUMNS "
@@ -487,6 +542,21 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if integration_schema_count != "3":
         raise AssertionError("Fresh schema did not create integration columns")
+
+    direct_source_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ("
+        "(TABLE_NAME = 'modversion_download_overrides' AND "
+        "COLUMN_NAME = 'jar_url') OR "
+        "(TABLE_NAME = 'modversion_download_sources' AND COLUMN_NAME IN "
+        "('provider', 'url', 'filename', 'md5', 'sha1', 'sha512', "
+        "'filesize')) OR "
+        "(TABLE_NAME = 'maven_artifacts' AND COLUMN_NAME = "
+        "'solderpy_loader_direct'));",
+    )
+    if direct_source_column_count != "9":
+        raise AssertionError("Fresh schema did not create direct JAR source columns")
 
     integration_table_count = mysql(
         database_container,
@@ -523,6 +593,70 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if settings_table_count != "1":
         raise AssertionError("Fresh schema did not create distribution settings")
+
+    advanced_optional_table_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME IN "
+        "('build_optional_groups', 'build_optional_group_items');",
+    )
+    if advanced_optional_table_count != "2":
+        raise AssertionError("Fresh schema did not create advanced optionals")
+
+    advanced_listing_nullable = mysql(
+        database_container,
+        "SELECT IS_NULLABLE FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME = 'build_optional_group_items' "
+        "AND COLUMN_NAME = 'group_id';",
+    )
+    if advanced_listing_nullable != "YES":
+        raise AssertionError(
+            "Advanced optional work-list entries still require a group"
+        )
+
+    technic_solderpy_loader_table_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.TABLES "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME = 'technic_solderpy_loader_builds';",
+    )
+    if technic_solderpy_loader_table_count != "1":
+        raise AssertionError(
+            "Fresh schema did not create Technic SolderPy Loader settings"
+        )
+    technic_delivery_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME = 'technic_solderpy_loader_builds' "
+        "AND COLUMN_NAME = 'delivery_mode';",
+    )
+    if technic_delivery_column_count != "1":
+        raise AssertionError("Fresh schema omitted the Technic delivery mode")
+
+    advanced_optional_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ("
+        "(TABLE_NAME = 'modpacks' AND COLUMN_NAME = 'optional_mode') OR "
+        "(TABLE_NAME = 'platform_export_overrides' AND "
+        "COLUMN_NAME = 'override_solder_only'));",
+    )
+    if advanced_optional_column_count != "2":
+        raise AssertionError("Fresh schema omitted advanced export columns")
+
+    override_default = mysql(
+        database_container,
+        "SELECT CONCAT(modrinth_project_id, ':', curseforge_project_id, ':', "
+        "side, ':', enabled, ':', override_solder_only, ':', built_in) "
+        "FROM platform_export_overrides "
+        "WHERE name = 'TX Loader';",
+    )
+    if override_default != "eh8us8FY:706505:CLIENT:0:0:1":
+        raise AssertionError(
+            f"Fresh schema has an invalid TX Loader override: {override_default}"
+        )
 
     maven_table_count = mysql(
         database_container,
@@ -756,17 +890,29 @@ def seed_api_access_scenario(database_container: str) -> None:
 
 
 def seed_mcinstance_scenario(database_container: str) -> None:
+    modtype_definition = mysql(
+        database_container,
+        "SELECT COLUMN_TYPE FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME = 'mods' "
+        "AND COLUMN_NAME = 'modtype';",
+    ).upper()
+    bootstrap_modtype = (
+        "BOOTSTRAP" if "'BOOTSTRAP'" in modtype_definition else "MCIL"
+    )
     mysql(
         database_container,
-        """INSERT INTO mods
+        f"""INSERT INTO mods
                (id, name, description, author, link, pretty_name, side, modtype)
            VALUES
                (26, 'ci-mcil-loader', 'Synthetic MCInstanceLoader package',
-                'CI', 'https://example.invalid/mcil', 'CI MCIL Loader',
-                'BOTH', 'MCIL'),
+                'CI', 'https://example.invalid/bootstrap', 'CI Bootstrap Loader',
+                'BOTH', '{bootstrap_modtype}'),
                (27, 'ci-mcil-optional', 'Synthetic optional MCIL export mod',
                 'CI', 'https://example.invalid/mcil-optional',
-                'CI MCIL Optional', 'CLIENT', 'MOD');
+                'CI MCIL Optional', 'CLIENT', 'MOD'),
+               (28, 'ci-forge-launcher', 'Synthetic modpack.jar package',
+                'CI', 'https://example.invalid/forge', 'CI Forge Launcher',
+                'BOTH', 'LAUNCHER');
            INSERT INTO modversions
                (id, mod_id, version, mcversion, md5, jarmd5, filesize)
            VALUES
@@ -775,7 +921,9 @@ def seed_mcinstance_scenario(database_container: str) -> None:
                 '26262626262626262626262626262626', 2626),
                (27, 27, '1.7.10-1.0', '1.7.10',
                 '27272727272727272727272727272727',
-                '27272727272727272727272727272727', 2727);
+                '27272727272727272727272727272727', 2727),
+               (28, 28, '1.7.10-10.13.4.1614', '1.7.10',
+                '28282828282828282828282828282828', '0', 2828);
            INSERT INTO build_modversion
                (id, modversion_id, build_id, optional)
            VALUES
@@ -1452,16 +1600,33 @@ def exercise_synthetic_user_login(
         def redirect_request(self, request, file_pointer, code, message, headers, url):
             return None
 
-    request = urllib.request.Request(
-        f"{base_url}/login",
-        data=urllib.parse.urlencode(
-            {"username": "ci-user", "password": "ci-password"}
-        ).encode(),
-        method="POST",
-    )
     cookies = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(cookies), NoRedirect
+    )
+    with opener.open(f"{base_url}/login", timeout=5) as response:
+        login_page = response.read()
+    token_match = re.search(
+        rb'name="_csrf_token" value="([^"]+)"', login_page
+    )
+    if token_match is None:
+        raise AssertionError("The login form did not include a CSRF token")
+    csrf_token = token_match.group(1).decode("ascii")
+
+    def form_data(values: dict[str, str]) -> bytes:
+        submitted = dict(values)
+        submitted["_csrf_token"] = csrf_token
+        return urllib.parse.urlencode(submitted).encode()
+
+    request = urllib.request.Request(
+        f"{base_url}/login",
+        data=form_data(
+            {
+                "username": "ci-user",
+                "password": "ci-password",
+            }
+        ),
+        method="POST",
     )
     try:
         opener.open(request, timeout=5)  # nosec B310
@@ -1472,6 +1637,15 @@ def exercise_synthetic_user_login(
             ) from error
     else:
         raise AssertionError("Synthetic user login did not redirect after success")
+
+    upgraded_password = mysql(
+        database_container,
+        "SELECT password LIKE '$argon2id$%' FROM users WHERE username = 'ci-user';",
+    )
+    if upgraded_password != "1":
+        raise AssertionError(
+            "A successful legacy login did not upgrade the password to Argon2id"
+        )
 
     with opener.open(f"{base_url}/", timeout=5) as response:
         dashboard_page = response.read()
@@ -1505,13 +1679,15 @@ def exercise_synthetic_user_login(
             b'id="distribution_settings"'
         )
         hashing_position = settings_page.find(b'id="manual_md5_hashing"')
+        environment_position = settings_page.find(b"DEBUG ENV")
         if (
             distribution_position < 0
             or hashing_position < 0
-            or distribution_position >= hashing_position
+            or environment_position < 0
+            or hashing_position >= environment_position
         ):
             raise AssertionError(
-                "Distribution settings were not above manual MD5 hashing"
+                "Manual MD5 hashing was not above the environment list"
             )
 
     with opener.open(
@@ -1548,25 +1724,27 @@ def exercise_synthetic_user_login(
             f"The Maven integration was not portable: {integration_manifest}"
         )
 
-    with opener.open(f"{base_url}/modversion/3", timeout=5) as response:
+    with opener.open(f"{base_url}/modversion/3/manage/3", timeout=5) as response:
         version_page = response.read()
         if (
             response.status != 200
             or b">Create JAR</button>" not in version_page
+            or b">Verify ZIP</button>" not in version_page
         ):
-            raise AssertionError("The legacy JAR action was not shown")
+            raise AssertionError("The artifact verification actions were not shown")
 
     mcil_jar_request = urllib.request.Request(
-        f"{base_url}/modversion/3",
-        data=urllib.parse.urlencode(
-            {"createmciljar_id": "3", "createmciljar_submit": "1"}
-        ).encode(),
+        f"{base_url}/modversion/3/manage/3",
+        data=form_data({"jar_action_submit": "1"}),
         method="POST",
     )
     try:
         opener.open(mcil_jar_request, timeout=10)
     except urllib.error.HTTPError as error:
-        if error.code != 302 or error.headers.get("Location") != "/modversion/3":
+        if (
+            error.code != 302
+            or error.headers.get("Location") != "/modversion/3/manage/3"
+        ):
             raise AssertionError(
                 f"Creating a legacy MCIL JAR returned an unexpected response: {error}"
             ) from error
@@ -1581,6 +1759,14 @@ def exercise_synthetic_user_login(
         raise AssertionError(
             f"The converted MCIL JAR MD5 was not stored: {stored_jar_md5}"
         )
+    stored_jar_size = mysql(
+        database_container,
+        "SELECT jarfilesize FROM modversions WHERE id = 3;",
+    )
+    if int(stored_jar_size) != len(b"legacy Technic Solder JAR"):
+        raise AssertionError(
+            f"The converted MCIL JAR size was not stored: {stored_jar_size}"
+        )
     artifact_hash = subprocess.check_output(
         [
             "docker",
@@ -1594,15 +1780,15 @@ def exercise_synthetic_user_login(
     if artifact_hash != expected_legacy_jar_md5:
         raise AssertionError(f"The converted MCIL JAR was incorrect: {artifact_hash}")
 
-    with opener.open(f"{base_url}/modversion/3", timeout=5) as response:
-        if b"JAR ready" not in response.read():
-            raise AssertionError("The converted version was not shown as JAR ready")
+    with opener.open(f"{base_url}/modversion/3/manage/3", timeout=5) as response:
+        if b">Verify JAR</button>" not in response.read():
+            raise AssertionError("The converted version did not show the JAR verification action")
 
     dependency_request = urllib.request.Request(
         f"{base_url}/modversion/3",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {"dependency_mod_id": "2", "adddependency_submit": "1"}
-        ).encode(),
+        ),
         method="POST",
     )
     try:
@@ -1622,13 +1808,13 @@ def exercise_synthetic_user_login(
 
     add_parent_request = urllib.request.Request(
         f"{base_url}/modpackbuild/1",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {
                 "modversion": "3",
                 "modnames": "3",
                 "add_mod_submit": "1",
             }
-        ).encode(),
+        ),
         method="POST",
     )
     try:
@@ -1661,9 +1847,9 @@ def exercise_synthetic_user_login(
 
     update_all_request = urllib.request.Request(
         f"{base_url}/modpackbuild/1",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {"update_all_mods_submit": "1"}
-        ).encode(),
+        ),
         method="POST",
     )
     try:
@@ -1697,17 +1883,27 @@ def exercise_synthetic_user_login(
             response.status != 200
             or b"CI Example Mod" not in build_editor
             or b">Update all mods</button>" not in build_editor
-            or b">Export mod list (CSV)</a>" not in build_editor
+            or b">Export</a>" not in build_editor
+            or b"export=1" not in build_editor
+            or b'id="export_modpack_modal"' in build_editor
             or b'id="build_version_fields"' not in build_editor
             or b'name="java_runtime"' not in build_editor
-            or b">Advanced</span>" not in build_editor
-            or b">Export mod list</button>" in build_editor
+            or b">Advanced</span>" in build_editor
         ):
             raise AssertionError("The authenticated build editor did not render")
 
+    with opener.open(f"{base_url}/modpackbuild/1?export=1", timeout=5) as response:
+        export_editor = response.read()
+        if (
+            response.status != 200
+            or b'id="export_modpack_modal"' not in export_editor
+            or b">Export CSV</button>" not in export_editor
+        ):
+            raise AssertionError("The build export window did not render")
+
     build_settings_request = urllib.request.Request(
         f"{base_url}/modpackbuild/1",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {
                 "form-submit": "1",
                 "version": "1.0",
@@ -1719,7 +1915,7 @@ def exercise_synthetic_user_login(
                 "modloader": "",
                 "publish": "1",
             }
-        ).encode(),
+        ),
         method="POST",
     )
     try:
@@ -1755,6 +1951,37 @@ def exercise_synthetic_user_login(
             f"The API omitted the Mojang Java runtime: {java_manifest}"
         )
 
+    add_launcher_request = urllib.request.Request(
+        f"{base_url}/modpackbuild/20",
+        data=form_data(
+            {
+                "modversion": "28",
+                "modnames": "28",
+                "add_mod_submit": "1",
+            }
+        ),
+        method="POST",
+    )
+    try:
+        opener.open(add_launcher_request, timeout=5)
+    except urllib.error.HTTPError as error:
+        if error.code != 302 or error.headers.get("Location") != "/modpackbuild/20":
+            raise AssertionError(
+                f"Adding a launcher package returned an unexpected response: {error}"
+            ) from error
+    else:
+        raise AssertionError("Adding a launcher package did not redirect")
+
+    stored_modloader = mysql(
+        database_container,
+        "SELECT forge, modloader FROM builds WHERE id = 20;",
+    )
+    if stored_modloader != "1.7.10-10.13.4.1614\tFORGE":
+        raise AssertionError(
+            "The launcher package version was not synchronized to the build: "
+            f"{stored_modloader}"
+        )
+
     with opener.open(f"{base_url}/modpackbuild/20/mcinstance", timeout=5) as response:
         if response.status != 200:
             raise AssertionError("The MCInstance export did not return HTTP 200")
@@ -1780,7 +2007,7 @@ def exercise_synthetic_user_login(
 
     duplicate_request = urllib.request.Request(
         f"{base_url}/newmod",
-        data=urllib.parse.urlencode(
+        data=form_data(
             {
                 "pretty_name": "Duplicate CI Mod",
                 "name": "ci-example-mod",
@@ -1791,7 +2018,7 @@ def exercise_synthetic_user_login(
                 "type": "MOD",
                 "internal_note": "Synthetic duplicate",
             }
-        ).encode(),
+        ),
         method="POST",
     )
     try:
@@ -1873,6 +2100,16 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         ).strip()
         base_url = f"http://127.0.0.1:{port_mapping.rsplit(':', 1)[1]}"
         wait_for_application(application_container, f"{base_url}/api/")
+        verify_compatible_collations(database_container)
+        migrated_bootstrap_type = mysql(
+            database_container,
+            "SELECT modtype FROM mods WHERE id = 26;",
+        )
+        if migrated_bootstrap_type != "BOOTSTRAP":
+            raise AssertionError(
+                "Application startup did not migrate the MCIL package type "
+                "to BOOTSTRAP"
+            )
         write_token = seed_write_api_token(database_container)
         exercise_write_api(base_url, database_container, write_token)
         if fixture is not None and fixture.name == "solderpy.sql":
@@ -1902,7 +2139,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
                 )
         mysql(
             database_container,
-            "UPDATE modversions SET modloader = 'FORGE' WHERE id IN (26, 27);",
+            "UPDATE modversions SET modloader = 'FORGE' WHERE id IN (26, 27, 28);",
         )
         dependency_table_count = mysql(
             database_container,
@@ -1922,6 +2159,47 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             raise AssertionError(
                 "Application startup did not create distribution settings"
             )
+        advanced_optional_table_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.TABLES "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' AND TABLE_NAME IN "
+            "('build_optional_groups', 'build_optional_group_items');",
+        )
+        if advanced_optional_table_count != "2":
+            raise AssertionError(
+                "Application startup did not create advanced optionals"
+            )
+        technic_solderpy_loader_table_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.TABLES "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+            "AND TABLE_NAME = 'technic_solderpy_loader_builds';",
+        )
+        if technic_solderpy_loader_table_count != "1":
+            raise AssertionError(
+                "Application startup did not create Technic SolderPy Loader settings"
+            )
+        technic_delivery_column_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.COLUMNS "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+            "AND TABLE_NAME = 'technic_solderpy_loader_builds' "
+            "AND COLUMN_NAME = 'delivery_mode';",
+        )
+        if technic_delivery_column_count != "1":
+            raise AssertionError(
+                "Application startup omitted the Technic delivery mode"
+            )
+        override_default = mysql(
+            database_container,
+            "SELECT CONCAT(modrinth_project_id, ':', curseforge_project_id, ':', "
+            "side, ':', enabled, ':', override_solder_only, ':', built_in) "
+            "FROM platform_export_overrides WHERE name = 'TX Loader';",
+        )
+        if override_default != "eh8us8FY:706505:CLIENT:0:0:1":
+            raise AssertionError(
+                "Application startup did not create the disabled TX Loader override"
+            )
         maven_table_count = mysql(
             database_container,
             "SELECT COUNT(*) FROM information_schema.TABLES "
@@ -1931,6 +2209,22 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         )
         if maven_table_count != "3":
             raise AssertionError("Application startup did not create the Maven catalog")
+        direct_source_column_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.COLUMNS "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' AND ("
+            "(TABLE_NAME = 'modversion_download_overrides' AND "
+            "COLUMN_NAME = 'jar_url') OR "
+            "(TABLE_NAME = 'modversion_download_sources' AND COLUMN_NAME IN "
+            "('provider', 'url', 'filename', 'md5', 'sha1', 'sha512', "
+            "'filesize')) OR "
+            "(TABLE_NAME = 'maven_artifacts' AND COLUMN_NAME = "
+            "'solderpy_loader_direct'));",
+        )
+        if direct_source_column_count != "9":
+            raise AssertionError(
+                "Application startup did not create direct JAR source columns"
+            )
         integration_schema_count = mysql(
             database_container,
             "SELECT COUNT(*) FROM information_schema.COLUMNS "
@@ -1962,7 +2256,8 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         mysql(
             database_container,
             "INSERT INTO solder_settings (name, value) VALUES "
-            "('packwiz_enabled', '1'), ('filedirector_enabled', '1') "
+            "('mcil_enabled', '1'), ('packwiz_enabled', '1'), "
+            "('filedirector_enabled', '1') "
             "ON DUPLICATE KEY UPDATE value = '1';",
         )
         verify_api_only_distribution_files(image, network)

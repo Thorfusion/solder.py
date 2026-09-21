@@ -29,6 +29,7 @@ TEST_ENVIRONMENT = {
     "R2_REGION": "auto",
     "R2_SECRET_KEY": "test",
     "R2_URL": "https://cdn.example.test/mods/",
+    "SECRET_KEY": "test-only-secret-key",
     "TECHNIC_MIGRATION": "false",
 }
 
