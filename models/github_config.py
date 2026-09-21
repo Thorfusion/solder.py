@@ -32,7 +32,7 @@ MAX_SUBMODULES = 50
 MAX_SUBMODULE_DEPTH = 3
 MAX_IGNORE_SIZE = 256 * 1024
 MAX_IGNORE_RULES = 2000
-USER_AGENT = "solder.py/1.10.0 (+https://github.com/Thorfusion/solder.py)"
+USER_AGENT = "solder.py/1.10.1 (+https://github.com/Thorfusion/solder.py)"
 
 _REPOSITORY_RE = re.compile(
     r"(?P<owner>[A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/(?P<repo>[A-Za-z0-9_.-]{1,100})"

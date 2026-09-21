@@ -35,7 +35,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         cls.client = cls.app_module.app.test_client()
 
     def test_application_exposes_its_version(self):
-        self.assertEqual(self.app_module.__version__, "1.10.0")
+        self.assertEqual(self.app_module.__version__, "1.10.1")
 
     def test_management_session_cookie_has_safe_defaults(self):
         self.assertTrue(self.app_module.app.config["SESSION_COOKIE_HTTPONLY"])

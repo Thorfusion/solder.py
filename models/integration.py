@@ -68,7 +68,7 @@ MAX_MODRINTH_DEPENDENCY_PROJECTS = 256
 MAX_MODRINTH_DEPENDENCY_DEPTH = 32
 REQUEST_TIMEOUT = (5, 30)
 DOWNLOAD_TIMEOUT = (5, 120)
-USER_AGENT = "solder.py/1.10.0 (+https://github.com/Thorfusion/solder.py)"
+USER_AGENT = "solder.py/1.10.1 (+https://github.com/Thorfusion/solder.py)"
 
 
 class IntegrationError(ValueError):

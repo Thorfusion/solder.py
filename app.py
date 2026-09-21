@@ -7,7 +7,7 @@ from asetup import asetup
 from asite import asite
 from distribution_api import distribution_api
 from flask import Flask, jsonify, render_template, request
-from models.common import debug, host, port, api_only, management_only, migratetechnic, new_user, DB_IS_UP, reverse_proxy, write_api, session_cookie_secure
+from models.common import debug, host, port, api_only, management_only, migratetechnic, new_user, DB_IS_UP, database_needs_setup, reverse_proxy, write_api, session_cookie_secure
 from models.csrf import CsrfProtection
 from models.cache_revision import CacheRevision
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -30,9 +30,9 @@ if write_api and DB_IS_UP == 1:
 
     app.register_blueprint(write_api_blueprint)
 if not api_only:
-    if migratetechnic is True or new_user is True or DB_IS_UP != 1:
+    if migratetechnic is True or new_user is True or database_needs_setup or DB_IS_UP != 1:
         app.register_blueprint(asetup)
-    if DB_IS_UP != 2:
+    if DB_IS_UP == 1:
         # Note that asite must be after setup
         app.register_blueprint(alogin)
         app.register_blueprint(asite)

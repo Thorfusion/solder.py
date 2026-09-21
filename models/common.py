@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from models.database import Database
 
 ## Solderpy version
-solderpy_version = "1.10.0"
+solderpy_version = "1.10.1"
 
 load_dotenv(".env")
 
@@ -74,11 +74,19 @@ R2_SECRET_KEY = os.getenv("R2_SECRET_KEY")
 R2_BUCKET = os.getenv("R2_BUCKET")
 
 DB_IS_UP = Database.is_setup()
+database_needs_setup = DB_IS_UP == 0
+if database_needs_setup and (not api_only or write_api):
+    # An empty or partial database must be repaired before login is exposed.
+    # Keep the setup page available afterwards to create the first user.
+    if Database.create_tables():
+        DB_IS_UP = Database.is_setup()
+    else:
+        DB_IS_UP = 2
 if DB_IS_UP == 1 and (not api_only or write_api):
     if migratetechnic:
         schema_ready = Database.migratetechnic_tables()
     else:
-        schema_ready = Database.ensure_runtime_schema()
+        schema_ready = Database.repair_schema()
     if not schema_ready:
         DB_IS_UP = 2
 

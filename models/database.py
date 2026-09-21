@@ -14,10 +14,12 @@ db_user = getenv("DB_USER")
 db_pass = getenv("DB_PASSWORD")
 db_name = getenv("DB_DATABASE")
 
-DISABLE_is_setup = False
-
-if os.getenv("DISABLE_is_setup"):
-    DISABLE_is_setup = os.getenv("DISABLE_is_setup").lower() in ["true", "t", "1", "yes", "y"]
+# Unit tests import the application without a MySQL server. Never let this
+# historical test shortcut disable schema repair in a deployed container.
+DISABLE_is_setup = (
+    os.getenv("SOLDERPY_TESTING") == "1"
+    and os.getenv("DISABLE_is_setup", "").lower() in ["true", "t", "1", "yes", "y"]
+)
 
 CORE_TABLES = {
     "modpacks",
@@ -329,6 +331,41 @@ class Database:
         MAVEN_VERSIONS_TABLE_SQL,
     )
 
+    # One current-state table definition per additive feature. Fresh installs,
+    # Technic imports and existing solder.py databases all use this same list.
+    ADDITIVE_TABLES_SQL = (
+        MOD_DEPENDENCIES_TABLE_SQL,
+        MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL,
+        MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL,
+        MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL,
+        *PUBLISHING_TABLES_SQL,
+        PERSONAL_ACCESS_TOKENS_TABLE_SQL,
+        USER_MODPACK_TABLE_SQL,
+        SOLDER_SETTINGS_TABLE_SQL,
+        SESSION_TABLE_SQL,
+        LOGIN_ATTEMPTS_TABLE_SQL,
+        PLATFORM_EXPORT_OVERRIDES_TABLE_SQL,
+        *ADVANCED_OPTIONAL_TABLES_SQL,
+        TECHNIC_SOLDERPY_LOADER_TABLE_SQL,
+        *MAVEN_TABLES_SQL,
+    )
+
+    @staticmethod
+    def create_additive_tables(cur) -> None:
+        for query in Database.ADDITIVE_TABLES_SQL:
+            cur.execute(query)
+
+    @staticmethod
+    def verify_application_tables(cur) -> None:
+        cur.execute("SHOW TABLES")
+        present = {row[0] for row in cur.fetchall()}
+        missing = Database.APPLICATION_TABLES - present
+        if missing:
+            raise RuntimeError(
+                "Database schema is missing required tables: "
+                + ", ".join(sorted(missing))
+            )
+
     MODLOADER_COLUMN_MIGRATIONS = (
         (
             "builds",
@@ -414,6 +451,28 @@ class Database:
             "modversions",
             "integration_version_id",
             "ALTER TABLE modversions ADD COLUMN integration_version_id VARCHAR(64) NULL AFTER modloader",
+        ),
+    )
+
+    CURRENT_COLUMN_REPAIRS = (
+        *JAR_COLUMN_MIGRATIONS,
+        *MODLOADER_COLUMN_MIGRATIONS,
+        *JAVA_RUNTIME_COLUMN_MIGRATIONS,
+        *USER_COLUMN_MIGRATIONS,
+        *NOTES_COLUMN_MIGRATIONS,
+        *INTEGRATION_COLUMN_MIGRATIONS,
+        *MAVEN_COLUMN_MIGRATIONS,
+        *TECHNIC_SOLDERPY_LOADER_COLUMN_MIGRATIONS,
+        (
+            "modpacks",
+            "optional_mode",
+            "ALTER TABLE modpacks ADD COLUMN optional_mode TINYINT NOT NULL DEFAULT 0",
+        ),
+        (
+            "platform_export_overrides",
+            "override_solder_only",
+            "ALTER TABLE platform_export_overrides ADD COLUMN override_solder_only "
+            "TINYINT(1) NOT NULL DEFAULT 0 AFTER enabled",
         ),
     )
 
@@ -567,6 +626,18 @@ class Database:
             (db_name, table, column),
         )
         return cur.fetchone() is not None
+
+    @staticmethod
+    def repair_columns(cur, definitions) -> None:
+        for table, column, query in definitions:
+            if not Database.column_exists(cur, table, column):
+                cur.execute(query)
+
+    @staticmethod
+    def repair_indexes(cur) -> None:
+        for table, columns, query in Database.API_INDEX_MIGRATIONS:
+            if not Database.index_covers_columns(cur, table, columns):
+                cur.execute(query)
 
     @staticmethod
     def allow_ungrouped_advanced_optionals(cur) -> None:
@@ -901,22 +972,6 @@ class Database:
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                           COLLATE=utf8mb4_unicode_ci"""
             )
-            cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
-            cur.execute(Database.MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL)
-            cur.execute(Database.MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL)
-            cur.execute(Database.MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL)
-            for query in Database.PUBLISHING_TABLES_SQL:
-                cur.execute(query)
-            cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
-            cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
-            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
-            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL)
-            for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
-                cur.execute(query)
-            Database.allow_ungrouped_advanced_optionals(cur)
-            cur.execute(Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL)
-            for query in Database.MAVEN_TABLES_SQL:
-                cur.execute(query)
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS users (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -980,7 +1035,6 @@ class Database:
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                           COLLATE=utf8mb4_unicode_ci"""
             )
-            cur.execute(Database.USER_MODPACK_TABLE_SQL)
             cur.execute(
                 """CREATE TABLE IF NOT EXISTS `keys` (
                         id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -991,9 +1045,11 @@ class Database:
                         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
                           COLLATE=utf8mb4_unicode_ci"""
             )
-            cur.execute(Database.SESSION_TABLE_SQL)
-            cur.execute(Database.LOGIN_ATTEMPTS_TABLE_SQL)
+            Database.create_additive_tables(cur)
+            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL)
+            Database.allow_ungrouped_advanced_optionals(cur)
             Database.normalize_table_collations(cur)
+            Database.verify_application_tables(cur)
             con.commit()
             return True
         except Exception as error:
@@ -1030,11 +1086,6 @@ class Database:
                 "ALTER TABLE modpacks ADD COLUMN enable_server BOOLEAN DEFAULT 0",
             ),
             (
-                "modpacks",
-                "optional_mode",
-                "ALTER TABLE modpacks ADD COLUMN optional_mode TINYINT NOT NULL DEFAULT 0",
-            ),
-            (
                 "mods",
                 "side",
                 "ALTER TABLE mods ADD COLUMN side ENUM('CLIENT', 'SERVER', 'BOTH') DEFAULT 'BOTH'",
@@ -1064,7 +1115,6 @@ class Database:
                 "optional",
                 "ALTER TABLE build_modversion ADD COLUMN optional TINYINT(1) NOT NULL DEFAULT 0",
             ),
-            *Database.JAR_COLUMN_MIGRATIONS,
             (
                 "modversions",
                 "mcversion",
@@ -1075,18 +1125,7 @@ class Database:
                 "solder_env",
                 "ALTER TABLE user_permissions ADD COLUMN solder_env BOOLEAN DEFAULT 0",
             ),
-            *Database.MODLOADER_COLUMN_MIGRATIONS,
-            *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
-            *Database.USER_COLUMN_MIGRATIONS,
-            *Database.NOTES_COLUMN_MIGRATIONS,
-            *Database.INTEGRATION_COLUMN_MIGRATIONS,
-            *Database.MAVEN_COLUMN_MIGRATIONS,
-            *Database.TECHNIC_SOLDERPY_LOADER_COLUMN_MIGRATIONS,
-            (
-                "platform_export_overrides",
-                "override_solder_only",
-                "ALTER TABLE platform_export_overrides ADD COLUMN override_solder_only TINYINT(1) NOT NULL DEFAULT 0 AFTER enabled",
-            ),
+            *Database.CURRENT_COLUMN_REPAIRS,
         )
         con = Database.get_connection()
         if con is None:
@@ -1095,33 +1134,19 @@ class Database:
         cur = None
         try:
             cur = con.cursor()
-            # This table does not exist in a Technic database. Create its
-            # current shape before applying additive column checks.
-            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
-            cur.execute(Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL)
-            for query in Database.MAVEN_TABLES_SQL:
-                cur.execute(query)
+            # Repair all additive tables before checking columns that may
+            # belong to those tables.
+            Database.create_additive_tables(cur)
             Database.normalize_legacy_timestamps(cur)
-            for table, column, query in column_migrations:
-                cur.execute(
-                    """SELECT 1
-                       FROM information_schema.COLUMNS
-                       WHERE TABLE_SCHEMA = %s
-                         AND TABLE_NAME = %s
-                         AND COLUMN_NAME = %s""",
-                    (db_name, table, column),
-                )
-                if cur.fetchone() is None:
-                    cur.execute(query)
+            Database.repair_columns(cur, column_migrations)
 
             Database.migrate_legacy_mod_notes(cur)
             Database.migrate_bootstrap_modtype(cur)
             Database.expand_modversion_compatibility(cur)
             Database.migrate_jar_hash_mod_types(cur)
 
-            # Technic has no user_modpack table. Create it before migrating
-            # its CSV permissions or attempting the related index migrations.
-            cur.execute(Database.USER_MODPACK_TABLE_SQL)
+            # Technic stores modpack permissions as CSV; copy them into the
+            # current table after its definition has been repaired above.
             Database.migrate_technic_modpack_permissions(cur)
             cur.execute("ALTER TABLE modpacks MODIFY user_id INT NOT NULL")
             cur.execute(
@@ -1129,31 +1154,15 @@ class Database:
                 "WHERE modloader IS NULL AND forge IS NOT NULL"
             )
 
-            cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
-            cur.execute(Database.MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL)
-            cur.execute(Database.MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL)
-            cur.execute(Database.MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL)
-            for query in Database.PUBLISHING_TABLES_SQL:
-                cur.execute(query)
-            cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
-            cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
-            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
             cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL)
-            for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
-                cur.execute(query)
             Database.allow_ungrouped_advanced_optionals(cur)
-            cur.execute(Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL)
-
-            cur.execute(Database.SESSION_TABLE_SQL)
-            cur.execute(Database.LOGIN_ATTEMPTS_TABLE_SQL)
 
             # Run index migrations after every additive table has been
             # created. A stock Technic database does not contain sessions or
             # the publishing tables yet.
-            for table, columns, query in Database.API_INDEX_MIGRATIONS:
-                if not Database.index_covers_columns(cur, table, columns):
-                    cur.execute(query)
+            Database.repair_indexes(cur)
             Database.normalize_table_collations(cur)
+            Database.verify_application_tables(cur)
             con.commit()
             print("technic database migrated!")
             return True
@@ -1168,8 +1177,8 @@ class Database:
             con.close()
 
     @staticmethod
-    def ensure_runtime_schema() -> bool:
-        """Create additive tables needed when an existing installation upgrades."""
+    def repair_schema() -> bool:
+        """Repair an existing database against the current schema, without version steps."""
         if DISABLE_is_setup:
             return True
 
@@ -1181,55 +1190,10 @@ class Database:
         try:
             cur = con.cursor()
             Database.normalize_legacy_timestamps(cur)
-            cur.execute(Database.MOD_DEPENDENCIES_TABLE_SQL)
-            cur.execute(Database.MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL)
-            cur.execute(Database.MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL)
-            cur.execute(Database.MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL)
-            for query in Database.PUBLISHING_TABLES_SQL:
-                cur.execute(query)
-            cur.execute(Database.PERSONAL_ACCESS_TOKENS_TABLE_SQL)
-            cur.execute(Database.USER_MODPACK_TABLE_SQL)
-            cur.execute(Database.SOLDER_SETTINGS_TABLE_SQL)
-            cur.execute(Database.SESSION_TABLE_SQL)
-            cur.execute(Database.LOGIN_ATTEMPTS_TABLE_SQL)
-            cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_TABLE_SQL)
-            for query in Database.ADVANCED_OPTIONAL_TABLES_SQL:
-                cur.execute(query)
+            Database.create_additive_tables(cur)
             Database.allow_ungrouped_advanced_optionals(cur)
-            cur.execute(Database.TECHNIC_SOLDERPY_LOADER_TABLE_SQL)
-            for query in Database.MAVEN_TABLES_SQL:
-                cur.execute(query)
 
-            for table, column, query in (
-                *Database.JAR_COLUMN_MIGRATIONS,
-                *Database.MODLOADER_COLUMN_MIGRATIONS,
-                *Database.JAVA_RUNTIME_COLUMN_MIGRATIONS,
-                *Database.USER_COLUMN_MIGRATIONS,
-                *Database.NOTES_COLUMN_MIGRATIONS,
-                *Database.INTEGRATION_COLUMN_MIGRATIONS,
-                *Database.MAVEN_COLUMN_MIGRATIONS,
-                *Database.TECHNIC_SOLDERPY_LOADER_COLUMN_MIGRATIONS,
-                (
-                    "modpacks",
-                    "optional_mode",
-                    "ALTER TABLE modpacks ADD COLUMN optional_mode TINYINT NOT NULL DEFAULT 0",
-                ),
-                (
-                    "platform_export_overrides",
-                    "override_solder_only",
-                    "ALTER TABLE platform_export_overrides ADD COLUMN override_solder_only TINYINT(1) NOT NULL DEFAULT 0 AFTER enabled",
-                ),
-            ):
-                cur.execute(
-                    """SELECT 1
-                       FROM information_schema.COLUMNS
-                       WHERE TABLE_SCHEMA = %s
-                         AND TABLE_NAME = %s
-                         AND COLUMN_NAME = %s""",
-                    (db_name, table, column),
-                )
-                if cur.fetchone() is None:
-                    cur.execute(query)
+            Database.repair_columns(cur, Database.CURRENT_COLUMN_REPAIRS)
 
             # Existing installations can already have this table with an
             # older shape. Seed built-in rows only after its additive column
@@ -1246,21 +1210,9 @@ class Database:
                 "WHERE modloader IS NULL AND forge IS NOT NULL"
             )
 
-            for table, columns, query in Database.API_INDEX_MIGRATIONS:
-                cur.execute(
-                    """SELECT 1
-                       FROM information_schema.TABLES
-                       WHERE TABLE_SCHEMA = %s
-                         AND TABLE_NAME = %s
-                       LIMIT 1""",
-                    (db_name, table),
-                )
-                if cur.fetchone() is None:
-                    continue
-
-                if not Database.index_covers_columns(cur, table, columns):
-                    cur.execute(query)
+            Database.repair_indexes(cur)
             Database.normalize_table_collations(cur)
+            Database.verify_application_tables(cur)
             con.commit()
             return True
         except Exception as error:
@@ -1270,6 +1222,8 @@ class Database:
             if cur is not None:
                 cur.close()
             con.close()
+
+    ensure_runtime_schema = repair_schema
 
     @staticmethod
     def create_session_table() -> bool:
