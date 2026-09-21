@@ -76,7 +76,7 @@ Example response:
 ```json
 {
   "api": "solder.py",
-  "version": "v1.10.0",
+  "version": "v1.10.1",
   "stream": "DEV",
   "capabilities": {
     "advanced_optionals": true,

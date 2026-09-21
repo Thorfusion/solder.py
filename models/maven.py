@@ -22,7 +22,7 @@ DEFAULT_VERSION_PATTERN = "{minecraft}-{version}"
 REQUEST_TIMEOUT = (5, 30)
 MAX_METADATA_SIZE = 2 * 1024 * 1024
 MAX_MAVEN_VERSIONS = 10000
-USER_AGENT = "solder.py/1.10.0 (+https://github.com/Thorfusion/solder.py)"
+USER_AGENT = "solder.py/1.10.1 (+https://github.com/Thorfusion/solder.py)"
 logger = logging.getLogger(__name__)
 
 _GROUP_PATTERN = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,190}")

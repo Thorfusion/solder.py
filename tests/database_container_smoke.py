@@ -166,35 +166,6 @@ def migrate_technic_schema(image: str, network: str) -> None:
             )
 
 
-def create_fresh_schema(image: str, network: str) -> None:
-    command = (
-        "from models.database import Database; "
-        "raise SystemExit(0 if Database.create_tables() else 1)"
-    )
-    result = subprocess.run(
-        [
-            "docker",
-            "run",
-            "--rm",
-            "--network",
-            network,
-            *database_environment("mysql"),
-            image,
-            "python",
-            "-c",
-            command,
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(
-            "Fresh database setup failed:\n"
-            f"{result.stdout.strip()}\n{result.stderr.strip()}"
-        )
-
-
 def verify_read_only_api_startup(image: str, network: str, database_container: str) -> None:
     mysql(
         database_container,
@@ -2064,23 +2035,32 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             capture_output=True,
         )
         wait_for_mysql(database_container)
-        if fixture is None:
-            create_fresh_schema(image, network)
-            verify_fresh_schema(database_container)
-            seed_fresh_database(database_container)
-        else:
+        if fixture is not None:
             mysql(database_container, fixture.read_text(encoding="utf-8"))
 
         if migrate:
             migrate_technic_schema(image, network)
             verify_technic_migration(database_container)
 
-        verify_read_only_api_startup(image, network, database_container)
-
-        seed_dependency_scenario(database_container)
-        seed_api_access_scenario(database_container)
-        seed_mcinstance_scenario(database_container)
+        if fixture is not None:
+            verify_read_only_api_startup(image, network, database_container)
+            seed_dependency_scenario(database_container)
+            seed_api_access_scenario(database_container)
+            seed_mcinstance_scenario(database_container)
         start_maven_fixture(image, network, maven_container)
+
+        application_environment = database_environment("mysql", write_api=True)
+        if fixture is not None and fixture.name == "solderpy.sql":
+            # This historical database has no login_attempts table. Even if a
+            # deployment carries the old skip flag, startup must repair it.
+            before = mysql(
+                database_container,
+                "SELECT COUNT(*) FROM information_schema.TABLES "
+                "WHERE TABLE_SCHEMA = 'solder' AND TABLE_NAME = 'login_attempts';",
+            )
+            if before != "0":
+                raise AssertionError("Legacy fixture unexpectedly has login_attempts")
+            application_environment.extend(("--env", "DISABLE_is_setup=true"))
 
         docker(
             "run",
@@ -2091,7 +2071,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             network,
             "--publish",
             "127.0.0.1:0:5000",
-            *database_environment("mysql", write_api=True),
+            *application_environment,
             image,
             capture_output=True,
         )
@@ -2100,6 +2080,24 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         ).strip()
         base_url = f"http://127.0.0.1:{port_mapping.rsplit(':', 1)[1]}"
         wait_for_application(application_container, f"{base_url}/api/")
+        if fixture is None:
+            # A real first boot must create the schema before exposing login.
+            verify_fresh_schema(database_container)
+            with urllib.request.urlopen(f"{base_url}/setup", timeout=5) as response:  # nosec B310
+                if response.status != 200:
+                    raise AssertionError("First-boot setup page was not available")
+            seed_fresh_database(database_container)
+            verify_read_only_api_startup(image, network, database_container)
+            seed_dependency_scenario(database_container)
+            seed_api_access_scenario(database_container)
+            seed_mcinstance_scenario(database_container)
+        login_table_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.TABLES "
+            "WHERE TABLE_SCHEMA = 'solder' AND TABLE_NAME = 'login_attempts';",
+        )
+        if login_table_count != "1":
+            raise AssertionError("Management startup did not repair login_attempts")
         verify_compatible_collations(database_container)
         migrated_bootstrap_type = mysql(
             database_container,

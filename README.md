@@ -396,7 +396,7 @@ Create a Compose `.env` file beside `compose.yml`. Use different, randomly
 generated values in production and do not commit this file:
 
 ```dotenv
-SOLDER_IMAGE=thorfusion/solderpy:1.10.0
+SOLDER_IMAGE=thorfusion/solderpy:1.10.1
 SOLDER_DB_PASSWORD=replace-with-a-long-random-password
 MYSQL_ROOT_PASSWORD=replace-with-another-long-random-password
 SOLDER_SECRET_KEY=replace-with-a-long-random-application-secret
@@ -567,8 +567,11 @@ docker compose ps
 docker compose logs --tail=200 solderpy
 ```
 
-The management process applies the current additive solder.py schema at
-startup. Do not start a read-only API service against a database until the
+The management process repairs the database against the current solder.py
+schema at startup; it does not run a chain of per-release migrations. Its
+database user needs permission to create tables and alter columns/indexes.
+If repair fails, management login is not exposed and the error is logged.
+Do not start a read-only API service against a database until the
 management service has completed successfully. Keep the previous image tag in
 your deployment notes; a database backup is still required because rolling an
 application image back does not roll its schema or stored data back.

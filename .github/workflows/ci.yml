@@ -23,7 +23,7 @@ jobs:
     # Keep this name stable: branch protection requires this exact status check.
     name: solder.py tests
     runs-on: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ubuntu-latest' || 'self-hosted' }}
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       PIPENV_DONT_LOAD_ENV: "1"
       PIPENV_NOSPIN: "1"
@@ -55,6 +55,23 @@ jobs:
 
       - name: Run test suite
         run: pipenv run python -m unittest discover -s tests -v
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build production image for tests
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          push: false
+          tags: solderpy:test-${{ github.sha }}
+
+      - name: Smoke test running container
+        run: python tests/container_smoke.py solderpy:test-${{ github.sha }}
+
+      - name: Test current and migrated MySQL databases
+        run: python tests/database_container_smoke.py solderpy:test-${{ github.sha }}
 
   python-security:
     # Keep this name stable if it is selected as a required status check.
@@ -129,12 +146,6 @@ jobs:
           load: true
           push: false
           tags: solderpy:security-${{ github.sha }}
-
-      - name: Smoke test running container
-        run: python tests/container_smoke.py solderpy:security-${{ github.sha }}
-
-      - name: Test current and migrated MySQL databases
-        run: python tests/database_container_smoke.py solderpy:security-${{ github.sha }}
 
       - name: Scan image for high and critical vulnerabilities
         if: always()

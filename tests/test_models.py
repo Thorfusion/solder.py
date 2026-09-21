@@ -1,5 +1,6 @@
 import datetime
 import hashlib
+import re
 import tempfile
 import unittest
 import zipfile
@@ -23,7 +24,7 @@ from models.build import (  # noqa: E402
 )
 from models.build_modversion import Build_modversion  # noqa: E402
 from models.common import common  # noqa: E402
-from models.database import Database  # noqa: E402
+from models.database import CORE_TABLES, Database  # noqa: E402
 from models.dashboard import Dashboard  # noqa: E402
 from models.mod import DuplicateModError, Mod, UploadVerificationError  # noqa: E402
 from models.mod_dependency import (  # noqa: E402
@@ -360,6 +361,26 @@ class ModelSerializationTests(unittest.TestCase):
 
 
 class ModelBehaviorTests(unittest.TestCase):
+    def test_additive_table_repair_includes_login_throttle(self):
+        cursor = MagicMock()
+        Database.create_additive_tables(cursor)
+        statements = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertIn(Database.LOGIN_ATTEMPTS_TABLE_SQL, statements)
+        defined_tables = {
+            re.search(r"CREATE TABLE IF NOT EXISTS ([a-z_]+)", sql).group(1)
+            for sql in statements
+        }
+        self.assertEqual(Database.APPLICATION_TABLES, CORE_TABLES | defined_tables)
+
+    def test_schema_verification_rejects_missing_login_table(self):
+        cursor = MagicMock()
+        cursor.fetchall.return_value = [
+            (table,) for table in Database.APPLICATION_TABLES
+            if table != "login_attempts"
+        ]
+        with self.assertRaisesRegex(RuntimeError, "login_attempts"):
+            Database.verify_application_tables(cursor)
+
     def test_runtime_schema_migrates_export_override_before_seeding(self):
         connection = MagicMock()
         cursor = connection.cursor.return_value
@@ -371,8 +392,9 @@ class ModelBehaviorTests(unittest.TestCase):
             patch.object(Database, "normalize_legacy_timestamps"),
             patch.object(Database, "migrate_legacy_mod_notes"),
             patch.object(Database, "migrate_jar_hash_mod_types"),
+            patch.object(Database, "verify_application_tables"),
         ):
-            self.assertTrue(Database.ensure_runtime_schema())
+            self.assertTrue(Database.repair_schema())
 
         statements = [call.args[0] for call in cursor.execute.call_args_list]
         migration = next(
