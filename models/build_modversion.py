@@ -291,9 +291,10 @@ class Build_modversion:
                    INNER JOIN builds ON build_modversion.build_id = builds.id
                    INNER JOIN modversions AS candidate
                        ON candidate.mod_id = current.mod_id
+                      AND candidate.mcversion IS NOT NULL
+                      AND candidate.mcversion <> ''
                       AND (
-                           candidate.mcversion IS NULL
-                           OR candidate.mcversion = builds.minecraft
+                           candidate.mcversion = builds.minecraft
                            OR FIND_IN_SET(builds.minecraft,
                                           candidate.mcversion) > 0
                            OR (

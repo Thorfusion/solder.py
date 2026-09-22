@@ -1929,6 +1929,9 @@ class ModelBehaviorTests(unittest.TestCase):
 
         self.assertEqual(updated, 1)
         self.assertEqual(cursor.execute.call_args.args[1], (7,))
+        update_query = cursor.execute.call_args.args[0]
+        self.assertIn("candidate.mcversion IS NOT NULL", update_query)
+        self.assertIn("candidate.mcversion <> ''", update_query)
         cursor.executemany.assert_called_once_with(
             """UPDATE build_modversion
                        SET modversion_id = %s

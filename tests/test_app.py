@@ -1970,7 +1970,9 @@ class ApplicationSmokeTests(unittest.TestCase):
             "modverid": 12,
             "integration_provider": "MODRINTH",
             "integration_version_id": "OLD",
-            "versions": [{"id": 12, "version": "1.0"}],
+            "versions": [
+                {"id": 12, "version": "1.0", "mcversion": "1.21.1"}
+            ],
         }
         stored_update = {
             "id": 42,
@@ -1979,8 +1981,9 @@ class ApplicationSmokeTests(unittest.TestCase):
             "integration_provider": None,
             "integration_version_id": None,
             "versions": [
-                {"id": 22, "version": "2.0"},
-                {"id": 21, "version": "1.0"},
+                {"id": 23, "version": "3.0", "mcversion": None},
+                {"id": 22, "version": "2.0", "mcversion": "1.21.1"},
+                {"id": 21, "version": "1.0", "mcversion": "1.21.1"},
             ],
         }
         provider_current = {
@@ -1992,8 +1995,27 @@ class ApplicationSmokeTests(unittest.TestCase):
             # The provider result is authoritative even if a later local row
             # exists for an integration-managed mod.
             "versions": [
-                {"id": 32, "version": "local-newer"},
-                {"id": 31, "version": "current"},
+                {
+                    "id": 32,
+                    "version": "local-newer",
+                    "mcversion": "1.21.1",
+                },
+                {
+                    "id": 31,
+                    "version": "current",
+                    "mcversion": "1.21.1",
+                },
+            ],
+        }
+        missing_minecraft = {
+            "id": 44,
+            "modid": 12,
+            "modverid": 41,
+            "integration_provider": None,
+            "integration_version_id": None,
+            "versions": [
+                {"id": 42, "version": "2.0", "mcversion": None},
+                {"id": 41, "version": "1.0", "mcversion": "1.21.1"},
             ],
         }
         editor = SimpleNamespace(
@@ -2001,7 +2023,12 @@ class ApplicationSmokeTests(unittest.TestCase):
             packbuild=build,
             packbuildname="Example Pack",
             listmodversions=[],
-            buildlist=[provider_update, stored_update, provider_current],
+            buildlist=[
+                provider_update,
+                stored_update,
+                provider_current,
+                missing_minecraft,
+            ],
             optional_mode=0,
         )
 
@@ -2063,6 +2090,8 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(stored_update["available_version"], "2.0")
         self.assertFalse(provider_current["update_available"])
         self.assertNotIn("available_version", provider_current)
+        self.assertFalse(missing_minecraft["update_available"])
+        self.assertNotIn("available_version", missing_minecraft)
         self.assertIs(render.call_args.kwargs["buildlist"], editor.buildlist)
         materialize.assert_not_called()
         update_all.assert_not_called()

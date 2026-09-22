@@ -1925,7 +1925,11 @@ def modpackbuild(id):
     if request.args.get("check_updates") == "1":
         update_memberships = set()
         for combo in editor.buildlist:
-            compatible = combo.get("versions") or []
+            compatible = [
+                version
+                for version in (combo.get("versions") or [])
+                if str(version.get("mcversion") or "").strip()
+            ]
             if (
                 compatible
                 and int(compatible[0]["id"]) != int(combo["modverid"])
