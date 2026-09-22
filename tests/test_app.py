@@ -1025,12 +1025,18 @@ class ApplicationSmokeTests(unittest.TestCase):
         with (
             patch("asite.Session.verify_session", return_value=True),
             patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Session.get_user_id", return_value=4),
+            patch(
+                "asite.ModIntegration.ensure_bootstrap_projects",
+                return_value=((), 2),
+            ) as ensure_bootstrap,
             patch("asite.DistributionSettings.update_exports") as update,
         ):
             saved = self.client.post(
                 "/mainsettings",
                 data={
                     "export_settings_submit": "1",
+                    "mcil_enabled": "on",
                     "solderpy_loader_enabled": "on",
                     "filedirector_enabled": "on",
                     "modpack_director_enabled": "on",
@@ -1040,7 +1046,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(saved.status_code, 302)
         self.assertEqual(saved.headers["Location"], "/mainsettings")
         update.assert_called_once_with(
-            mcil=False,
+            mcil=True,
             solderpy_loader=True,
             packwiz=False,
             filedirector=True,
@@ -1048,6 +1054,9 @@ class ApplicationSmokeTests(unittest.TestCase):
             mrpack=False,
             curseforge=False,
             prism=False,
+        )
+        ensure_bootstrap.assert_called_once_with(
+            ("5LpwENAj", "zCFNaupz", "cUtsYbG5", "4dRu1OUz"), 4
         )
 
     def test_environment_settings_can_scan_legacy_jar_packages(self):

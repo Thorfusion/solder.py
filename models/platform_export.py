@@ -177,6 +177,15 @@ class SyncedPlatformVersion:
     curseforge_file_id: int | None = None
 
 
+@dataclass(frozen=True)
+class NativeProjectMapping:
+    name: str
+    modrinth_project_id: str
+    curseforge_project_id: int
+    enabled: bool = True
+    built_in: bool = True
+
+
 class CurseForgeDownloaderAPI:
     """Resolve downloader files through CurseForge's authenticated API."""
 
@@ -432,6 +441,53 @@ class PlatformPackExport:
     def downloader_spec(cls, value):
         key = cls.downloader_key(value)
         return next((item for item in DOWNLOADERS if item.key == key), None)
+
+    @classmethod
+    def bootstrap_project_ids(cls, downloader_keys):
+        """Return unique Modrinth projects required by enabled downloaders."""
+        project_ids = []
+        for downloader_key in downloader_keys:
+            spec = cls.downloader_spec(downloader_key)
+            if spec is None:
+                continue
+            project_ids.extend(
+                project_id
+                for project_id in (
+                    spec.modrinth_project_id,
+                    *spec.modrinth_required_projects,
+                )
+                if project_id
+            )
+        return tuple(dict.fromkeys(project_ids))
+
+    @classmethod
+    def native_project_mapping(cls, modrinth_project_id):
+        """Return a hardcoded downloader project pair, including dependencies."""
+        project_id = str(modrinth_project_id or "")
+        for spec in DOWNLOADERS:
+            if project_id == str(spec.modrinth_project_id or ""):
+                if spec.curseforge_project_id is None:
+                    return None
+                return NativeProjectMapping(
+                    spec.label,
+                    project_id,
+                    spec.curseforge_project_id,
+                )
+            for dependency_index, pair in enumerate(
+                zip(
+                    spec.modrinth_required_projects,
+                    spec.curseforge_required_projects,
+                ),
+                start=1,
+            ):
+                modrinth_dependency, curseforge_dependency = pair
+                if project_id == str(modrinth_dependency):
+                    return NativeProjectMapping(
+                        f"{spec.label} dependency {dependency_index}",
+                        project_id,
+                        curseforge_dependency,
+                    )
+        return None
 
     @classmethod
     def _modrinth_release(

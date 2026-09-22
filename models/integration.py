@@ -1069,6 +1069,55 @@ class ModIntegration:
         return mod, True
 
     @classmethod
+    def ensure_bootstrap_projects(
+        cls, project_ids, user_id, *, http=None
+    ):
+        """Ensure required Modrinth bootstrap projects exist in the library."""
+        project_ids = tuple(
+            dict.fromkeys(external_id(value) for value in project_ids if value)
+        )
+        change_context = {
+            "externals": {},
+            "mods": {},
+            "processed": set(),
+            "created_mods": set(),
+            "linked_mods": [],
+            "created_versions": set(),
+            "dependency_edges": [],
+            "artifacts": [],
+        }
+        imported = []
+        created = 0
+        try:
+            for project_id in project_ids:
+                mod = Mod.get_by_integration(MODRINTH, project_id)
+                if mod is None:
+                    mod, was_created = cls.import_project(
+                        MODRINTH,
+                        project_id,
+                        user_id,
+                        http=http,
+                        _change_context=change_context,
+                    )
+                    created += int(was_created)
+                imported.append(mod)
+            Mod.set_modtypes(
+                (mod.id for mod in imported), "BOOTSTRAP"
+            )
+        except Exception as error:
+            if any(
+                change_context.get(key)
+                for key in ("created_mods", "linked_mods")
+            ):
+                cls._rollback_modrinth_materialization(change_context)
+            if isinstance(error, IntegrationError):
+                raise
+            raise IntegrationError(
+                "Downloader bootstrap projects could not be imported."
+            ) from error
+        return tuple(imported), created
+
+    @classmethod
     def link_existing(cls, mod, provider_name, reference, user_id, *, http=None):
         """Link a manually selected upstream project without changing local data."""
         if mod is None:

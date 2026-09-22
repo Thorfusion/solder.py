@@ -395,9 +395,13 @@ def manage_modversion(mod_id, version_id):
         elif "curseforge_file_id_submit" in request.form:
             mapping = None
             if str(getattr(mod, "integration_provider", "") or "").upper() == MODRINTH:
-                mapping = PlatformExportOverride.get_by_modrinth_project_id(
+                mapping = PlatformPackExport.native_project_mapping(
                     getattr(mod, "integration_project_id", None)
                 )
+                if mapping is None:
+                    mapping = PlatformExportOverride.get_by_modrinth_project_id(
+                        getattr(mod, "integration_project_id", None)
+                    )
             try:
                 if mapping is None:
                     raise ModversionProviderIdError(
@@ -451,9 +455,13 @@ def manage_modversion(mod_id, version_id):
     curseforge_mapping = None
     curseforge_file_id = None
     if str(getattr(mod, "integration_provider", "") or "").upper() == MODRINTH:
-        curseforge_mapping = PlatformExportOverride.get_by_modrinth_project_id(
+        curseforge_mapping = PlatformPackExport.native_project_mapping(
             getattr(mod, "integration_project_id", None)
         )
+        if curseforge_mapping is None:
+            curseforge_mapping = PlatformExportOverride.get_by_modrinth_project_id(
+                getattr(mod, "integration_project_id", None)
+            )
         if curseforge_mapping is not None:
             curseforge_file_id = ModversionProviderId.get(
                 version.id,
@@ -1286,18 +1294,47 @@ def mainsettings():
 
     if request.method == "POST" and "export_settings_submit" in request.form:
         try:
+            mcil_enabled = "mcil_enabled" in request.form
+            solderpy_loader_enabled = "solderpy_loader_enabled" in request.form
+            filedirector_enabled = "filedirector_enabled" in request.form
+            imported_bootstrap_projects = 0
+            enabled_bootstrap_downloaders = tuple(
+                key
+                for key, enabled in (
+                    ("solderpyloader", solderpy_loader_enabled),
+                    ("mcil", mcil_enabled),
+                    ("filedirector", filedirector_enabled),
+                )
+                if enabled
+            )
+            bootstrap_project_ids = PlatformPackExport.bootstrap_project_ids(
+                enabled_bootstrap_downloaders
+            )
+            if bootstrap_project_ids:
+                _mods, imported_bootstrap_projects = (
+                    ModIntegration.ensure_bootstrap_projects(
+                        bootstrap_project_ids,
+                        Session.get_user_id(session["token"]),
+                    )
+                )
             DistributionSettings.update_exports(
-                mcil="mcil_enabled" in request.form,
-                solderpy_loader="solderpy_loader_enabled" in request.form,
+                mcil=mcil_enabled,
+                solderpy_loader=solderpy_loader_enabled,
                 packwiz="packwiz_enabled" in request.form,
-                filedirector="filedirector_enabled" in request.form,
+                filedirector=filedirector_enabled,
                 modpack_director="modpack_director_enabled" in request.form,
                 mrpack="mrpack_enabled" in request.form,
                 curseforge="curseforge_export_enabled" in request.form,
                 prism="prism_export_enabled" in request.form,
             )
-            flash("Distribution settings updated.", "success")
-        except DistributionSettingsError as error:
+            message = "Distribution settings updated."
+            if imported_bootstrap_projects:
+                message += (
+                    f" Imported {imported_bootstrap_projects} downloader "
+                    "bootstrap project(s) from Modrinth."
+                )
+            flash(message, "success")
+        except (DistributionSettingsError, IntegrationError) as error:
             ErrorPrinter.message("Unable to update distribution settings", error)
             flash(str(error), "error")
         return redirect(url_for("asite.mainsettings"))

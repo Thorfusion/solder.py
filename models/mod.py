@@ -154,6 +154,31 @@ class Mod:
         return None
 
     @staticmethod
+    def set_modtypes(ids, modtype):
+        """Set one system-managed role without rewriting mod metadata."""
+        modtype = normalize_modtype(modtype)
+        ids = tuple(dict.fromkeys(int(value) for value in ids))
+        if not ids:
+            return
+        conn = Database.get_connection()
+        if conn is None:
+            raise RuntimeError("Could not connect to the database.")
+        cur = conn.cursor()
+        now = datetime.datetime.now()
+        try:
+            cur.executemany(
+                "UPDATE mods SET modtype = %s, updated_at = %s WHERE id = %s",
+                [(modtype, now, mod_id) for mod_id in ids],
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
     def delete_mod(id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)

@@ -263,6 +263,32 @@ class PlatformPackExportTests(unittest.TestCase):
         self.addCleanup(modrinth.stop)
         self.addCleanup(curseforge.stop)
 
+    def test_downloader_native_project_mappings_include_dependencies(self):
+        loader = PlatformPackExport.native_project_mapping("5LpwENAj")
+        relauncher = PlatformPackExport.native_project_mapping("zCFNaupz")
+        mcil = PlatformPackExport.native_project_mapping("cUtsYbG5")
+        filedirector = PlatformPackExport.native_project_mapping("4dRu1OUz")
+
+        self.assertEqual(loader.curseforge_project_id, 1702825)
+        self.assertEqual(relauncher.curseforge_project_id, 1491728)
+        self.assertEqual(mcil.curseforge_project_id, 576287)
+        self.assertEqual(filedirector.curseforge_project_id, 650242)
+        self.assertIsNone(
+            PlatformPackExport.native_project_mapping("not-a-downloader")
+        )
+
+    def test_enabled_downloaders_collect_unique_bootstrap_projects(self):
+        self.assertEqual(
+            PlatformPackExport.bootstrap_project_ids(
+                ("solderpyloader", "mcil", "filedirector")
+            ),
+            ("5LpwENAj", "zCFNaupz", "cUtsYbG5", "4dRu1OUz"),
+        )
+        self.assertEqual(
+            PlatformPackExport.bootstrap_project_ids(("modpackdirector",)),
+            (),
+        )
+
     def test_curseforge_api_lists_compatible_files_with_secret_header(self):
         response = FakeResponse(
             {

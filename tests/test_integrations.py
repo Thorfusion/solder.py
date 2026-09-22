@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import ANY, Mock, patch
 import zipfile
 
 from tests.environment import configure_test_environment
@@ -484,6 +484,42 @@ class MaterializationTests(unittest.TestCase):
         self.assertEqual(new.call_args.kwargs["integration_provider"], MODRINTH)
         self.assertEqual(new.call_args.kwargs["integration_project_id"], "PROJECT")
         provider.download.assert_not_called()
+
+    def test_bootstrap_project_import_only_fetches_missing_projects(self):
+        loader = SimpleNamespace(id=8)
+        relauncher = SimpleNamespace(id=9)
+
+        def existing(_provider, project_id):
+            return loader if project_id == "5LpwENAj" else None
+
+        with (
+            patch(
+                "models.integration.Mod.get_by_integration",
+                side_effect=existing,
+            ),
+            patch.object(
+                ModIntegration,
+                "import_project",
+                return_value=(relauncher, True),
+            ) as import_project,
+            patch("models.integration.Mod.set_modtypes") as set_modtypes,
+        ):
+            mods, created = ModIntegration.ensure_bootstrap_projects(
+                ("5LpwENAj", "zCFNaupz"), 7
+            )
+
+        self.assertEqual(mods, (loader, relauncher))
+        self.assertEqual(created, 1)
+        import_project.assert_called_once_with(
+            MODRINTH,
+            "zCFNaupz",
+            7,
+            http=None,
+            _change_context=ANY,
+        )
+        set_modtypes.assert_called_once()
+        self.assertEqual(tuple(set_modtypes.call_args.args[0]), (8, 9))
+        self.assertEqual(set_modtypes.call_args.args[1], "BOOTSTRAP")
 
     def test_import_links_an_existing_manual_slug_and_keeps_its_versions(self):
         project = ExternalProject(

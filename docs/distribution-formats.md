@@ -290,6 +290,14 @@ Loader and Relauncher themselves. The registered projects are Modrinth
 `5LpwENAj` and CurseForge `1702825`; its required Relauncher dependency is
 Modrinth `zCFNaupz` or CurseForge `1491728`.
 
+Saving distribution settings with SolderPy Loader, MCInstance Loader, or
+FileDirector enabled automatically imports the corresponding Modrinth projects
+into the mod library. SolderPy Loader also imports Relauncher. They are stored
+as `BOOTSTRAP`, so they can hold imported upstream versions and manual
+CurseForge file IDs without being treated as ordinary build content. The
+operation is idempotent: existing linked projects are reused. Modpack Director
+keeps its existing CurseForge-only export behavior and is not imported here.
+
 SolderPy Loader uses the dedicated bootstrap API, so it supports basic
 optionals and advanced independent or exact-one groups without generating a
 FileDirector-style package list. Select **Export SolderPy Loader** to download:
