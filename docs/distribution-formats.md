@@ -2,7 +2,7 @@
 
 solder.py keeps the Technic Solder API as its primary distribution interface,
 but the same build can also be exported for SolderPy Loader, MCInstance Loader,
-FileDirector, Modpack Director, Packwiz, Modrinth, CurseForge, or Prism
+FileDirector, Packwiz, Modrinth, CurseForge, or Prism
 Launcher. This guide covers both the management workflow and the files each
 format receives.
 
@@ -15,10 +15,9 @@ format receives.
 | Dedicated server | A small, updateable server installation backed by SolderPy Loader | Downloaded ZIP containing the bootstrap JARs and the build's server launcher JAR |
 | MCInstance Loader (MCIL) | A self-contained MCIL pack with downloadable mods and bundled overrides | Downloaded `.mcinstance` archive |
 | FileDirector | Installing individual files or Solder ZIPs with optional and side metadata | Downloaded config ZIP or hosted config |
-| Modpack Director | Runtime installation using a FileDirector-compatible bundle plus pack/update metadata | Downloaded config ZIP or hosted config |
 | Packwiz | A standard Packwiz pack made from raw JAR-ready mods | Downloaded metadata ZIP or hosted metadata |
 | Modrinth | A Modrinth `.mrpack`, with exact Modrinth files kept native | Downloaded `.mrpack` archive |
-| CurseForge | A CurseForge pack that bootstraps SolderPy Loader, MCIL, FileDirector, or Modpack Director | Downloaded CurseForge ZIP |
+| CurseForge | A CurseForge pack that bootstraps SolderPy Loader, MCIL, or FileDirector | Downloaded CurseForge ZIP |
 | Prism Launcher | A directly importable bootstrap or self-contained instance | Downloaded Prism instance ZIP |
 
 The Technic API remains the right choice for Technic Launcher. Its builds still
@@ -36,15 +35,14 @@ The exporters use these application settings:
 | --- | --- |
 | `PUBLIC_REPO_LOCATION` | Public HTTP or HTTPS base URL from which players can download Solder ZIPs and raw JARs |
 | `MD5_REPO_LOCATION` | Server-side repository path or URL used to inspect and hash existing packages; a local path is allowed |
-| `APP_URL` | Public HTTP or HTTPS URL of solder.py, used by SolderPy Loader and in hosted FileDirector and Modpack Director pointers |
+| `APP_URL` | Public HTTP or HTTPS URL of solder.py, used by SolderPy Loader and in hosted FileDirector pointers |
 | `CURSEFORGE_API_KEY` | CurseForge third-party API key used for automatic CurseForge file and downloader-version lookup; manually mapped version IDs do not use it |
 
 `PUBLIC_REPO_LOCATION` and `MD5_REPO_LOCATION` deliberately serve different
 purposes. A local filesystem path is useful for fast server-side hashing, but it
 cannot be written into a client download manifest. In the recommended proxy
 layout Caddy serves the public mod repository directly and reverse-proxies the
-solder.py application, including `/packwiz/*`, `/filedirector/*`, and
-`/modpackdirector/*`.
+solder.py application, including `/packwiz/*` and `/filedirector/*`.
 
 ### Enable the formats
 
@@ -56,7 +54,7 @@ switches.
 
 These switches are stored in MySQL, not only in the management process. A
 separate process started with `API_ONLY=True` therefore uses the same settings
-and can serve Packwiz, FileDirector, and Modpack Director files without
+and can serve Packwiz and FileDirector files without
 exposing the management interface. Disabling a format does not remove raw-JAR hashes, integration
 mappings, or other build data.
 
@@ -150,12 +148,12 @@ state. The **Advanced optionals** page stores named groups
 while retaining one Technic/basic state per configured entry:
 `0` is required, `1` is optional, and `2` is excluded. State `2` is never
 returned to Technic, Packwiz, or the native MRPack file list. It remains
-available to SolderPy Loader, FileDirector, Modpack Director, or MCIL only when
+available to SolderPy Loader, FileDirector, or MCIL only when
 assigned to an active group.
 
 SolderPy Loader obtains all optional definitions and defaults from the
 bootstrap API and presents them interactively before mod discovery.
-FileDirector and Modpack Director render independent choices as checkboxes and
+FileDirector renders independent choices as checkboxes and
 exact-one named groups as radio choices. MCIL renders every named group as a separate menu,
 using the saved group name, order, default selections, and min/max choice
 rules. Basic mode ignores the saved advanced groups, and returning to Basic is
@@ -203,7 +201,7 @@ Before exporting:
 3. Check each mod's side and optional status. These values are carried into
    formats that support them.
 4. Publish the build and make it non-private if clients will use SolderPy
-   Loader or hosted Packwiz, FileDirector, or Modpack Director files. Other
+   Loader or hosted Packwiz or FileDirector files. Other
    downloaded management-side exports may still be generated according to the
    user's normal modpack permissions.
 
@@ -257,7 +255,7 @@ FileDirector is selected, and still uses a temporary modloader-version
 override when one is entered. Modrinth and CurseForge also show a compatible
 fallback downloader selector.
 
-MCIL, FileDirector, Modpack Director, and Packwiz write direct download URLs
+MCIL, FileDirector, and Packwiz write direct download URLs
 into their generated files; they do not consult the SolderPy bootstrap API.
 For those formats, Solder API only uses the Solder repository URLs and Hybrid
 may use exact supported provider URLs. The broader API URL fallbacks above
@@ -295,8 +293,7 @@ FileDirector enabled automatically imports the corresponding Modrinth projects
 into the mod library. SolderPy Loader also imports Relauncher. They are stored
 as `BOOTSTRAP`, so they can hold imported upstream versions and manual
 CurseForge file IDs without being treated as ordinary build content. The
-operation is idempotent: existing linked projects are reused. Modpack Director
-keeps its existing CurseForge-only export behavior and is not imported here.
+operation is idempotent: existing linked projects are reused.
 
 SolderPy Loader uses the dedicated bootstrap API, so it supports basic
 optionals and advanced independent or exact-one groups without generating a
@@ -469,43 +466,6 @@ See FileDirector's upstream documentation for
 [remote configs](https://github.com/TerraFirmaCraft-The-Final-Frontier/FileDirector/wiki/Config-Type:-Remote),
 and [remote modpack versions](https://github.com/TerraFirmaCraft-The-Final-Frontier/FileDirector/wiki/Modpack).
 
-## Modpack Director
-
-Enable **Modpack Director exports** and select **Export Modpack Director**.
-Modpack Director is a FileDirector fork and accepts the same `.bundle.json`
-and `.remote.json` files under `config/mod-director/`. solder.py therefore uses
-the same package filtering, MD5 checks, side metadata, and advanced optional
-groups for both implementations.
-
-A bundled export contains:
-
-```text
-config/mod-director/modpack.json
-config/mod-director/solder.bundle.json
-```
-
-A hosted export replaces the bundle with `solder.remote.json`. Its public
-metadata is available under:
-
-```text
-https://solder.example.com/modpackdirector/example-pack/latest/mods.bundle.json
-https://solder.example.com/modpackdirector/example-pack/latest/mods.remote.json
-https://solder.example.com/modpackdirector/example-pack/latest/version.txt
-```
-
-`modpack.json` identifies the pack and its local version. When `APP_URL` is
-configured, it also points to the selected exact, `latest`, or `recommended`
-version endpoint so Modpack Director can report an outdated pack. solder.py
-does not refuse launch automatically.
-
-Install the appropriate Modpack Director JAR separately when using the config
-ZIP directly. For a CurseForge pack export, solder.py can instead add the
-selected official CurseForge project (`969109`) and file to `manifest.json`.
-The official project currently has no Modrinth release, so it is intentionally
-not shown in MRPack or Prism's Modrinth-backed downloader selector. See the
-[upstream project](https://github.com/juanmuscaria/ModpackDirector) for its
-LaunchWrapper, ModLauncher, universal, and standalone variants.
-
 ## Packwiz
 
 Enable **Packwiz files**. A bundled export contains:
@@ -589,7 +549,7 @@ requires a published, non-private build and can follow this build, `latest`, or
 Enable **CurseForge exports** and select **Export CurseForge** from a compatible
 Forge build. The ZIP contains
 `manifest.json` and `overrides/`. Its native `files` array contains the selected
-SolderPy Loader, MCInstance Loader, FileDirector, or Modpack Director release,
+SolderPy Loader, MCInstance Loader, or FileDirector release,
 its required dependencies, and any enabled Modrinth-CurseForge sync overrides.
 
 With `CURSEFORGE_API_KEY`, the selector loads compatible files from the official
@@ -623,10 +583,9 @@ are installed natively on both platforms.
 SolderPy Loader always uses its API pointer and supports both source modes. In
 hybrid mode the bootstrap API omits enabled native CurseForge sync mappings,
 so they are not installed twice.
-FileDirector and Modpack Director configuration can be included in the archive
-or hosted by solder.py and pinned to this build, `latest`, or `recommended`.
-MCIL configuration is always included. Modpack Director is resolved from its
-official CurseForge project and supports compatible Forge and NeoForge files.
+FileDirector configuration can be included in the archive or hosted by
+solder.py and pinned to this build, `latest`, or `recommended`. MCIL
+configuration is always included.
 
 ## Prism Launcher instance
 
@@ -712,7 +671,7 @@ returns its legacy `forge` value, additive `modloader` metadata, and selected
 
 ## Public routes and API-only mode
 
-Packwiz, FileDirector, and Modpack Director routes are read-only and are available in
+Packwiz and FileDirector routes are read-only and are available in
 `API_ONLY=True` mode. Public routes expose only published builds. Hidden
 modpacks remain directly addressable by slug, matching the Technic read API;
 private or unpublished builds return `404`.
@@ -722,7 +681,7 @@ management-side downloads rather than permanent public archive URLs. An
 MRPack or CurseForge archive may still contain a public Director pointer
 served by an API-only process.
 
-Generated Packwiz, FileDirector, and Modpack Director responses include a SHA-256 `ETag` and
+Generated Packwiz and FileDirector responses include a SHA-256 `ETag` and
 `Cache-Control: public, no-cache`. Clients and reverse proxies can revalidate
 metadata without keeping a stale channel result. JAR and Solder ZIP integrity
 continues to use the stored MD5; SHA-256 here identifies generated manifest
@@ -743,5 +702,4 @@ content, not package artifacts.
 - **An MCIL optional fails:** optional entries must be raw JARs, and MCIL 2.7
   cannot represent a server-only optional choice.
 - **No MRPack or CurseForge downloader versions appear:** enable at least one
-  compatible downloader. Modpack Director is available only in the CurseForge
-  selector; CurseForge also requires its API key.
+  compatible downloader. CurseForge also requires its API key.

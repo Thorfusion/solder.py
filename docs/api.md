@@ -18,7 +18,7 @@ The optional authenticated write routes are documented separately in the
 [write API reference](write-api.md). Unknown API routes and unsupported methods
 return JSON rather than the management interface's HTML error page.
 
-Packwiz, FileDirector, and Modpack Director are public file formats rather
+Packwiz and FileDirector are public file formats rather
 than Technic JSON API routes. Authenticated build management can also create Modrinth and CurseForge
 archives that bootstrap their non-native files from Solder. Their paths,
 visibility rules, and enable switches are covered in the

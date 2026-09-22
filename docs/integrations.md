@@ -107,9 +107,9 @@ recorded in the ordinary `modversions` table. Technic-compatible API responses
 therefore continue to expose an ordinary Solder config package; this does not
 change Technic Solder's metadata-only/manual-MD5 model.
 
-Packwiz, FileDirector, and Modpack Director remain dynamic public solder.py
+Packwiz and FileDirector remain dynamic public solder.py
 routes. In the Docker setup, clients connect to Caddy and Caddy reverse-proxies
-`/packwiz/*`, `/filedirector/*`, and `/modpackdirector/*` to the API container;
+`/packwiz/*` and `/filedirector/*` to the API container;
 Caddy does not look for those generated responses in the static `/mods`
 directory.
 

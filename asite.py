@@ -1322,7 +1322,6 @@ def mainsettings():
                 solderpy_loader=solderpy_loader_enabled,
                 packwiz="packwiz_enabled" in request.form,
                 filedirector=filedirector_enabled,
-                modpack_director="modpack_director_enabled" in request.form,
                 mrpack="mrpack_enabled" in request.form,
                 curseforge="curseforge_export_enabled" in request.form,
                 prism="prism_export_enabled" in request.form,
@@ -2671,50 +2670,6 @@ def export_filedirector(id):
 
     filename = secure_filename(
         f"{build.modpack_slug}-{build.version}-filedirector.zip"
-    )
-    return send_file(
-        archive,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=filename,
-    )
-
-
-@asite.route("/modpackbuild/<int:id>/modpackdirector", methods=["GET"])
-def export_modpack_director(id):
-    if not DistributionSettings.is_enabled(
-        DistributionSettings.MODPACK_DIRECTOR
-    ):
-        return render_template("404.html", error="Not Found"), 404
-
-    loaded, failure = _platform_export_build(id)
-    if failure is not None:
-        return failure
-    build, packages = loaded
-    try:
-        source_mode = PlatformPackExport.source_mode(request.args.get("source"))
-        delivery = PlatformPackExport.delivery_mode(request.args.get("delivery"))
-        selector = request.args.get("selector")
-        if delivery == "hosted" and not _hosted_export_allowed(build):
-            return redirect(url_for("asite.modpackbuild", id=id))
-        archive = PlatformPackExport.render_modpack_director(
-            build,
-            packages,
-            public_repo_url,
-            app_url,
-            source_mode=source_mode,
-            delivery=delivery,
-            selector=selector,
-            optional_groups=AdvancedOptional.get_active_groups_for_packages(
-                id, packages
-            ),
-        )
-    except PlatformExportError as error:
-        flash(str(error), "error")
-        return redirect(url_for("asite.modpackbuild", id=id))
-
-    filename = secure_filename(
-        f"{build.modpack_slug}-{build.version}-modpack-director.zip"
     )
     return send_file(
         archive,

@@ -397,15 +397,6 @@ DOWNLOADERS = (
         curseforge_project_id=650242,
         supports_remote_config=True,
     ),
-    DownloaderSpec(
-        key="modpackdirector",
-        label="Modpack Director",
-        setting_key="modpack_director_enabled",
-        modrinth_project_id=None,
-        curseforge_project_id=969109,
-        supports_remote_config=True,
-        supported_loaders=("FORGE", "NEOFORGE"),
-    ),
 )
 
 
@@ -1043,34 +1034,6 @@ class PlatformPackExport:
         return FileDirectorExport.remote(url)
 
     @staticmethod
-    def _modpack_director_metadata(
-        build,
-        application_url,
-        selector="build",
-    ):
-        """Create Modpack Director's optional pack identity/update config."""
-        DistributionExport._validate_slug(build.modpack_slug, "modpack slug")
-        metadata = {
-            "packName": str(build.modpack_name),
-            "localVersion": str(build.version),
-            "refuseLaunch": False,
-            "requiresRestart": False,
-        }
-        if application_url:
-            base = DistributionExport.application_base(application_url)
-            selector = PlatformPackExport.hosted_selector(build, selector)
-            DistributionExport._validate_component(selector, "build selector")
-            metadata["remoteVersion"] = (
-                f"{base}/modpackdirector/"
-                f"{quote(build.modpack_slug, safe='-._~')}/"
-                f"{quote(selector, safe='-._~')}/version.txt"
-            )
-        return (
-            json.dumps(metadata, indent=2)
-            + "\n"
-        ).encode("utf-8")
-
-    @staticmethod
     def solderpy_loader_config(
         build,
         application_url,
@@ -1525,14 +1488,6 @@ class PlatformPackExport:
                 archive.close()
             return
 
-        if spec.key == "modpackdirector":
-            target.writestr(
-                archive_path("config/mod-director/modpack.json"),
-                cls._modpack_director_metadata(
-                    build, application_url, selector
-                ),
-            )
-
         if delivery == "hosted":
             if not build.is_published or build.private:
                 raise PlatformExportError(
@@ -1552,11 +1507,7 @@ class PlatformPackExport:
                     hosted_bundle_name,
                     selector,
                     source_mode,
-                    route_prefix=(
-                        "modpackdirector"
-                        if spec.key == "modpackdirector"
-                        else "filedirector"
-                    ),
+                    route_prefix="filedirector",
                 ),
             )
             return
@@ -2349,71 +2300,6 @@ class PlatformPackExport:
                 "config/mod-director/solder.bundle.json",
                 bundle,
             )
-        return archive
-
-    @classmethod
-    def render_modpack_director(
-        cls,
-        build,
-        packages,
-        public_repo_url,
-        application_url,
-        *,
-        source_mode="solder",
-        delivery="bundled",
-        selector="build",
-        http=None,
-        optional_groups=(),
-    ):
-        """Create a Modpack Director config archive backed by Solder."""
-        source_mode = cls.source_mode(source_mode)
-        delivery = cls.delivery_mode(delivery)
-        if delivery == "hosted" and (
-            not build.is_published or build.private
-        ):
-            raise PlatformExportError(
-                "Hosted Modpack Director configs require a published, "
-                "non-private build."
-            )
-        plan = (
-            cls._package_plan(
-                build,
-                packages,
-                source_mode,
-                http=http,
-            )
-            if delivery == "bundled"
-            else None
-        )
-        with cls._zip_archive() as (archive, target):
-            target.writestr(
-                "config/mod-director/modpack.json",
-                cls._modpack_director_metadata(
-                    build, application_url, selector
-                ),
-            )
-            if delivery == "hosted":
-                target.writestr(
-                    "config/mod-director/solder.remote.json",
-                    cls._remote_config(
-                        build,
-                        application_url,
-                        "mods",
-                        selector,
-                        source_mode,
-                        route_prefix="modpackdirector",
-                    ),
-                )
-            else:
-                target.writestr(
-                    "config/mod-director/solder.bundle.json",
-                    FileDirectorExport.bundle(
-                        plan.packages,
-                        public_repo_url,
-                        native_files=plan.native_files,
-                        optional_groups=optional_groups,
-                    ),
-                )
         return archive
 
     @classmethod

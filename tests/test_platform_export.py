@@ -284,10 +284,6 @@ class PlatformPackExportTests(unittest.TestCase):
             ),
             ("5LpwENAj", "zCFNaupz", "cUtsYbG5", "4dRu1OUz"),
         )
-        self.assertEqual(
-            PlatformPackExport.bootstrap_project_ids(("modpackdirector",)),
-            (),
-        )
 
     def test_curseforge_api_lists_compatible_files_with_secret_header(self):
         response = FakeResponse(
@@ -855,48 +851,6 @@ class PlatformPackExportTests(unittest.TestCase):
         )
         self.assertEqual(config["build"], "latest")
 
-    def test_curseforge_can_bootstrap_official_modpack_director(self):
-        archive = PlatformPackExport.render_curseforge(
-            build(),
-            [package()],
-            "modpackdirector:5071845",
-            REPOSITORY,
-            "./mods/",
-            APPLICATION,
-            curseforge_api_key="test-key",
-            source_mode="solder",
-            delivery="hosted",
-            selector="latest",
-        )
-
-        with archive, zipfile.ZipFile(archive) as result:
-            manifest = json.loads(result.read("manifest.json"))
-            metadata = json.loads(
-                result.read("overrides/config/mod-director/modpack.json")
-            )
-            remote = json.loads(
-                result.read(
-                    "overrides/config/mod-director/solder.remote.json"
-                )
-            )
-
-        self.assertEqual(
-            manifest["files"],
-            [{"projectID": 969109, "fileID": 5071845, "required": True}],
-        )
-        self.assertEqual(metadata["packName"], "Example Pack")
-        self.assertEqual(metadata["localVersion"], "2.0")
-        self.assertEqual(
-            metadata["remoteVersion"],
-            "https://solder.example.test/modpackdirector/example-pack/"
-            "latest/version.txt",
-        )
-        self.assertEqual(
-            remote["url"],
-            "https://solder.example.test/modpackdirector/example-pack/latest/"
-            "mods.bundle.json",
-        )
-
     def test_mrpack_always_installs_enabled_override_natively(self):
         with patch(
             "models.platform_export.ModrinthProvider.get_versions",
@@ -1372,9 +1326,6 @@ class PlatformPackExportTests(unittest.TestCase):
         filedirector = PlatformPackExport.render_filedirector(
             build(), [package()], REPOSITORY
         )
-        modpack_director = PlatformPackExport.render_modpack_director(
-            build(), [package()], REPOSITORY, APPLICATION
-        )
 
         with packwiz, zipfile.ZipFile(packwiz) as result:
             self.assertEqual(
@@ -1385,32 +1336,6 @@ class PlatformPackExportTests(unittest.TestCase):
             self.assertEqual(
                 result.namelist(),
                 ["config/mod-director/solder.bundle.json"],
-            )
-        with modpack_director, zipfile.ZipFile(modpack_director) as result:
-            self.assertEqual(
-                set(result.namelist()),
-                {
-                    "config/mod-director/modpack.json",
-                    "config/mod-director/solder.bundle.json",
-                },
-            )
-            metadata = json.loads(
-                result.read("config/mod-director/modpack.json")
-            )
-            self.assertEqual(metadata["packName"], "Example Pack")
-            self.assertEqual(metadata["localVersion"], "2.0")
-
-    def test_hosted_modpack_director_requires_a_public_build(self):
-        private_build = replace(build(), private=True)
-        with self.assertRaisesRegex(
-            PlatformExportError, "published, non-private"
-        ):
-            PlatformPackExport.render_modpack_director(
-                private_build,
-                [package()],
-                REPOSITORY,
-                APPLICATION,
-                delivery="hosted",
             )
 
     def test_prism_export_is_a_self_contained_instance_using_optional_defaults(self):
@@ -1838,10 +1763,9 @@ class PlatformPackExportTests(unittest.TestCase):
                 ("mcil", "4920730"),
                 ("mcil", "4428492"),
                 ("filedirector", "6436962"),
-                ("modpackdirector", "5071845"),
             ],
         )
-        self.assertEqual(list_files.call_count, 5)
+        self.assertEqual(list_files.call_count, 4)
 
     def test_selected_downloader_version_controls_curseforge_file(self):
         with patch(

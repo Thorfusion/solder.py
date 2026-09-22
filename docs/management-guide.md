@@ -77,7 +77,7 @@ are normalized to `MOD`, except deliberate `BOOTSTRAP` and `LAUNCHER` packages.
 Open the mod from **Mod Library** and add a version. A normal JAR upload is the
 preferred path: solder.py validates the JAR, gives it a canonical filename,
 wraps it in the normal Solder ZIP, and stores MD5 values for both artifacts.
-Those raw-JAR details allow MCIL, FileDirector, Modpack Director, and Packwiz to install the JAR
+Those raw-JAR details allow MCIL, FileDirector, and Packwiz to install the JAR
 without extracting a Solder ZIP.
 
 Set compatibility deliberately:
@@ -250,7 +250,7 @@ exact-one FileDirector group labels. An exact-one group always retains one
 default choice. An excluded entry must belong to a group so it cannot silently
 become unreachable.
 
-FileDirector, Modpack Director, and MCIL consume these advanced groups. Packwiz and the native
+FileDirector and MCIL consume these advanced groups. Packwiz and the native
 Modrinth index retain their basic optional model; an MRPack using FileDirector
 or MCIL can still carry grouped fallback packages through that downloader.
 Switching a modpack back to Basic is blocked while any membership is Excluded.

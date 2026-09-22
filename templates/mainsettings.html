@@ -187,18 +187,6 @@
         </div>
         <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" role="switch"
-                id="modpack_director_enabled" name="modpack_director_enabled"
-                {% if distribution_settings.modpack_director_enabled %}checked{% endif %}>
-            <label class="form-check-label" for="modpack_director_enabled">
-                Enable Modpack Director exports
-            </label>
-            <div class="form-text">
-                Generates compatible bundled or hosted configuration. The
-                official downloader is also available to CurseForge exports.
-            </div>
-        </div>
-        <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" role="switch"
                 id="mrpack_enabled" name="mrpack_enabled"
                 {% if distribution_settings.mrpack_enabled %}checked{% endif %}>
             <label class="form-check-label" for="mrpack_enabled">

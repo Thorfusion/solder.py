@@ -120,7 +120,7 @@ Generated config ZIPs use the same local repository and optional S3/R2 storage
 as manual uploads. They can be selected in any normal build and remain
 compatible with the Technic read API.
 
-MCInstance Loader, FileDirector, Modpack Director, Packwiz, Modrinth, and
+MCInstance Loader, FileDirector, Packwiz, Modrinth, and
 CurseForge exports treat the generated version like any other CONFIG package. For downloader-backed
 launcher archives, its instance-root contents may be carried by the downloader
 configuration rather than copied to the launcher's outer `overrides/`

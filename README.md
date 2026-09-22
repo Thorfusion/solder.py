@@ -30,7 +30,7 @@ optional groups, dependency resolution, updates, and safe archive ownership.
 Management-side Modrinth, GitHub config, and Maven imports are documented in the
 [integration guide](docs/integrations.md).
 
-SolderPy Loader, MCInstance Loader, Packwiz, FileDirector, Modpack Director,
+SolderPy Loader, MCInstance Loader, Packwiz, FileDirector,
 Modrinth, CurseForge, and Prism setup,
 export usage, and file layouts are documented in the
 [distribution usage and format guide](docs/distribution-formats.md).
@@ -106,7 +106,7 @@ export usage, and file layouts are documented in the
 
   + **Advanced optional groups**
 
-    Give SolderPy Loader, MCIL, FileDirector, and Modpack Director choices
+    Give SolderPy Loader, MCIL, and FileDirector choices
     names, independent or exact-one selection rules, defaults, and a
     Technic/basic state of Required, Optional, or Excluded. Public builds can
     optionally bootstrap SolderPy Loader through a normal Technic Solder
@@ -129,21 +129,19 @@ export usage, and file layouts are documented in the
   Export a build from its management page as an MCInstanceLoader
   `.mcinstance` archive.
 
-+ **SolderPy Loader, Packwiz, FileDirector, and Modpack Director support**
++ **SolderPy Loader, Packwiz, and FileDirector support**
 
   Export a SolderPy Loader configuration ZIP, or let Technic, Modrinth,
   CurseForge, and Prism deliver the Loader and Relauncher while using the same
-  dedicated API. Packwiz metadata and Director-compatible bundles remain
-  available as separate formats.
-  Modpack Director exports include its `modpack.json` pack identity and update
-  metadata. Each format is independently enabled in the settings GUI, and the
-  hosted routes are available in API-only mode.
+  dedicated API. Packwiz metadata and FileDirector bundles remain available as
+  separate formats. Each format is independently enabled in the settings GUI,
+  and the hosted routes are available in API-only mode.
 
 + **Modrinth and CurseForge pack exports**
 
   Export a build as an MRPack or CurseForge archive. Modrinth-mapped versions
   remain native in MRPack; other packages are installed from Solder through
-  SolderPy Loader, MCInstance Loader, FileDirector, or Modpack Director where
+  SolderPy Loader, MCInstance Loader, or FileDirector where
   available.
   CurseForge packs contain only the selected
   downloader and any enabled Modrinth-CurseForge sync mappings as native projects.
@@ -242,7 +240,7 @@ Enable the required formats under **Settings > Env Settings**, then open a
 build's **Export** window. The complete
 [distribution usage and format guide](docs/distribution-formats.md) explains
 the shared Solder API only and hybrid options, SolderPy Loader and MCInstance
-Loader archive mapping, Packwiz, FileDirector, and Modpack Director hosting,
+Loader archive mapping, Packwiz and FileDirector hosting,
 Modrinth or CurseForge fallback exports, and Prism Launcher bootstrap or
 self-contained instance exports.
 
@@ -376,10 +374,6 @@ solder.example.com {
 	}
 
 	handle /filedirector/* {
-		reverse_proxy solderpy:5000
-	}
-
-	handle /modpackdirector/* {
 		reverse_proxy solderpy:5000
 	}
 
@@ -616,9 +610,8 @@ Compose example it is the service name `mysql`, not `127.0.0.1`.
 
 ### Repository variables
 
-`APP_URL` is solder.py's trusted public base URL. Hosted FileDirector and
-Modpack Director exports use it instead of deriving a URL from the incoming
-request:
+`APP_URL` is solder.py's trusted public base URL. Hosted FileDirector exports
+use it instead of deriving a URL from the incoming request:
 
 ```dotenv
 APP_URL=https://solder.example.com/

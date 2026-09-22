@@ -12,7 +12,6 @@ class DistributionSettings:
     SOLDERPY_LOADER = "solderpy_loader_enabled"
     PACKWIZ = "packwiz_enabled"
     FILEDIRECTOR = "filedirector_enabled"
-    MODPACK_DIRECTOR = "modpack_director_enabled"
     MRPACK = "mrpack_enabled"
     CURSEFORGE = "curseforge_export_enabled"
     PRISM = "prism_export_enabled"
@@ -21,7 +20,6 @@ class DistributionSettings:
         SOLDERPY_LOADER: False,
         PACKWIZ: False,
         FILEDIRECTOR: False,
-        MODPACK_DIRECTOR: False,
         MRPACK: False,
         CURSEFORGE: False,
         PRISM: False,
@@ -50,14 +48,13 @@ class DistributionSettings:
                 cls.SOLDERPY_LOADER,
                 cls.PACKWIZ,
                 cls.FILEDIRECTOR,
-                cls.MODPACK_DIRECTOR,
                 cls.MRPACK,
                 cls.CURSEFORGE,
                 cls.PRISM,
             )
             cursor.execute(
                 "SELECT name, value FROM solder_settings "
-                "WHERE name IN (%s, %s, %s, %s, %s, %s, %s, %s)",
+                "WHERE name IN (%s, %s, %s, %s, %s, %s, %s)",
                 names,
             )
             for row in cursor.fetchall():
@@ -79,7 +76,6 @@ class DistributionSettings:
         cls,
         packwiz: bool,
         filedirector: bool,
-        modpack_director: bool = False,
         mrpack: bool = False,
         curseforge: bool = False,
         mcil: bool = False,
@@ -99,7 +95,6 @@ class DistributionSettings:
                 (cls.SOLDERPY_LOADER, solderpy_loader),
                 (cls.PACKWIZ, packwiz),
                 (cls.FILEDIRECTOR, filedirector),
-                (cls.MODPACK_DIRECTOR, modpack_director),
                 (cls.MRPACK, mrpack),
                 (cls.CURSEFORGE, curseforge),
                 (cls.PRISM, prism),

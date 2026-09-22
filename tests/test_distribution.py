@@ -348,7 +348,6 @@ class DistributionSettingsTests(unittest.TestCase):
         self.assertFalse(values[DistributionSettings.MCIL])
         self.assertFalse(values[DistributionSettings.SOLDERPY_LOADER])
         self.assertFalse(values[DistributionSettings.FILEDIRECTOR])
-        self.assertFalse(values[DistributionSettings.MODPACK_DIRECTOR])
         self.assertFalse(values[DistributionSettings.PRISM])
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
@@ -363,7 +362,6 @@ class DistributionSettingsTests(unittest.TestCase):
             DistributionSettings.update_exports(
                 packwiz=True,
                 filedirector=False,
-                modpack_director=True,
                 mrpack=True,
                 curseforge=False,
                 mcil=True,
@@ -371,7 +369,7 @@ class DistributionSettingsTests(unittest.TestCase):
                 prism=True,
             )
 
-        self.assertEqual(cursor.execute.call_count, 8)
+        self.assertEqual(cursor.execute.call_count, 7)
         first_parameters = cursor.execute.call_args_list[0].args[1]
         second_parameters = cursor.execute.call_args_list[1].args[1]
         third_parameters = cursor.execute.call_args_list[2].args[1]
@@ -379,7 +377,6 @@ class DistributionSettingsTests(unittest.TestCase):
         fifth_parameters = cursor.execute.call_args_list[4].args[1]
         sixth_parameters = cursor.execute.call_args_list[5].args[1]
         seventh_parameters = cursor.execute.call_args_list[6].args[1]
-        eighth_parameters = cursor.execute.call_args_list[7].args[1]
         self.assertEqual(first_parameters, ("mcil_enabled", "1", "1"))
         self.assertEqual(
             second_parameters, ("solderpy_loader_enabled", "1", "1")
@@ -388,15 +385,12 @@ class DistributionSettingsTests(unittest.TestCase):
         self.assertEqual(
             fourth_parameters, ("filedirector_enabled", "0", "0")
         )
+        self.assertEqual(fifth_parameters, ("mrpack_enabled", "1", "1"))
         self.assertEqual(
-            fifth_parameters, ("modpack_director_enabled", "1", "1")
-        )
-        self.assertEqual(sixth_parameters, ("mrpack_enabled", "1", "1"))
-        self.assertEqual(
-            seventh_parameters, ("curseforge_export_enabled", "0", "0")
+            sixth_parameters, ("curseforge_export_enabled", "0", "0")
         )
         self.assertEqual(
-            eighth_parameters, ("prism_export_enabled", "1", "1")
+            seventh_parameters, ("prism_export_enabled", "1", "1")
         )
         connection.commit.assert_called_once_with()
         connection.rollback.assert_not_called()
@@ -567,7 +561,6 @@ class DistributionDeploymentDocumentationTests(unittest.TestCase):
 
         self.assertIn("handle /packwiz/*", readme)
         self.assertIn("handle /filedirector/*", readme)
-        self.assertIn("handle /modpackdirector/*", readme)
         self.assertIn("reverse_proxy solderpy:5000", readme)
         self.assertIn("image: mysql:8.4", readme)
         self.assertIn("mysql_data:/var/lib/mysql", readme)
@@ -592,13 +585,9 @@ class DistributionRouteTests(unittest.TestCase):
             filedirector = self.client.get(
                 "/filedirector/example-pack/1.0/mods.bundle.json"
             )
-            modpack_director = self.client.get(
-                "/modpackdirector/example-pack/1.0/mods.bundle.json"
-            )
 
         self.assertEqual(packwiz.status_code, 404)
         self.assertEqual(filedirector.status_code, 404)
-        self.assertEqual(modpack_director.status_code, 404)
 
     def test_packwiz_channel_redirects_to_exact_build(self):
         with (
@@ -695,28 +684,6 @@ class DistributionRouteTests(unittest.TestCase):
             7, optional=None, include_excluded=True
         )
 
-    def test_modpack_director_uses_the_compatible_bundle_schema(self):
-        with (
-            patch.object(
-                routes.DistributionSettings, "is_enabled", return_value=True
-            ) as enabled,
-            patch.object(
-                routes.DistributionExport, "load_build", return_value=build()
-            ),
-            patch.object(
-                routes.DistributionExport,
-                "load_packages",
-                return_value=[package()],
-            ),
-        ):
-            response = self.client.get(
-                "/modpackdirector/example-pack/1.0/mods.bundle.json"
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.get_json()["url"]), 1)
-        enabled.assert_called_once_with(DistributionSettings.MODPACK_DIRECTOR)
-
     def test_filedirector_modrinth_fallback_excludes_native_files(self):
         native = package(
             integration_provider="MODRINTH",
@@ -769,31 +736,6 @@ class DistributionRouteTests(unittest.TestCase):
                 "recommended/mods.bundle.json"
             },
         )
-
-    def test_modpack_director_remote_and_version_routes_use_own_namespace(self):
-        with (
-            patch.object(
-                routes.DistributionSettings, "is_enabled", return_value=True
-            ),
-            patch.object(
-                routes.DistributionExport,
-                "load_build",
-                return_value=build("recommended"),
-            ),
-        ):
-            remote = self.client.get(
-                "/modpackdirector/example-pack/recommended/mods.remote.json"
-            )
-            version = self.client.get(
-                "/modpackdirector/example-pack/recommended/version.txt"
-            )
-
-        self.assertEqual(
-            remote.get_json()["url"],
-            "https://solder.example.test/modpackdirector/example-pack/"
-            "recommended/mods.bundle.json",
-        )
-        self.assertEqual(version.get_data(as_text=True), "1.0\n")
 
     def test_hybrid_hosted_routes_use_validated_modrinth_urls(self):
         native_package = package(

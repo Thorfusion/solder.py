@@ -983,7 +983,6 @@ class ApplicationSmokeTests(unittest.TestCase):
                     "solderpy_loader_enabled": True,
                     "packwiz_enabled": True,
                     "filedirector_enabled": False,
-                    "modpack_director_enabled": True,
                     "mrpack_enabled": False,
                     "curseforge_export_enabled": False,
                     "prism_export_enabled": True,
@@ -1000,7 +999,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(b'id="solderpy_loader_enabled"', response.data)
         self.assertIn(b'id="packwiz_enabled"', response.data)
         self.assertIn(b'id="filedirector_enabled"', response.data)
-        self.assertIn(b'id="modpack_director_enabled"', response.data)
         self.assertIn(b'id="mrpack_enabled"', response.data)
         self.assertIn(b'id="curseforge_export_enabled"', response.data)
         self.assertIn(b'id="prism_export_enabled"', response.data)
@@ -1039,7 +1037,6 @@ class ApplicationSmokeTests(unittest.TestCase):
                     "mcil_enabled": "on",
                     "solderpy_loader_enabled": "on",
                     "filedirector_enabled": "on",
-                    "modpack_director_enabled": "on",
                 },
             )
 
@@ -1050,7 +1047,6 @@ class ApplicationSmokeTests(unittest.TestCase):
             solderpy_loader=True,
             packwiz=False,
             filedirector=True,
-            modpack_director=True,
             mrpack=False,
             curseforge=False,
             prism=False,
@@ -1553,46 +1549,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.data, b"packwiz archive")
         self.assertIn("example-pack-2.0-packwiz.zip", response.headers["Content-Disposition"])
         self.assertEqual(render.call_args.kwargs["source_mode"], "hybrid")
-
-    def test_authenticated_user_can_export_modpack_director(self):
-        with self.client.session_transaction() as flask_session:
-            flask_session["token"] = "valid-test-token"
-
-        build = SimpleNamespace(
-            modpack_slug="example-pack",
-            version="2.0",
-            is_published=True,
-            private=False,
-        )
-        with (
-            patch("asite.DistributionSettings.is_enabled", return_value=True),
-            patch("asite.Session.verify_session", return_value=True),
-            patch("asite.User.get_permission_token", return_value=1),
-            patch("asite.Build.get_modpackid_by_id", return_value=3),
-            patch(
-                "asite.User_modpack.get_user_modpackpermission",
-                return_value=True,
-            ),
-            patch("asite.MCInstanceExport.load", return_value=(build, [])),
-            patch(
-                "asite.PlatformPackExport.render_modpack_director",
-                return_value=io.BytesIO(b"modpack director archive"),
-            ) as render,
-        ):
-            response = self.client.get(
-                "/modpackbuild/7/modpackdirector"
-                "?delivery=hosted&source=hybrid&selector=latest"
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, b"modpack director archive")
-        self.assertIn(
-            "example-pack-2.0-modpack-director.zip",
-            response.headers["Content-Disposition"],
-        )
-        self.assertEqual(render.call_args.kwargs["source_mode"], "hybrid")
-        self.assertEqual(render.call_args.kwargs["delivery"], "hosted")
-        self.assertEqual(render.call_args.kwargs["selector"], "latest")
 
     def test_hosted_filedirector_export_can_follow_latest(self):
         with self.client.session_transaction() as flask_session:
@@ -2505,7 +2461,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(b'>FileDirector</option>', response.data)
         self.assertIn(b'value="solderpy"', response.data)
         self.assertIn(b'>Dedicated server</option>', response.data)
-        self.assertIn(b'>Modpack Director</option>', response.data)
         self.assertIn(b'>Packwiz</option>', response.data)
         self.assertIn(b'>Modrinth</option>', response.data)
         self.assertIn(b'>CurseForge</option>', response.data)
