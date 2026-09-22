@@ -13,7 +13,11 @@ import zipfile
 
 import requests
 
-from .compatibility import normalize_modloader, version_is_compatible
+from .compatibility import (
+    normalize_modloader,
+    resolved_minecraft_versions,
+    version_is_compatible,
+)
 from .distribution import DistributionExport, FileDirectorExport, PackwizExport
 from .integration import (
     IntegrationError,
@@ -22,6 +26,7 @@ from .integration import (
     USER_AGENT,
 )
 from .mcinstance import MCInstanceExport, MCInstanceExportError
+from .modversion_provider_id import ModversionProviderId
 
 
 _SHA1_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -163,6 +168,13 @@ class CurseForgeFile:
     published: str
     sha1: str | None = None
     size: int | None = None
+
+
+@dataclass(frozen=True)
+class SyncedPlatformVersion:
+    override: object
+    version: object | None
+    curseforge_file_id: int | None = None
 
 
 class CurseForgeDownloaderAPI:
@@ -488,6 +500,97 @@ class PlatformPackExport:
         return tuple(dependencies)
 
     @classmethod
+    def _manual_curseforge_files(
+        cls, modrinth_project_id, curseforge_project_id, build
+    ):
+        rows = ModversionProviderId.get_modrinth_project_versions(
+            modrinth_project_id,
+            ModversionProviderId.CURSEFORGE,
+            curseforge_project_id,
+        )
+        files = []
+        for row in rows:
+            if not version_is_compatible(
+                row.get("mcversion"),
+                row.get("modloader"),
+                build.minecraft,
+                build.modloader,
+                resolved_minecraft_versions(
+                    row.get("mcversion"), row.get("minecraft_versions")
+                ),
+            ):
+                continue
+            try:
+                file_id = int(row["provider_version_id"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise PlatformExportError(
+                    "A manually configured CurseForge file ID is invalid."
+                ) from error
+            if file_id <= 0:
+                raise PlatformExportError(
+                    "A manually configured CurseForge file ID is invalid."
+                )
+            files.append(
+                CurseForgeFile(
+                    project_id=int(curseforge_project_id),
+                    file_id=file_id,
+                    display_name=str(row.get("version") or file_id),
+                    filename="",
+                    game_versions=(str(build.minecraft),),
+                    published="",
+                )
+            )
+        return tuple(files)
+
+    @classmethod
+    def _manual_curseforge_downloader_dependencies(cls, spec, build):
+        dependencies = []
+        pairs = tuple(
+            zip(
+                spec.modrinth_required_projects,
+                spec.curseforge_required_projects,
+            )
+        )
+        if len(spec.modrinth_required_projects) != len(
+            spec.curseforge_required_projects
+        ):
+            raise PlatformExportError(
+                f"{spec.label} has incomplete manual dependency mappings."
+            )
+        for modrinth_project_id, curseforge_project_id in pairs:
+            files = cls._manual_curseforge_files(
+                modrinth_project_id, curseforge_project_id, build
+            )
+            if not files:
+                raise PlatformExportError(
+                    f"{spec.label}'s required CurseForge dependency needs an "
+                    "imported compatible version with a manual file ID."
+                )
+            dependencies.append(files[0])
+        return tuple(dependencies)
+
+    @classmethod
+    def _manual_curseforge_releases(cls, spec, build):
+        if not spec.modrinth_project_id or not spec.curseforge_project_id:
+            return ()
+        files = cls._manual_curseforge_files(
+            spec.modrinth_project_id, spec.curseforge_project_id, build
+        )
+        if not files:
+            return ()
+        dependencies = cls._manual_curseforge_downloader_dependencies(
+            spec, build
+        )
+        return tuple(
+            cls._curseforge_release(
+                file,
+                default=index == 0,
+                dependencies=dependencies,
+            )
+            for index, file in enumerate(files)
+        )
+
+    @classmethod
     def available_downloaders(
         cls,
         build,
@@ -539,30 +642,35 @@ class PlatformPackExport:
                 else:
                     if not spec.curseforge_project_id:
                         continue
-                    if provider is None:
-                        provider = CurseForgeDownloaderAPI(
-                            curseforge_api_key, http=http
+                    if curseforge_api_key:
+                        if provider is None:
+                            provider = CurseForgeDownloaderAPI(
+                                curseforge_api_key, http=http
+                            )
+                        files = provider.list_files(
+                            spec.curseforge_project_id,
+                            build.minecraft,
+                            build.modloader,
                         )
-                    files = provider.list_files(
-                        spec.curseforge_project_id,
-                        build.minecraft,
-                        build.modloader,
-                    )
-                    dependencies = (
-                        cls._curseforge_downloader_dependencies(
-                            spec, build, provider
+                        dependencies = (
+                            cls._curseforge_downloader_dependencies(
+                                spec, build, provider
+                            )
+                            if files
+                            else ()
                         )
-                        if files
-                        else ()
-                    )
-                    releases = tuple(
-                        cls._curseforge_release(
-                            file,
-                            default=index == 0,
-                            dependencies=dependencies,
+                        releases = tuple(
+                            cls._curseforge_release(
+                                file,
+                                default=index == 0,
+                                dependencies=dependencies,
+                            )
+                            for index, file in enumerate(files)
                         )
-                        for index, file in enumerate(files)
-                    )
+                    else:
+                        releases = cls._manual_curseforge_releases(
+                            spec, build
+                        )
             except (IntegrationError, PlatformExportError) as error:
                 # One unpublished or temporarily unavailable downloader must
                 # not hide compatible releases from the other families.
@@ -582,6 +690,12 @@ class PlatformPackExport:
                     f"{platform.title()} downloader versions could not be loaded."
                 )
             raise PlatformExportError(message) from failure
+        if platform == "curseforge" and not curseforge_api_key and not available:
+            raise PlatformExportError(
+                "Configure CURSEFORGE_API_KEY, or import a compatible "
+                "Modrinth version of the downloader and its required "
+                "dependencies and save their manual CurseForge file IDs."
+            )
         return tuple(available)
 
     @staticmethod
@@ -684,21 +798,33 @@ class PlatformPackExport:
                     raise PlatformExportError(
                         f"{downloader.label} is not distributed on CurseForge."
                     )
-                provider = CurseForgeDownloaderAPI(
-                    curseforge_api_key, http=http
-                )
-                file = provider.get_file(
-                    downloader.curseforge_project_id,
-                    requested_version,
-                    build.minecraft,
-                    build.modloader,
-                )
-                dependencies = cls._curseforge_downloader_dependencies(
-                    downloader, build, provider
-                )
-                release = cls._curseforge_release(
-                    file, default=True, dependencies=dependencies
-                )
+                if curseforge_api_key:
+                    provider = CurseForgeDownloaderAPI(
+                        curseforge_api_key, http=http
+                    )
+                    file = provider.get_file(
+                        downloader.curseforge_project_id,
+                        requested_version,
+                        build.minecraft,
+                        build.modloader,
+                    )
+                    dependencies = cls._curseforge_downloader_dependencies(
+                        downloader, build, provider
+                    )
+                    release = cls._curseforge_release(
+                        file, default=True, dependencies=dependencies
+                    )
+                else:
+                    release = next(
+                        (
+                            item
+                            for item in cls._manual_curseforge_releases(
+                                downloader, build
+                            )
+                            if item.selector == requested_version
+                        ),
+                        None,
+                    )
             else:
                 raise PlatformExportError("Unknown downloader platform.")
         else:
@@ -1503,7 +1629,13 @@ class PlatformPackExport:
 
     @classmethod
     def _override_modrinth_versions(
-        cls, build, overrides, packages, *, http=None
+        cls,
+        build,
+        overrides,
+        packages,
+        *,
+        http=None,
+        allow_manual_curseforge=False,
     ):
         """Resolve the selected Modrinth release for each manual project map."""
         if not overrides:
@@ -1533,13 +1665,25 @@ class PlatformPackExport:
                 )
             selected_packages[project_id] = package
 
+        exact_requests = {
+            project_id: package
+            for project_id, package in selected_packages.items()
+            if not (
+                allow_manual_curseforge
+                and getattr(package, "curseforge_file_id", None)
+                and str(
+                    getattr(package, "curseforge_project_id", "") or ""
+                )
+                == str(mapped_projects[project_id].curseforge_project_id)
+            )
+        }
         exact_versions = {}
-        if selected_packages:
+        if exact_requests:
             try:
                 exact_versions = provider.get_versions(
                     [
                         (project_id, package.integration_version_id)
-                        for project_id, package in selected_packages.items()
+                        for project_id, package in exact_requests.items()
                     ],
                     build.minecraft,
                     build.modloader,
@@ -1555,13 +1699,61 @@ class PlatformPackExport:
             project_id = str(override.modrinth_project_id)
             selected_package = selected_packages.get(project_id)
             if selected_package is not None:
-                resolved.append(
-                    (
-                        override,
-                        exact_versions[selected_package.integration_version_id],
-                    )
+                manual_file_id = getattr(
+                    selected_package, "curseforge_file_id", None
                 )
+                manual_project_id = str(
+                    getattr(
+                        selected_package, "curseforge_project_id", ""
+                    )
+                    or ""
+                )
+                if (
+                    allow_manual_curseforge
+                    and manual_file_id
+                    and manual_project_id
+                    == str(override.curseforge_project_id)
+                ):
+                    try:
+                        manual_file_id = int(manual_file_id)
+                    except (TypeError, ValueError) as error:
+                        raise PlatformExportError(
+                            f'{override.name} has an invalid manual '
+                            "CurseForge file ID."
+                        ) from error
+                    if manual_file_id <= 0:
+                        raise PlatformExportError(
+                            f'{override.name} has an invalid manual '
+                            "CurseForge file ID."
+                        )
+                    resolved.append(
+                        SyncedPlatformVersion(
+                            override, None, manual_file_id
+                        )
+                    )
+                else:
+                    resolved.append(
+                        SyncedPlatformVersion(
+                            override,
+                            exact_versions[
+                                selected_package.integration_version_id
+                            ],
+                        )
+                    )
                 continue
+            if allow_manual_curseforge:
+                manual_files = cls._manual_curseforge_files(
+                    override.modrinth_project_id,
+                    override.curseforge_project_id,
+                    build,
+                )
+                if manual_files:
+                    resolved.append(
+                        SyncedPlatformVersion(
+                            override, None, manual_files[0].file_id
+                        )
+                    )
+                    continue
             try:
                 versions = provider.list_versions(
                     project_id,
@@ -1576,14 +1768,17 @@ class PlatformPackExport:
                 raise PlatformExportError(
                     f'{override.name} has no compatible Modrinth version.'
                 )
-            resolved.append((override, versions[0]))
+            resolved.append(SyncedPlatformVersion(override, versions[0]))
         return tuple(resolved)
 
     @classmethod
     def _modrinth_override_files(cls, override_versions):
         return tuple(
-            (override, cls._modrinth_release(version).modrinth)
-            for override, version in override_versions
+            (
+                item.override,
+                cls._modrinth_release(item.version).modrinth,
+            )
+            for item in override_versions
         )
 
     @staticmethod
@@ -1671,9 +1866,29 @@ class PlatformPackExport:
         """Match CurseForge files during export without persisting metadata."""
         if not override_versions:
             return ()
-        provider = CurseForgeDownloaderAPI(curseforge_api_key, http=http)
+        provider = None
         resolved = []
-        for override, version in override_versions:
+        for item in override_versions:
+            override = item.override
+            if item.curseforge_file_id is not None:
+                resolved.append(
+                    (
+                        override,
+                        CurseForgeFile(
+                            project_id=override.curseforge_project_id,
+                            file_id=item.curseforge_file_id,
+                            display_name=override.name,
+                            filename="",
+                            game_versions=(str(build.minecraft),),
+                            published="",
+                        ),
+                    )
+                )
+                continue
+            if provider is None:
+                provider = CurseForgeDownloaderAPI(
+                    curseforge_api_key, http=http
+                )
             files = provider.list_files(
                 override.curseforge_project_id,
                 build.minecraft,
@@ -1687,7 +1902,7 @@ class PlatformPackExport:
                 (
                     override,
                     cls._matching_curseforge_file(
-                        override, version, files
+                        override, item.version, files
                     ),
                 )
             )
@@ -2281,7 +2496,11 @@ class PlatformPackExport:
             export_overrides, source_mode
         )
         override_versions = cls._override_modrinth_versions(
-            build, export_overrides, packages, http=http
+            build,
+            export_overrides,
+            packages,
+            http=http,
+            allow_manual_curseforge=True,
         )
         override_files = cls._curseforge_override_files(
             build,

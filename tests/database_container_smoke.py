@@ -392,13 +392,14 @@ def verify_technic_migration(database_container: str) -> None:
         "'technic_solderpy_loader_builds', "
         "'modversion_download_overrides', "
         "'modversion_download_sources', "
+        "'modversion_provider_ids', "
         "'modversion_minecraft_versions', "
         "'publishing_provider_accounts', "
         "'modpack_publication_targets', 'modpack_publication_runs', "
         "'personal_access_tokens', 'password_reset_tokens', "
         "'maven_repositories', 'maven_artifacts', 'maven_versions');",
     )
-    if int(table_count) != 20:
+    if int(table_count) != 21:
         raise AssertionError(
             "Migration did not preserve the current Technic tables and create "
             "the solder.py tables"
@@ -528,6 +529,17 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if direct_source_column_count != "9":
         raise AssertionError("Fresh schema did not create direct JAR source columns")
+
+    provider_id_column_count = mysql(
+        database_container,
+        "SELECT COUNT(*) FROM information_schema.COLUMNS "
+        f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+        "AND TABLE_NAME = 'modversion_provider_ids' "
+        "AND COLUMN_NAME IN "
+        "('modversion_id', 'provider', 'project_id', 'version_id');",
+    )
+    if provider_id_column_count != "4":
+        raise AssertionError("Fresh schema did not create provider version IDs")
 
     integration_table_count = mysql(
         database_container,
@@ -2222,6 +2234,18 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         if direct_source_column_count != "9":
             raise AssertionError(
                 "Application startup did not create direct JAR source columns"
+            )
+        provider_id_column_count = mysql(
+            database_container,
+            "SELECT COUNT(*) FROM information_schema.COLUMNS "
+            f"WHERE TABLE_SCHEMA = '{DATABASE}' "
+            "AND TABLE_NAME = 'modversion_provider_ids' "
+            "AND COLUMN_NAME IN "
+            "('modversion_id', 'provider', 'project_id', 'version_id');",
+        )
+        if provider_id_column_count != "4":
+            raise AssertionError(
+                "Application startup did not create provider version IDs"
             )
         integration_schema_count = mysql(
             database_container,

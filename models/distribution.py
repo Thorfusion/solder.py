@@ -68,6 +68,8 @@ class DistributionPackage:
     download_source_sha1: str | None = None
     download_source_sha512: str | None = None
     download_source_filesize: int | None = None
+    curseforge_project_id: str | None = None
+    curseforge_file_id: str | None = None
 
     @property
     def jar_ready(self) -> bool:
@@ -213,6 +215,10 @@ class DistributionExport:
                                   AS download_source_sha512,
                               modversion_download_sources.filesize
                                   AS download_source_filesize,
+                              modversion_provider_ids.version_id
+                                  AS curseforge_file_id,
+                              modversion_provider_ids.project_id
+                                  AS curseforge_project_id,
                               build_modversion.optional
                        FROM build_modversion
                        INNER JOIN modversions
@@ -222,6 +228,10 @@ class DistributionExport:
                            ON modversion_download_sources.modversion_id =
                               modversions.id
                           AND modversion_download_sources.provider = 'MODRINTH'
+                       LEFT JOIN modversion_provider_ids
+                           ON modversion_provider_ids.modversion_id =
+                              modversions.id
+                          AND modversion_provider_ids.provider = 'CURSEFORGE'
                        WHERE build_modversion.build_id = %s"""
             parameters = [build_id]
             if mod_slug is not None:
@@ -266,6 +276,8 @@ class DistributionExport:
             download_source_sha512=row.get("download_source_sha512"),
             download_source_filesize=row.get("download_source_filesize")
             or row.get("jarfilesize"),
+            curseforge_project_id=row.get("curseforge_project_id"),
+            curseforge_file_id=row.get("curseforge_file_id"),
         )
 
     @staticmethod

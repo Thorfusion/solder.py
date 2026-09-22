@@ -12,11 +12,11 @@
     <div class="alert alert-secondary">
         <h3 class="h6">How CurseForge matching works</h3>
         <p>
-            The mapping stores only the manually entered Modrinth and CurseForge
-            project IDs. No CurseForge file metadata or matched file ID is saved.
-            When exporting, solder.py resolves the exact Modrinth version selected
-            in the build, asks CurseForge for compatible JARs, and tries these matches
-            in order:
+            The mapping stores the manually entered Modrinth and CurseForge
+            project IDs. A manually entered CurseForge file ID can also be saved
+            from an imported Modrinth version's management page. Without one,
+            solder.py resolves the selected Modrinth version, asks CurseForge for
+            compatible JARs, and tries these matches in order:
         </p>
         <ol class="mb-0">
             <li>the same SHA-1;</li>
@@ -30,8 +30,9 @@
     </div>
     {%if not curseforge_api_configured%}
     <div class="alert alert-warning">
-        CURSEFORGE_API_KEY is not configured. Modrinth exports can still resolve these
-        projects, but CurseForge exports cannot resolve files until the key is set.
+        CURSEFORGE_API_KEY is not configured. Versions with manually entered
+        CurseForge file IDs do not need an API lookup. Automatic file matching and
+        downloader-version lookup still require the key.
     </div>
     {%endif%}
     <div class="table-responsive">

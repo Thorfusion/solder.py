@@ -51,6 +51,7 @@ class Database:
         "mod_dependencies",
         "modversion_download_overrides",
         "modversion_download_sources",
+        "modversion_provider_ids",
         "modversion_minecraft_versions",
         "publishing_provider_accounts",
         "modpack_publication_targets",
@@ -191,6 +192,18 @@ class Database:
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (modversion_id, provider),
         INDEX idx_modversion_download_sources_provider (provider, modversion_id)
+    )""" + TABLE_OPTIONS
+
+    MODVERSION_PROVIDER_IDS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS modversion_provider_ids (
+        modversion_id INT NOT NULL,
+        provider VARCHAR(32) NOT NULL,
+        project_id VARCHAR(191) NOT NULL,
+        version_id VARCHAR(191) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (modversion_id, provider),
+        INDEX idx_modversion_provider_ids_lookup
+            (provider, project_id, version_id)
     )""" + TABLE_OPTIONS
 
     MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS modversion_minecraft_versions (
@@ -337,6 +350,7 @@ class Database:
         MOD_DEPENDENCIES_TABLE_SQL,
         MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL,
         MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL,
+        MODVERSION_PROVIDER_IDS_TABLE_SQL,
         MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL,
         *PUBLISHING_TABLES_SQL,
         PERSONAL_ACCESS_TOKENS_TABLE_SQL,

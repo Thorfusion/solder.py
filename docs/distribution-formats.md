@@ -37,7 +37,7 @@ The exporters use these application settings:
 | `PUBLIC_REPO_LOCATION` | Public HTTP or HTTPS base URL from which players can download Solder ZIPs and raw JARs |
 | `MD5_REPO_LOCATION` | Server-side repository path or URL used to inspect and hash existing packages; a local path is allowed |
 | `APP_URL` | Public HTTP or HTTPS URL of solder.py, used by SolderPy Loader and in hosted FileDirector and Modpack Director pointers |
-| `CURSEFORGE_API_KEY` | CurseForge third-party API key; required only for CurseForge archive exports |
+| `CURSEFORGE_API_KEY` | CurseForge third-party API key used for automatic CurseForge file and downloader-version lookup; manually mapped version IDs do not use it |
 
 `PUBLIC_REPO_LOCATION` and `MD5_REPO_LOCATION` deliberately serve different
 purposes. A local filesystem path is useful for fast server-side hashing, but it
@@ -87,9 +87,10 @@ the attempt **UNKNOWN** and keeps the duplicate lock. Check the remote project
 first; the user who owns the publishing account can then use **Allow retry**
 on the Publishing page if the version was not created.
 
-`CURSEFORGE_API_KEY` remains separate: it reads public CurseForge file metadata
-needed while building an archive. The stored CurseForge author token is used
-only by an explicit upload action.
+`CURSEFORGE_API_KEY` remains separate: when configured, it reads public
+CurseForge file metadata while building an archive. An archive made entirely
+from manually entered file IDs does not use it. The stored CurseForge author
+token is used only by an explicit upload action.
 
 ### Modrinth-CurseForge sync
 
@@ -105,11 +106,14 @@ An enabled mapping is native in hybrid Modrinth and CurseForge archives:
   Modrinth version is resolved; a standalone mapping uses the newest compatible
   Modrinth release;
 - a Modrinth export adds the verified project file to `modrinth.index.json`;
-- a CurseForge export queries compatible files at export time and matches the
-  Modrinth release by SHA-1, then filename plus filesize, then the Modrinth
-  version number in the CurseForge filename or display name;
-- only the manually entered project mapping is stored. CurseForge file metadata
-  and the matched file ID are not persisted;
+- a manually entered CurseForge file ID on **Manage mod version** is used
+  directly, without a Modrinth or CurseForge matching request;
+- otherwise a CurseForge export queries compatible files at export time and
+  matches the Modrinth release by SHA-1, then filename plus filesize, then the
+  Modrinth version number in the CurseForge filename or display name;
+- only manually entered project mappings and manually entered file IDs are
+  stored. CurseForge API responses and automatically matched file IDs are not
+  persisted;
 - an export fails instead of silently using the newest CurseForge file when no
   match is found or a weaker match is ambiguous;
 - **Override Solder API only** may be enabled for a mapping that must remain native
@@ -122,8 +126,9 @@ TX Loader is included as a built-in, client-only mapping between Modrinth
 project `eh8us8FY` and CurseForge project `706505`. It is disabled by default.
 Enable it only for packs that use TX Loader's early resource and asset loading
 behavior. More mappings can be added without changing solder.py. A CurseForge
-API key is needed to resolve CurseForge files, while Modrinth resolution does
-not use that key.
+API key is needed for automatic matching, while a manually entered file ID for
+the selected version bypasses that lookup. Downloader-version lookup can still
+require the API key.
 
 These mappings affect only generated Modrinth and CurseForge archives. They do
 not add packages to a build and do not change the Technic-compatible API, so
@@ -573,16 +578,26 @@ requires a published, non-private build and can follow this build, `latest`, or
 
 ## CurseForge pack
 
-Enable **CurseForge exports**, configure `CURSEFORGE_API_KEY`, and select
-**Export CurseForge** from a compatible Forge build. The ZIP contains
+Enable **CurseForge exports** and select **Export CurseForge** from a compatible
+Forge build. The ZIP contains
 `manifest.json` and `overrides/`. Its native `files` array contains the selected
 SolderPy Loader, MCInstance Loader, FileDirector, or Modpack Director release,
 its required dependencies, and any enabled Modrinth-CurseForge sync overrides.
 
-The selector loads compatible files from the official CurseForge API. During
-export, solder.py verifies that the selected file still belongs to the expected
-project and supports the build's Minecraft version. The API key is sent only
-to `https://api.curseforge.com/v1` and is never written into the archive.
+With `CURSEFORGE_API_KEY`, the selector loads compatible files from the official
+CurseForge API. During export, solder.py verifies that the selected file still
+belongs to the expected project and supports the build's Minecraft version. The
+API key is sent only to `https://api.curseforge.com/v1` and is never written
+into the archive.
+
+An API-free export is also possible. Import the selected downloader and each of
+its required dependencies as Modrinth mods, configure their
+Modrinth-CurseForge project mappings, and enter the exact CurseForge file ID on
+each **Manage mod version** page. Do the same for every synced build mod that
+should be native. The export selector then uses only compatible imported
+versions with manual IDs. It never turns a file ID learned from the CurseForge
+API into a stored manual value. Manual IDs are trusted as entered, so confirm
+that each ID belongs to the mapped CurseForge project and exact local version.
 
 In Solder API only mode, no ordinary build package is native to the CurseForge
 manifest; the selected downloader handles them. SolderPy Loader obtains their

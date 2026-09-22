@@ -1116,7 +1116,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Modrinth-CurseForge sync", response.data)
         self.assertIn(b"How CurseForge matching works", response.data)
-        self.assertIn(b"No CurseForge file metadata", response.data)
+        self.assertIn(b"manually entered CurseForge file ID", response.data)
         self.assertIn(b"same filename and filesize", response.data)
         self.assertIn(b"CurseForge filename or display name", response.data)
         self.assertIn(b"TX Loader", response.data)
@@ -1770,6 +1770,41 @@ class ApplicationSmokeTests(unittest.TestCase):
         update.assert_called_once_with(
             12, 9, "https://override.example/mod.jar"
         )
+        clear_caches.assert_called_once_with()
+
+    def test_modversion_management_saves_manual_curseforge_file_id(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        mod = SimpleNamespace(
+            id=9,
+            integration_provider="MODRINTH",
+            integration_project_id="project-id",
+        )
+        version = SimpleNamespace(id=12, mod_id=9)
+        mapping = SimpleNamespace(curseforge_project_id=12345, enabled=True)
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Mod.get_by_id", return_value=mod),
+            patch("asite.Modversion.get_by_id", return_value=version),
+            patch(
+                "asite.PlatformExportOverride.get_by_modrinth_project_id",
+                return_value=mapping,
+            ),
+            patch("asite.ModversionProviderId.save") as save,
+            patch("api.clear_api_caches") as clear_caches,
+        ):
+            response = self.client.post(
+                "/modversion/9/manage/12",
+                data={
+                    "curseforge_file_id_submit": "1",
+                    "curseforge_file_id": "4920730",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        save.assert_called_once_with(12, "CURSEFORGE", 12345, "4920730")
         clear_caches.assert_called_once_with()
 
     def test_authenticated_user_can_export_technic_csv(self):

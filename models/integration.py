@@ -1609,6 +1609,7 @@ class ModIntegration:
                 for table in (
                     "modversion_download_overrides",
                     "modversion_download_sources",
+                    "modversion_provider_ids",
                     "modversion_minecraft_versions",
                 ):
                     cursor.execute(

@@ -38,6 +38,10 @@ from models.modversion import (  # noqa: E402
     MissingDependencyVersionError,
     Modversion,
 )
+from models.modversion_provider_id import (  # noqa: E402
+    ModversionProviderId,
+    ModversionProviderIdError,
+)
 from models.passhasher import Passhasher  # noqa: E402
 from models.session import Session  # noqa: E402
 from models.user import User  # noqa: E402
@@ -361,6 +365,35 @@ class ModelSerializationTests(unittest.TestCase):
 
 
 class ModelBehaviorTests(unittest.TestCase):
+    def test_manual_curseforge_file_id_is_validated_and_upserted(self):
+        connection = MagicMock()
+        cursor = connection.cursor.return_value
+        with patch(
+            "models.modversion_provider_id.Database.get_connection",
+            return_value=connection,
+        ):
+            stored = ModversionProviderId.save(
+                12, "CURSEFORGE", "0012345", "004920730"
+            )
+
+        self.assertEqual(stored, "4920730")
+        cursor.execute.assert_called_once()
+        self.assertEqual(
+            cursor.execute.call_args.args[1],
+            (12, "CURSEFORGE", "12345", "4920730"),
+        )
+        connection.commit.assert_called_once_with()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_manual_curseforge_file_id_rejects_non_numeric_values(self):
+        with self.assertRaisesRegex(
+            ModversionProviderIdError, "numeric CurseForge file ID"
+        ):
+            ModversionProviderId.save(
+                12, "CURSEFORGE", "12345", "not-a-file"
+            )
+
     def test_additive_table_repair_includes_login_throttle(self):
         cursor = MagicMock()
         Database.create_additive_tables(cursor)

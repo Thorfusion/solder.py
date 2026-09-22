@@ -510,6 +510,15 @@ class WriteApiStore:
                 (mod_id,),
             )
             cur.execute(
+                """DELETE modversion_provider_ids
+                   FROM modversion_provider_ids
+                   INNER JOIN modversions
+                       ON modversions.id =
+                          modversion_provider_ids.modversion_id
+                   WHERE modversions.mod_id = %s""",
+                (mod_id,),
+            )
+            cur.execute(
                 """DELETE modversion_minecraft_versions
                    FROM modversion_minecraft_versions
                    INNER JOIN modversions
@@ -815,6 +824,11 @@ class WriteApiStore:
             )
             cur.execute(
                 "DELETE FROM modversion_download_sources "
+                "WHERE modversion_id = %s",
+                (modversion_id,),
+            )
+            cur.execute(
+                "DELETE FROM modversion_provider_ids "
                 "WHERE modversion_id = %s",
                 (modversion_id,),
             )

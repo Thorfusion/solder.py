@@ -401,7 +401,7 @@ SOLDER_IMAGE=thorfusion/solderpy:1.10.1
 SOLDER_DB_PASSWORD=replace-with-a-long-random-password
 MYSQL_ROOT_PASSWORD=replace-with-another-long-random-password
 SOLDER_SECRET_KEY=replace-with-a-long-random-application-secret
-# Optional; required only when CurseForge exports are enabled.
+# Optional; enables automatic CurseForge matching and downloader lookup.
 CURSEFORGE_API_KEY=
 ```
 
@@ -521,7 +521,7 @@ PUBLIC_REPO_LOCATION=https://solder.example.com/mods/
 MD5_REPO_LOCATION=/app/mods/
 APP_URL=https://solder.example.com/
 SECRET_KEY=replace-with-a-long-random-application-secret
-# Required only for CurseForge archive exports.
+# Used for automatic CurseForge file and downloader-version lookup.
 CURSEFORGE_API_KEY=
 ```
 
@@ -532,7 +532,9 @@ the trusted public base URL used in generated FileDirector remote pointers.
 `SECRET_KEY` signs management login cookies and must remain private and stable
 across restarts and replicas.
 `CURSEFORGE_API_KEY` is a CurseForge third-party API key used only to list and
-verify downloader files while generating CurseForge archives.
+verify files while generating CurseForge archives. A manually entered
+CurseForge file ID on a synced Modrinth version bypasses that version's lookup;
+automatic matching and downloader-version lookup still require the key.
 
 All distribution formats are disabled by default. After setup, open **Settings
 > Env Settings**, enable the formats that this installation should publish or

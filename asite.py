@@ -89,6 +89,10 @@ from models.mod import DuplicateModError, Mod, UploadVerificationError
 from models.mod_dependency import DependencyError, ModDependency
 from models.modpack import Modpack
 from models.modversion import IncompatibleModVersionError, MissingDependencyVersionError, Modversion
+from models.modversion_provider_id import (
+    ModversionProviderId,
+    ModversionProviderIdError,
+)
 from models.session import Session
 from models.user import User
 from mysql import connector
@@ -388,6 +392,36 @@ def manage_modversion(mod_id, version_id):
                 clear_api_caches()
                 action = "Verified" if was_ready else "Created"
                 flash(f"{action} the raw JAR ({jar_md5}).", "success")
+        elif "curseforge_file_id_submit" in request.form:
+            mapping = None
+            if str(getattr(mod, "integration_provider", "") or "").upper() == MODRINTH:
+                mapping = PlatformExportOverride.get_by_modrinth_project_id(
+                    getattr(mod, "integration_project_id", None)
+                )
+            try:
+                if mapping is None:
+                    raise ModversionProviderIdError(
+                        "Configure a Modrinth-CurseForge sync mapping for this "
+                        "mod before adding a CurseForge file ID."
+                    )
+                value = request.form.get("curseforge_file_id", "").strip()
+                if value:
+                    ModversionProviderId.save(
+                        version.id,
+                        ModversionProviderId.CURSEFORGE,
+                        mapping.curseforge_project_id,
+                        value,
+                    )
+                    flash("Saved the manual CurseForge file ID.", "success")
+                else:
+                    ModversionProviderId.delete(
+                        version.id, ModversionProviderId.CURSEFORGE
+                    )
+                    flash("Removed the manual CurseForge file ID.", "success")
+            except ModversionProviderIdError as error:
+                flash(str(error), "error")
+            else:
+                clear_api_caches()
         else:
             value = request.form.get("jar_url_override", "")
             try:
@@ -414,6 +448,18 @@ def manage_modversion(mod_id, version_id):
     maven_artifact = None
     if getattr(mod, "integration_provider", None) == MAVEN:
         maven_artifact = MavenArtifact.get_by_mod_id(mod.id)
+    curseforge_mapping = None
+    curseforge_file_id = None
+    if str(getattr(mod, "integration_provider", "") or "").upper() == MODRINTH:
+        curseforge_mapping = PlatformExportOverride.get_by_modrinth_project_id(
+            getattr(mod, "integration_project_id", None)
+        )
+        if curseforge_mapping is not None:
+            curseforge_file_id = ModversionProviderId.get(
+                version.id,
+                ModversionProviderId.CURSEFORGE,
+                curseforge_mapping.curseforge_project_id,
+            )
     return render_template(
         "manage_modversion.html",
         mod=mod,
@@ -421,6 +467,8 @@ def manage_modversion(mod_id, version_id):
         mirror_url=public_repo_url,
         builds=version.get_management_builds(),
         maven_artifact=maven_artifact,
+        curseforge_mapping=curseforge_mapping,
+        curseforge_file_id=curseforge_file_id,
         jar_ready=MCInstanceJar.is_ready(version.jarmd5),
     )
 

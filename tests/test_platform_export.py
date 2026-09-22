@@ -179,6 +179,14 @@ def overridden_package():
     )
 
 
+def manually_synced_package():
+    return replace(
+        overridden_package(),
+        curseforge_project_id="706505",
+        curseforge_file_id="7000001",
+    )
+
+
 def downloader_version(project_id, version_id):
     versions = {
         ("5LpwENAj", "loader-version"): (
@@ -943,6 +951,116 @@ class PlatformPackExportTests(unittest.TestCase):
         )
         self.assertEqual(bundle["url"], [])
         files.assert_called_once_with(706505, "1.7.10", "FORGE")
+
+    def test_manual_curseforge_file_id_skips_provider_lookups(self):
+        with (
+            patch(
+                "models.platform_export.ModrinthProvider.get_versions"
+            ) as modrinth_versions,
+            patch(
+                "models.platform_export.CurseForgeDownloaderAPI"
+            ) as curseforge_api,
+        ):
+            versions = PlatformPackExport._override_modrinth_versions(
+                build(),
+                [export_override()],
+                [manually_synced_package()],
+                allow_manual_curseforge=True,
+            )
+            files = PlatformPackExport._curseforge_override_files(
+                build(), versions
+            )
+
+        modrinth_versions.assert_not_called()
+        curseforge_api.assert_not_called()
+        self.assertEqual(files[0][0], export_override())
+        self.assertEqual(files[0][1].project_id, 706505)
+        self.assertEqual(files[0][1].file_id, 7000001)
+
+    def test_standalone_sync_can_use_an_imported_manual_version(self):
+        rows = [
+            {
+                "version": "1.0",
+                "mcversion": "1.7.10",
+                "minecraft_versions": None,
+                "modloader": "FORGE",
+                "provider_version_id": "7000001",
+            }
+        ]
+        with (
+            patch(
+                "models.platform_export.ModversionProviderId."
+                "get_modrinth_project_versions",
+                return_value=rows,
+            ),
+            patch(
+                "models.platform_export.ModrinthProvider.list_versions"
+            ) as modrinth_versions,
+        ):
+            versions = PlatformPackExport._override_modrinth_versions(
+                build(),
+                [export_override()],
+                [],
+                allow_manual_curseforge=True,
+            )
+
+        modrinth_versions.assert_not_called()
+        self.assertEqual(versions[0].curseforge_file_id, 7000001)
+
+    def test_curseforge_export_uses_only_manual_ids_without_api_key(self):
+        def manual_versions(project_id, _provider, _provider_project_id):
+            file_ids = {
+                "5LpwENAj": ("0.1.0", "7000000"),
+                "zCFNaupz": ("1.1.1", "7100000"),
+            }
+            version, file_id = file_ids[project_id]
+            return [
+                {
+                    "version": version,
+                    "mcversion": "1.7.10",
+                    "minecraft_versions": None,
+                    "modloader": "FORGE",
+                    "provider_version_id": file_id,
+                }
+            ]
+
+        with (
+            patch(
+                "models.platform_export.ModversionProviderId."
+                "get_modrinth_project_versions",
+                side_effect=manual_versions,
+            ),
+            patch(
+                "models.platform_export.CurseForgeDownloaderAPI"
+            ) as curseforge_api,
+            patch(
+                "models.platform_export.ModrinthProvider.get_versions"
+            ) as modrinth_versions,
+        ):
+            archive = PlatformPackExport.render_curseforge(
+                build(),
+                [manually_synced_package()],
+                "solderpyloader:7000000",
+                REPOSITORY,
+                "./mods/",
+                APPLICATION,
+                source_mode="solder",
+                export_overrides=[export_override()],
+            )
+
+        with archive, zipfile.ZipFile(archive) as result:
+            manifest = json.loads(result.read("manifest.json"))
+
+        curseforge_api.assert_not_called()
+        modrinth_versions.assert_not_called()
+        self.assertEqual(
+            manifest["files"],
+            [
+                {"projectID": 1702825, "fileID": 7000000, "required": True},
+                {"projectID": 1491728, "fileID": 7100000, "required": True},
+                {"projectID": 706505, "fileID": 7000001, "required": True},
+            ],
+        )
 
     def test_curseforge_hybrid_bundle_uses_modrinth_and_solder_urls(self):
         with patch(

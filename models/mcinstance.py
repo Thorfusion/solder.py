@@ -117,6 +117,8 @@ class MCInstancePackage:
     download_source_sha1: str | None = None
     download_source_sha512: str | None = None
     download_source_filesize: int | None = None
+    curseforge_project_id: str | None = None
+    curseforge_file_id: str | None = None
 
     @property
     def mod_slug(self):
@@ -595,6 +597,10 @@ class MCInstanceExport:
                               AS download_source_sha512,
                           modversion_download_sources.filesize
                               AS download_source_filesize,
+                          modversion_provider_ids.version_id
+                              AS curseforge_file_id,
+                          modversion_provider_ids.project_id
+                              AS curseforge_project_id,
                           build_modversion.optional
                    FROM builds
                    INNER JOIN modpacks ON builds.modpack_id = modpacks.id
@@ -607,6 +613,10 @@ class MCInstanceExport:
                        ON modversion_download_sources.modversion_id =
                           modversions.id
                       AND modversion_download_sources.provider = 'MODRINTH'
+                   LEFT JOIN modversion_provider_ids
+                       ON modversion_provider_ids.modversion_id =
+                          modversions.id
+                      AND modversion_provider_ids.provider = 'CURSEFORGE'
                    WHERE builds.id = %s
                    ORDER BY mods.name ASC, modversions.id ASC""",
                 (build_id,),
@@ -665,6 +675,8 @@ class MCInstanceExport:
                 download_source_sha1=row.get("download_source_sha1"),
                 download_source_sha512=row.get("download_source_sha512"),
                 download_source_filesize=row.get("download_source_filesize"),
+                curseforge_project_id=row.get("curseforge_project_id"),
+                curseforge_file_id=row.get("curseforge_file_id"),
             )
             for row in rows
             if row["mod_id"] is not None
