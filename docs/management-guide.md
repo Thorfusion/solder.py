@@ -279,8 +279,11 @@ A practical release flow is:
 For alternative launchers, select **Export** from the build list or the build
 editor. Choose Solder API only or hybrid downloads and then
 choose whether supported metadata is included in the archive or served from
-solder.py. See the [distribution guide](distribution-formats.md) for exact
-format behavior.
+solder.py. Hybrid lets the platform install supported files natively while
+the selected downloader handles the remainder. Solder API only leaves ordinary
+build packages to the downloader. When that is SolderPy Loader, its API can
+still supply override, Modrinth/Maven, and Solder download URLs. See the
+[distribution guide](distribution-formats.md) for exact format behavior.
 
 ## Delete with care
 

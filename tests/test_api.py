@@ -1076,6 +1076,42 @@ class ApiTests(unittest.TestCase):
             include_download_sources=True,
         )
 
+        solder_response = self.client.get(
+            "/api/modpack/stable/42/bootstrap?cid=client-123&source=solder"
+        )
+        self.assertEqual(solder_response.status_code, 200)
+        solder_payload = solder_response.get_json()
+        self.assertEqual(solder_payload["source"], "solder")
+        solder_packages = {
+            package["name"]: package for package in solder_payload["packages"]
+        }
+        for name in ("core", "pretty-world"):
+            self.assertEqual(
+                solder_packages[name]["download"]["sources"],
+                by_name[name]["download"]["sources"],
+            )
+
+        for source_mode, expected_owner in (
+            ("hybrid", "launcher"),
+            ("solder", "loader"),
+        ):
+            with self.subTest(source_mode=source_mode):
+                platform_response = self.client.get(
+                    "/api/modpack/stable/42/bootstrap?cid=client-123"
+                    f"&platform=modrinth&source={source_mode}"
+                )
+                self.assertEqual(platform_response.status_code, 200)
+                core = next(
+                    package
+                    for package in platform_response.get_json()["packages"]
+                    if package["name"] == "core"
+                )
+                self.assertEqual(core["install_owner"], expected_owner)
+                self.assertEqual(
+                    core["download"]["sources"][0],
+                    {"provider": "modrinth", "url": modrinth_url},
+                )
+
         conditional = self.client.get(
             "/api/modpack/stable/42/bootstrap?cid=client-123",
             headers={"If-None-Match": response.headers["ETag"]},

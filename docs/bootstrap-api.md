@@ -40,7 +40,7 @@ The route accepts these query arguments:
 | Argument | Values | Default | Meaning |
 | --- | --- | --- | --- |
 | `target` | `client`, `server` | `client` | Filter packages by their configured side. |
-| `source` | `hybrid`, `solder` | `hybrid` | Include verified provider/override fallbacks, or restrict raw JARs to Solder. |
+| `source` | `hybrid`, `solder` | `hybrid` | Choose native-platform ownership (`hybrid`) or Loader-owned build packages (`solder`). Both retain the same verified JAR URL fallbacks. |
 | `platform` | `modrinth`, `curseforge`, `prism`, `technic` | none | Identify the native platform that installed SolderPy Loader and may own package files. |
 | `ownership` | `server`, `explicit` | `server` | Generated exports use `explicit`; it keeps the complete graph Loader-owned until the exported Loader config applies its exact native membership list. |
 | `from` | Build version, `recommended`, or `latest` | none | Add changes from an installed build. |
@@ -274,16 +274,20 @@ reasonable client download limit while streaming and still verify the MD5. A
 instruction, preserving legacy build compatibility while making the extra
 extraction cost explicit.
 
-A raw JAR in `source=hybrid` may include an ordered `download.sources` list. A per-version HTTPS
-override is first, a native Modrinth or enabled Maven source is second, and the
-Solder-hosted JAR is last. SolderPy Loader retries the next source after a
+A Loader-owned raw JAR may include an ordered `download.sources` list in
+**either** source mode. A per-version HTTPS override is first, a saved
+Modrinth or enabled direct Maven URL is second, and the Solder-hosted JAR is
+last. SolderPy Loader retries the next source after a
 transport, size, or MD5 failure. Every source represents the same bytes and
 therefore uses the one parent `download.md5` and `download.filesize`; renaming
 a file does not change either value. `download.url` remains the Solder-hosted
 URL, so clients that do not understand `sources` retain the existing behavior.
 If solder.py cannot use saved native-provider metadata, it still returns the
-override, when configured, and the Solder URL. `source=solder` returns only the
-Solder URL. The response always retains the complete dependency graph. Each
+override, when configured, and the Solder URL. `source=solder` means the
+platform is not asked to install ordinary build packages natively; it does
+**not** mean their bytes must come from Solder hosting. `source=hybrid` lets
+the platform install exact native matches and leaves the rest to the Loader.
+The response always retains the complete dependency graph. Each
 package has an `install_owner` of `loader`, `launcher`, or `ignored`, with the
 legacy `bootstrap_managed` boolean mirroring whether that value is `loader`.
 Launcher-owned dependencies therefore remain visible and can satisfy closure

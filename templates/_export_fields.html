@@ -2,9 +2,15 @@
 <h6>Export settings</h6>
 <label for="export_source" class="form-label">Download source</label>
 <select class="form-select mb-2" name="source" id="export_source">
-    <option value="hybrid">Hybrid (Modrinth/Curse where mapped)</option>
+    <option value="hybrid">Hybrid (native platform + downloader)</option>
     <option value="solder">Solder API only</option>
 </select>
+<div class="form-text mb-2">
+    Hybrid installs exact supported mappings through the native platform and
+    leaves the rest to the selected downloader. Solder API only leaves ordinary
+    build packages to the downloader. With SolderPy Loader, both modes can try
+    a verified override, saved Modrinth/Maven URL, then Solder as fallback.
+</div>
 <label for="export_forge_version" class="form-label">Modloader version</label>
 <input class="form-control mb-2" type="text" name="forge_version" id="export_forge_version" value="{{packbuild.forge or ''}}" maxlength="255">
 <div class="form-text mb-2">The version of the build's selected modloader, such as Forge or NeoForge.</div>

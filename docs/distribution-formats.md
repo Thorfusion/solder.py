@@ -224,11 +224,16 @@ CurseForge.
 
 The window contains a shared group of settings:
 
-- **Download source — Solder API only** uses `PUBLIC_REPO_LOCATION` for all build
-  packages.
-- **Download source — Hybrid** uses an exact native Modrinth or CurseForge file
-  when the version has a verified platform mapping, and Solder for manual,
-  Maven, legacy, configuration, and resource packages.
+- **Download source — Solder API only** keeps ordinary build packages out of
+  the platform's native file list. With SolderPy Loader, its bootstrap API owns
+  those packages and can offer a verified HTTPS override, saved Modrinth or
+  direct Maven URL, then the Solder-hosted JAR as fallback. "API only" describes
+  who manages the download, not a requirement to download every byte from
+  `PUBLIC_REPO_LOCATION`.
+- **Download source — Hybrid** combines native platform downloads for exact
+  compatible mappings with downloader-managed delivery for the remaining
+  packages. SolderPy Loader uses the same ordered URL choices for packages it
+  owns in either mode.
 - **Modloader version** temporarily overrides the exported Forge, NeoForge, or
   other loader version. It
   does not change the saved build.
@@ -241,11 +246,17 @@ The window contains a shared group of settings:
 
 Formats use only the controls they support. CSV ignores the shared controls,
 and MCInstance Loader always includes its configuration in the archive.
-SolderPy Loader always uses Solder, includes its API configuration, and honors
+SolderPy Loader always uses its bootstrap API, includes its API configuration, and honors
 the selected build channel. Prism uses source and delivery when MCIL or
 FileDirector is selected, and still uses a temporary modloader-version
 override when one is entered. Modrinth and CurseForge also show a compatible
 fallback downloader selector.
+
+MCIL, FileDirector, Modpack Director, and Packwiz write direct download URLs
+into their generated files; they do not consult the SolderPy bootstrap API.
+For those formats, Solder API only uses the Solder repository URLs and Hybrid
+may use exact supported provider URLs. The broader API URL fallbacks above
+apply specifically when SolderPy Loader handles a package.
 
 Hybrid generation resolves exact platform mappings when the export is made.
 The upstream filename, URL, hashes, and file size are validated at that time
@@ -288,8 +299,10 @@ exact build, `latest`, or `recommended` channel. Its target is `auto`, so
 Relauncher selects the client or dedicated-server manifest at launch. Extract
 the ZIP into an instance where SolderPy Loader and Relauncher are already
 installed. The build must be published and non-private. The bootstrap API owns
-the complete Solder API only package plan, so hybrid downloads are not used by
-this format.
+the complete package plan for this dedicated export: there is no outer native
+platform file list. It requests `source=solder`, but each raw JAR can still
+try its verified override or saved Modrinth/Maven URL before the Solder-hosted
+fallback.
 
 When the build has a **Minimum Java Version**, solder.py also writes a
 Relauncher Java-major rule. For example, `1.8.0_422` produces
@@ -537,8 +550,11 @@ or FileDirector fallback. Maven repository URLs are never placed directly in
 the pack. A no-downloader export is allowed only when every actual package is
 an exact compatible Modrinth version.
 
-In Solder API only mode, the MRPack bootstraps the selected downloader and all
-actual packages use the Solder repository.
+In Solder API only mode, the MRPack bootstraps the selected downloader without
+putting ordinary build packages in its native Modrinth file list. With
+SolderPy Loader, the bootstrap API owns all those packages and can provide
+override, saved Modrinth/Maven, and Solder fallback URLs. MCIL and
+FileDirector instead use Solder repository URLs in their generated configs.
 
 The downloader selector queries Modrinth for SolderPy Loader, MCInstance
 Loader, and FileDirector releases compatible with the build's Minecraft
@@ -568,10 +584,15 @@ export, solder.py verifies that the selected file still belongs to the expected
 project and supports the build's Minecraft version. The API key is sent only
 to `https://api.curseforge.com/v1` and is never written into the archive.
 
-In Solder API only mode, the downloader installs every actual build package from
-Solder. In hybrid mode, exact Modrinth-mapped versions use their validated
-Modrinth CDN URLs inside the selected downloader configuration, while manual,
-Maven, legacy, configuration, and resource packages continue to use Solder.
+In Solder API only mode, no ordinary build package is native to the CurseForge
+manifest; the selected downloader handles them. SolderPy Loader obtains their
+download choices from the bootstrap API, including verified overrides, saved
+Modrinth/Maven URLs, and Solder fallbacks. MCIL and FileDirector direct configs
+use Solder repository URLs in this mode. In hybrid mode, exact
+Modrinth-mapped versions use their validated Modrinth CDN URLs inside the
+selected downloader configuration, while manual, Maven, legacy,
+configuration, and resource packages continue to use Solder in those direct
+configs.
 Ordinary Modrinth project mappings are not guessed or translated into
 CurseForge IDs. Only explicit mappings under **Settings > Modrinth-CurseForge sync**
 are installed natively on both platforms.
@@ -630,7 +651,9 @@ because package ZIPs and JARs are downloaded after the instance starts.
 
 MCIL and FileDirector support **Solder API only** and **Hybrid**. Hybrid uses validated
 Modrinth CDN URLs for exact mapped versions and Solder URLs for everything
-else. The selectors only offer downloader families enabled in Settings and
+else; Solder API only uses Solder URLs in their direct configs. SolderPy Loader
+instead uses its bootstrap API's ordered URL choices in both modes. The
+selectors only offer downloader families enabled in Settings and
 versions compatible with the build. The built-in MCIL and FileDirector
 projects currently provide Forge releases; use Self-contained for other
 loaders or unsupported Minecraft versions.

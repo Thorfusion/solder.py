@@ -36,7 +36,6 @@ class BootstrapManifest:
         repository_url,
         modtype,
         native_downloads,
-        source_mode,
     ):
         slug = package.modname
         version = package.version
@@ -82,12 +81,11 @@ class BootstrapManifest:
                             {"provider": source_provider, "url": url}
                         )
 
-                if source_mode == "hybrid":
-                    add_source(
-                        "override",
-                        getattr(package, "jar_url_override", None),
-                    )
-                    add_source(source_provider.casefold(), native_url)
+                add_source(
+                    "override",
+                    getattr(package, "jar_url_override", None),
+                )
+                add_source(source_provider.casefold(), native_url)
                 add_source("solder", solder_url)
                 if len(sources) > 1:
                     download["sources"] = sources
@@ -249,7 +247,6 @@ class BootstrapManifest:
                 repository_url,
                 modtype,
                 native_downloads,
-                source_mode,
             )
             package_dependencies = []
             for dependency in dependencies.get(

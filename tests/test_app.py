@@ -936,7 +936,8 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("Web hosted", export_fields_source)
         self.assertEqual(export_fields_source.count('name="selector"'), 1)
         self.assertIn("MCInstance Loader stores its configuration", export_fields_source)
-        self.assertIn("Hybrid (Modrinth/Curse where mapped)", export_fields_source)
+        self.assertIn("Hybrid (native platform + downloader)", export_fields_source)
+        self.assertIn("saved Modrinth/Maven URL", export_fields_source)
         self.assertIn("Solder API only", export_fields_source)
         self.assertIn("numbered patch", export_fields_source)
 

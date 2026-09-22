@@ -147,9 +147,10 @@ export usage, and file layouts are documented in the
   available.
   CurseForge packs contain only the selected
   downloader and any enabled Modrinth-CurseForge sync mappings as native projects.
-  Solder API only and hybrid modes either use the Solder repository for build
-  packages or use exact Modrinth CDN files where a mapping exists and Solder
-  for everything else. The export window lets you
+  Hybrid combines native platform downloads with a downloader for the
+  remaining packages. Solder API only leaves ordinary build packages to the
+  downloader; with SolderPy Loader, its API can offer verified override,
+  Modrinth/Maven, and Solder fallback URLs. The export window lets you
   choose a compatible downloader release loaded from the
   target platform API and temporarily override the exported Forge/modloader
   version without changing the saved build.
