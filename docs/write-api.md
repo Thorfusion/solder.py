@@ -69,6 +69,13 @@ optional Mojang component override: `jre-legacy`, `java-runtime-alpha`,
 selection. Unsupported component names return `422`. On partial build updates,
 omitting the field preserves its current value.
 
+Create-modpack requests may include the modpack-wide boolean
+`remove_unlisted_mod_files`. It defaults to `false`. When enabled, compatible
+SolderPy Modpack Loader versions remove files from `mods/` that are not part of
+the resolved new build during a pack update. Other downloaders ignore it.
+Modpack updates preserve the current policy when the field is omitted, and
+clones inherit it unless the clone request supplies a different value.
+
 Create-mod requests require `name` and `pretty_name`. They may include
 `author`, `description`, `link`, private management `notes`, `side`, `modtype`,
 `enforce`, and `dependencies`.

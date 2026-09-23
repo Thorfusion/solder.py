@@ -35,6 +35,7 @@ def modpack_row(**changes):
         "pinned": 0,
         "enable_optionals": 0,
         "enable_server": 0,
+        "remove_unlisted_mod_files": False,
         "created_at": None,
         "updated_at": None,
     }
@@ -128,7 +129,11 @@ class WriteApiRouteTests(unittest.TestCase):
 
     def test_create_modpack_includes_solderpy_capabilities(self):
         created = modpack_row(
-            hidden=0, pinned=1, enable_optionals=1, enable_server=1
+            hidden=0,
+            pinned=1,
+            enable_optionals=1,
+            enable_server=1,
+            remove_unlisted_mod_files=True,
         )
         with patch(
             "api_write.WriteApiStore.create_modpack", return_value=created
@@ -143,6 +148,7 @@ class WriteApiRouteTests(unittest.TestCase):
                     "pinned": True,
                     "enable_optionals": True,
                     "enable_server": True,
+                    "remove_unlisted_mod_files": True,
                 },
             )
 
@@ -152,7 +158,11 @@ class WriteApiRouteTests(unittest.TestCase):
         self.assertTrue(values["pinned"])
         self.assertTrue(values["enable_optionals"])
         self.assertTrue(values["enable_server"])
+        self.assertTrue(values["remove_unlisted_mod_files"])
         self.assertTrue(response.get_json()["enable_server"])
+        self.assertTrue(
+            response.get_json()["remove_unlisted_mod_files"]
+        )
 
     def test_create_build_preserves_java_version_and_runtime_override(self):
         created = build_row(
@@ -808,6 +818,43 @@ class WriteApiStoreTests(unittest.TestCase):
 
         build_cleanup.assert_called_once_with(cursor, 12)
         pack_cleanup.assert_called_once_with(cursor, 3)
+        connection.commit.assert_called_once_with()
+
+    def test_create_modpack_stores_strict_cleanup_outside_core_table(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.lastrowid = 2
+        cursor.fetchone.return_value = modpack_row(
+            remove_unlisted_mod_files=True
+        )
+
+        with patch(
+            "models.write_api.Database.get_connection",
+            return_value=connection,
+        ):
+            row = WriteApiStore.create_modpack(
+                {
+                    "name": "Example Pack",
+                    "slug": "example-pack",
+                    "remove_unlisted_mod_files": True,
+                },
+                7,
+            )
+
+        statements = [call.args[0] for call in cursor.execute.call_args_list]
+        core_insert = next(
+            statement
+            for statement in statements
+            if statement.startswith("INSERT INTO modpacks")
+        )
+        self.assertNotIn("remove_unlisted_mod_files", core_insert)
+        self.assertTrue(
+            any(
+                "INSERT INTO modpack_bootstrap_settings" in statement
+                for statement in statements
+            )
+        )
+        self.assertTrue(row["remove_unlisted_mod_files"])
         connection.commit.assert_called_once_with()
 
     def test_create_mod_stores_disabled_enforcement_policy_separately(self):

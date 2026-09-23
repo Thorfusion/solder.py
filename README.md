@@ -391,7 +391,7 @@ Create a Compose `.env` file beside `compose.yml`. Use different, randomly
 generated values in production and do not commit this file:
 
 ```dotenv
-SOLDER_IMAGE=thorfusion/solderpy:1.10.1
+SOLDER_IMAGE=thorfusion/solderpy:1.10.2
 SOLDER_DB_PASSWORD=replace-with-a-long-random-password
 MYSQL_ROOT_PASSWORD=replace-with-another-long-random-password
 SOLDER_SECRET_KEY=replace-with-a-long-random-application-secret
@@ -529,6 +529,13 @@ across restarts and replicas.
 verify files while generating CurseForge archives. A manually entered
 CurseForge file ID on a synced Modrinth version bypasses that version's lookup;
 automatic matching and downloader-version lookup still require the key.
+
+Writable schema repair also generates one ECDSA bootstrap-manifest signing key
+for the entire solder.py installation and stores it in `solder_settings`. The
+private key is never returned by the API or included in an export. SolderPy
+Modpack Loader exports contain only its public key. Preserve the database in
+backups: losing or replacing this key requires recreating existing exports so
+clients can pin the replacement public key.
 
 All distribution formats are disabled by default. After setup, open **Settings
 > Env Settings**, enable the formats that this installation should publish or

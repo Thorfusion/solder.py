@@ -14,6 +14,7 @@ gunicorn = "*"
 defusedxml = "*"
 markdown = "*"
 argon2-cffi = "*"
+cryptography = "*"
 
 [dev-packages]
 bandit = "*"

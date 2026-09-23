@@ -76,11 +76,12 @@ Example response:
 ```json
 {
   "api": "solder.py",
-  "version": "v1.10.1",
+  "version": "v1.10.2",
   "stream": "DEV",
   "capabilities": {
     "advanced_optionals": true,
     "bootstrap_manifest": true,
+    "bootstrap_signatures": true,
     "bootstrap_schema": 1,
     "build_channels": true,
     "build_comparison": true,
@@ -417,12 +418,21 @@ files alone while its version, artifact, and install target are unchanged. A
 new or updated package is still installed normally. Other downloaders and
 export formats ignore this setting. It applies to both JAR and ZIP packages and
 is primarily intended for user-editable config packs.
+The manifest's modpack-wide `update_policy.remove_unlisted_mod_files` value
+defaults to `false`. When enabled, a compatible SolderPy Modpack Loader removes
+files from the instance's `mods/` directory that are not part of the resolved
+new build during a build update. Other instance directories and other
+downloaders are unaffected.
 
 The route supports `cid`, `k`, `target`, and `from`, as documented in the
 [dedicated bootstrap API guide](bootstrap-api.md). It returns an `ETag` and
 honors `If-None-Match`. Clients must discover `bootstrap_manifest` and support
 the reported `bootstrap_schema` before using it. The ordinary
 `/api/modpack/{slug}/{build}` response remains unchanged for Technic clients.
+Every successful dedicated bootstrap response is signed with the
+installation-wide ECDSA key. The private key remains in the server database;
+the corresponding public key is pinned only in SolderPy Modpack Loader export
+configuration. See the bootstrap guide for canonicalization and verification.
 
 ## List mods
 
@@ -579,6 +589,7 @@ Common status codes:
 | `404` | Resource absent or inaccessible, comparison build absent, or requested pack capability disabled. |
 | `405` | HTTP method is not supported by the route. |
 | `422` | Stored data cannot be represented by the bootstrap manifest contract. |
+| `503` | The installation signing key is missing or invalid; run schema repair on the writable management instance. |
 
 ## Caching
 
@@ -606,5 +617,6 @@ receive their JSON body each time.
    required Technic MD5, and apply the reported package changes.
 
 MD5 is part of the Technic Solder compatibility contract and detects accidental
-file changes. It is not a signature or proof that a download is trustworthy;
-server software should still use HTTPS and a trusted repository origin.
+file changes. It is not itself proof that a download is trustworthy. SolderPy
+Modpack Loader clients must first verify the dedicated manifest's ECDSA
+signature and must still use HTTPS for downloads.

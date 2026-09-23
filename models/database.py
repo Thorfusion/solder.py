@@ -54,6 +54,7 @@ class Database:
         "modversion_provider_ids",
         "modversion_minecraft_versions",
         "mod_bootstrap_settings",
+        "modpack_bootstrap_settings",
         "publishing_provider_accounts",
         "modpack_publication_targets",
         "modpack_publication_runs",
@@ -224,6 +225,13 @@ class Database:
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )""" + TABLE_OPTIONS
 
+    MODPACK_BOOTSTRAP_SETTINGS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS modpack_bootstrap_settings (
+        modpack_id INT NOT NULL PRIMARY KEY,
+        remove_unlisted_mod_files TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )""" + TABLE_OPTIONS
+
     PUBLISHING_TABLES_SQL = (
         """CREATE TABLE IF NOT EXISTS publishing_provider_accounts (
             id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -361,6 +369,7 @@ class Database:
         MODVERSION_PROVIDER_IDS_TABLE_SQL,
         MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL,
         MOD_BOOTSTRAP_SETTINGS_TABLE_SQL,
+        MODPACK_BOOTSTRAP_SETTINGS_TABLE_SQL,
         *PUBLISHING_TABLES_SQL,
         PERSONAL_ACCESS_TOKENS_TABLE_SQL,
         USER_MODPACK_TABLE_SQL,
@@ -377,6 +386,15 @@ class Database:
     def create_additive_tables(cur) -> None:
         for query in Database.ADDITIVE_TABLES_SQL:
             cur.execute(query)
+
+    @staticmethod
+    def ensure_bootstrap_signing_key(cur) -> None:
+        # Import lazily because bootstrap_signing uses Database to read the
+        # key while serving manifests. The private key is created only by a
+        # writable management/schema-repair process.
+        from .bootstrap_signing import BootstrapSigning
+
+        BootstrapSigning.ensure_key(cur)
 
     @staticmethod
     def verify_application_tables(cur) -> None:
@@ -1069,6 +1087,7 @@ class Database:
                           COLLATE=utf8mb4_unicode_ci"""
             )
             Database.create_additive_tables(cur)
+            Database.ensure_bootstrap_signing_key(cur)
             cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL)
             Database.allow_ungrouped_advanced_optionals(cur)
             Database.normalize_table_collations(cur)
@@ -1160,6 +1179,7 @@ class Database:
             # Repair all additive tables before checking columns that may
             # belong to those tables.
             Database.create_additive_tables(cur)
+            Database.ensure_bootstrap_signing_key(cur)
             Database.normalize_legacy_timestamps(cur)
             Database.repair_columns(cur, column_migrations)
 
@@ -1214,6 +1234,7 @@ class Database:
             cur = con.cursor()
             Database.normalize_legacy_timestamps(cur)
             Database.create_additive_tables(cur)
+            Database.ensure_bootstrap_signing_key(cur)
             Database.allow_ungrouped_advanced_optionals(cur)
 
             Database.repair_columns(cur, Database.CURRENT_COLUMN_REPAIRS)

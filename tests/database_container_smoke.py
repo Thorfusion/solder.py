@@ -136,6 +136,19 @@ def mysql(container: str, sql: str) -> str:
     return result.stdout.strip()
 
 
+def verify_bootstrap_signing_key(database_container: str) -> None:
+    key_length = mysql(
+        database_container,
+        "SELECT CHAR_LENGTH(value) FROM solder_settings "
+        "WHERE name = 'bootstrap_signing_private_key';",
+    )
+    if not key_length.isdigit() or not 100 <= int(key_length) <= 255:
+        raise AssertionError(
+            "Application startup did not create a valid installation "
+            "bootstrap signing key"
+        )
+
+
 def migrate_technic_schema(image: str, network: str) -> None:
     migration_command = (
         "from models.database import Database; "
@@ -576,6 +589,7 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if settings_table_count != "1":
         raise AssertionError("Fresh schema did not create distribution settings")
+    verify_bootstrap_signing_key(database_container)
 
     advanced_optional_table_count = mysql(
         database_container,
@@ -2169,6 +2183,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
             raise AssertionError(
                 "Application startup did not create distribution settings"
             )
+        verify_bootstrap_signing_key(database_container)
         advanced_optional_table_count = mysql(
             database_container,
             "SELECT COUNT(*) FROM information_schema.TABLES "

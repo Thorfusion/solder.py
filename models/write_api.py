@@ -8,8 +8,9 @@ from .compatibility import minecraft_version_storage, version_is_compatible
 from .advanced_optional import AdvancedOptional
 from .build import Build
 from .database import Database
-from .modpack import Modpack
+from .modpack import MODPACK_WITH_BOOTSTRAP_SQL, Modpack
 from .mod_bootstrap_settings import ModBootstrapSettings
+from .modpack_bootstrap_settings import ModpackBootstrapSettings
 from .modversion import Modversion
 
 
@@ -81,7 +82,10 @@ class WriteApiStore:
 
     @classmethod
     def get_modpack(cls, slug):
-        return cls._one("SELECT * FROM modpacks WHERE slug = %s", (slug,))
+        return cls._one(
+            MODPACK_WITH_BOOTSTRAP_SQL + " WHERE modpacks.slug = %s",
+            (slug,),
+        )
 
     @classmethod
     def get_build(cls, modpack_id, version):
@@ -187,27 +191,54 @@ class WriteApiStore:
 
     @classmethod
     def create_modpack(cls, values, user_id):
+        values = dict(values)
+        remove_unlisted_mod_files = values.pop(
+            "remove_unlisted_mod_files", False
+        )
         try:
             with _transaction() as cur:
                 modpack_id = cls._insert(cur, "modpacks", {**values, "user_id": user_id})
+                if remove_unlisted_mod_files:
+                    ModpackBootstrapSettings.apply(cur, modpack_id, True)
                 cls._grant_modpack_access(cur, user_id, modpack_id)
-                cur.execute("SELECT * FROM modpacks WHERE id = %s", (modpack_id,))
+                cur.execute(
+                    MODPACK_WITH_BOOTSTRAP_SQL + " WHERE modpacks.id = %s",
+                    (modpack_id,),
+                )
                 return cur.fetchone()
         except IntegrityError as error:
             cls._duplicate(error, "A modpack with that name or slug already exists.")
 
     @classmethod
     def update_modpack(cls, modpack, values):
+        values = dict(values)
+        remove_unlisted_mod_files = values.pop(
+            "remove_unlisted_mod_files", None
+        )
         try:
             with _transaction() as cur:
                 cls._update(cur, "modpacks", modpack["id"], values)
-                cur.execute("SELECT * FROM modpacks WHERE id = %s", (modpack["id"],))
+                if remove_unlisted_mod_files is not None:
+                    ModpackBootstrapSettings.apply(
+                        cur,
+                        modpack["id"],
+                        remove_unlisted_mod_files,
+                    )
+                cur.execute(
+                    MODPACK_WITH_BOOTSTRAP_SQL + " WHERE modpacks.id = %s",
+                    (modpack["id"],),
+                )
                 return cur.fetchone()
         except IntegrityError as error:
             cls._duplicate(error, "A modpack with that name or slug already exists.")
 
     @classmethod
     def clone_modpack(cls, source, values, user_id):
+        values = dict(values)
+        remove_unlisted_mod_files = values.pop(
+            "remove_unlisted_mod_files",
+            source.get("remove_unlisted_mod_files", False),
+        )
         try:
             with _transaction() as cur:
                 new_values = {
@@ -229,6 +260,8 @@ class WriteApiStore:
                     "optional_mode": source.get("optional_mode", 0),
                 }
                 modpack_id = cls._insert(cur, "modpacks", new_values)
+                if remove_unlisted_mod_files:
+                    ModpackBootstrapSettings.apply(cur, modpack_id, True)
                 cls._grant_modpack_access(cur, user_id, modpack_id)
                 cur.execute(
                     "SELECT * FROM builds WHERE modpack_id = %s ORDER BY id",
@@ -264,7 +297,10 @@ class WriteApiStore:
                     AdvancedOptional.clone_build(
                         cur, old_build_id, new_build_id, membership_ids
                     )
-                cur.execute("SELECT * FROM modpacks WHERE id = %s", (modpack_id,))
+                cur.execute(
+                    MODPACK_WITH_BOOTSTRAP_SQL + " WHERE modpacks.id = %s",
+                    (modpack_id,),
+                )
                 return cur.fetchone()
         except IntegrityError as error:
             cls._duplicate(error, "A modpack with that name or slug already exists.")

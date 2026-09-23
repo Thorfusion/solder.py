@@ -243,6 +243,9 @@ class ModelSerializationTests(unittest.TestCase):
         self.assertTrue(any("client_modpack" in sql for sql in statements))
         self.assertTrue(any("user_modpack" in sql for sql in statements))
         self.assertTrue(
+            any("modpack_bootstrap_settings" in sql for sql in statements)
+        )
+        self.assertTrue(
             any("UPDATE user_permissions" in sql for sql in statements)
         )
 
@@ -947,6 +950,50 @@ class ModelBehaviorTests(unittest.TestCase):
             ),
         )
 
+    def test_modpack_cleanup_policy_uses_a_sparse_extension_table(self):
+        schema = Database.MODPACK_BOOTSTRAP_SETTINGS_TABLE_SQL
+
+        self.assertIn("modpack_id INT NOT NULL PRIMARY KEY", schema)
+        self.assertIn(
+            "remove_unlisted_mod_files TINYINT(1) NOT NULL DEFAULT 0",
+            schema,
+        )
+
+        modpack = Modpack._from_row(
+            {
+                "id": 1,
+                "name": "Example",
+                "slug": "example",
+                "recommended": None,
+                "latest": None,
+                "created_at": None,
+                "updated_at": None,
+                "order": 0,
+                "hidden": 0,
+                "private": 0,
+                "remove_unlisted_mod_files": 1,
+            }
+        )
+        self.assertTrue(modpack.remove_unlisted_mod_files)
+
+    def test_user_modpack_list_includes_cleanup_policy(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchall.return_value = [{"id": 1, "remove_unlisted_mod_files": 1}]
+
+        with patch(
+            "models.modpack.Database.get_connection", return_value=connection
+        ):
+            rows = Modpack.get_all_for_user(7)
+
+        query, parameters = cursor.execute.call_args.args
+        self.assertIn("LEFT JOIN modpack_bootstrap_settings", query)
+        self.assertIn("AS remove_unlisted_mod_files", query)
+        self.assertEqual(parameters, (7, 7))
+        self.assertTrue(rows[0]["remove_unlisted_mod_files"])
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
     def test_integration_download_metadata_uses_a_sparse_table(self):
         schema = Database.MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL
 
@@ -1621,8 +1668,10 @@ class ModelBehaviorTests(unittest.TestCase):
 
         self.assertEqual(result, [])
         query, parameters = cursor.execute.call_args.args
-        self.assertIn("hidden = 0 AND private = 0", query)
-        self.assertIn("ORDER BY id ASC", query)
+        self.assertIn(
+            "modpacks.hidden = 0 AND modpacks.private = 0", query
+        )
+        self.assertIn("ORDER BY modpacks.id ASC", query)
         self.assertEqual(parameters, ("client-id",))
 
     def test_build_api_enforces_publish_and_private_access(self):
