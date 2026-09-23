@@ -4,6 +4,16 @@ from .build import Build
 from .database import Database
 
 
+MODPACK_WITH_BOOTSTRAP_SQL = """SELECT modpacks.*,
+          COALESCE(
+              modpack_bootstrap_settings.remove_unlisted_mod_files,
+              0
+          ) AS remove_unlisted_mod_files
+   FROM modpacks
+   LEFT JOIN modpack_bootstrap_settings
+       ON modpack_bootstrap_settings.modpack_id = modpacks.id"""
+
+
 class Modpack:
     def __init__(
         self,
@@ -21,6 +31,7 @@ class Modpack:
         enable_optionals=0,
         enable_server=0,
         optional_mode=0,
+        remove_unlisted_mod_files=False,
     ):
         self.id = id
         self.name = name
@@ -36,6 +47,7 @@ class Modpack:
         self.enable_optionals = enable_optionals
         self.enable_server = enable_server
         self.optional_mode = int(optional_mode or 0)
+        self.remove_unlisted_mod_files = bool(remove_unlisted_mod_files)
 
     @classmethod
     def _from_row(cls, row):
@@ -55,6 +67,7 @@ class Modpack:
             row.get("enable_optionals", 0),
             row.get("enable_server", 0),
             row.get("optional_mode", 0),
+            row.get("remove_unlisted_mod_files", 0),
         )
 
     @staticmethod
@@ -92,6 +105,10 @@ class Modpack:
     @staticmethod
     def delete_related_rows(cursor, modpack_id):
         """Delete pack-owned mappings using the caller's transaction."""
+        cursor.execute(
+            "DELETE FROM modpack_bootstrap_settings WHERE modpack_id = %s",
+            (modpack_id,),
+        )
         cursor.execute(
             """DELETE modpack_publication_runs
                FROM modpack_publication_runs
@@ -144,11 +161,16 @@ class Modpack:
     def get_by_id(cls, id):
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM modpacks WHERE id = %s", (id,))
-        row = cur.fetchone()
-        if row:
-            return cls._from_row(row)
-        return None
+        try:
+            cur.execute(
+                MODPACK_WITH_BOOTSTRAP_SQL + " WHERE modpacks.id = %s",
+                (id,),
+            )
+            row = cur.fetchone()
+            return cls._from_row(row) if row else None
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def get_by_pinned(user_id=None):
@@ -183,9 +205,8 @@ class Modpack:
         cur = conn.cursor(dictionary=True)
         try:
             cur.execute(
-                """SELECT *
-                   FROM modpacks
-                   WHERE (hidden = 0 AND private = 0)
+                MODPACK_WITH_BOOTSTRAP_SQL +
+                """ WHERE (modpacks.hidden = 0 AND modpacks.private = 0)
                       OR EXISTS (
                            SELECT 1
                            FROM client_modpack cm
@@ -193,7 +214,7 @@ class Modpack:
                            WHERE cm.modpack_id = modpacks.id
                              AND c.uuid = %s
                       )
-                   ORDER BY id ASC""",
+                   ORDER BY modpacks.id ASC""",
                 (cid,),
             )
             return [cls._from_row(row) for row in cur.fetchall()]
@@ -206,7 +227,9 @@ class Modpack:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
-            cur.execute("SELECT * FROM modpacks ORDER BY id ASC")
+            cur.execute(
+                MODPACK_WITH_BOOTSTRAP_SQL + " ORDER BY modpacks.id ASC"
+            )
             return [cls._from_row(row) for row in cur.fetchall()]
         finally:
             cur.close()
@@ -220,11 +243,10 @@ class Modpack:
             # Hidden packs are unlisted, not private. They remain directly
             # addressable by slug, matching the Technic Launcher contract.
             cur.execute(
-                """SELECT *
-                   FROM modpacks
-                   WHERE slug = %s
+                MODPACK_WITH_BOOTSTRAP_SQL +
+                """ WHERE modpacks.slug = %s
                      AND (
-                          private = 0
+                          modpacks.private = 0
                           OR EXISTS (
                               SELECT 1
                               FROM client_modpack cm
@@ -246,7 +268,10 @@ class Modpack:
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         try:
-            cur.execute("SELECT * FROM modpacks WHERE slug = %s", (slug,))
+            cur.execute(
+                MODPACK_WITH_BOOTSTRAP_SQL + " WHERE modpacks.slug = %s",
+                (slug,),
+            )
             row = cur.fetchone()
             return cls._from_row(row) if row else None
         finally:
@@ -270,8 +295,14 @@ class Modpack:
         cur = conn.cursor(dictionary=True)
         try:
             cur.execute(
-                """SELECT DISTINCT modpacks.*
+                """SELECT DISTINCT modpacks.*,
+                          COALESCE(
+                              modpack_bootstrap_settings.remove_unlisted_mod_files,
+                              0
+                          ) AS remove_unlisted_mod_files
                    FROM modpacks
+                   LEFT JOIN modpack_bootstrap_settings
+                       ON modpack_bootstrap_settings.modpack_id = modpacks.id
                    INNER JOIN user_permissions
                        ON user_permissions.user_id = %s
                    LEFT JOIN user_modpack

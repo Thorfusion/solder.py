@@ -76,6 +76,9 @@ This abbreviated example is a complete, valid schema-version 1 response:
   },
   "target": "client",
   "source": "hybrid",
+  "update_policy": {
+    "remove_unlisted_mod_files": false
+  },
   "optional_mode": {
     "id": 1,
     "name": "advanced"
@@ -326,6 +329,21 @@ behavior.
 The installed loader must support the field before administrators can rely on
 the unchanged-launch exception.
 
+`update_policy.remove_unlisted_mod_files` is a modpack-wide SolderPy Modpack
+Loader setting and defaults to `false`, which preserves the current behavior.
+When it is true and the installed build changes, reconcile the instance's
+`mods/` directory against the resolved packages and the user's optional
+selections. Files that do not belong to the new resolved mod list are removed.
+The cleanup must remain inside `mods/`, must not follow links outside the
+instance, and must preserve the Loader itself, its runtime dependencies, and
+launcher-provided modloader files. It does not clean configs, resource packs,
+or any other instance directory. Stage or quarantine removals until all new
+downloads have passed their size and MD5 checks so a failed update can roll
+back safely. Other downloaders and export formats ignore this policy.
+
+This field is also additive to schema version 1. Older SolderPy Modpack Loader
+versions ignore it and keep unlisted mod files.
+
 `download.format: solder_zip` is used by `CONFIG`, `RES`, `NONE`, and other
 non-mod content. Download the archive, verify its byte size when supplied,
 verify its MD5, and extract its contents relative to `download.extract_to`.
@@ -369,9 +387,10 @@ GET /api/modpack/example-pack/recommended/bootstrap?from=2.0
 
 The response adds `changes.added`, `changes.updated`, `changes.removed`,
 `changes.from`, `changes.to`, `changes.from_manifest_hash`, and
-`changes.selection_changed`. The full `packages` and `groups` arrays remain
-authoritative; `changes` is an optimization and UI summary, not a replacement
-for reconciliation.
+`changes.selection_changed`, and `changes.update_policy_changed`. The full
+`packages`, `groups`, and `update_policy` values remain authoritative;
+`changes` is an optimization and UI summary, not a replacement for
+reconciliation.
 
 Send the returned `ETag` in `If-None-Match` on later identical requests. A
 `304 Not Modified` means the locally stored manifest may be reused. Responses
@@ -414,6 +433,7 @@ A bootstrap mod is compatible with schema version 1 when it:
 - closes required dependencies before downloading;
 - honors `target`, `source`, `platform`, side filtering, `install_owner`, and the export's exact native membership list;
 - honors the mod-wide `enforce` package policy;
+- honors `update_policy.remove_unlisted_mod_files` without deleting outside the instance's `mods/` directory or removing launcher-owned files;
 - verifies each ZIP's size and MD5 and extracts it safely;
 - tracks extracted-file ownership for reliable removal and rollback;
 - handles ETags, resolved channels, and the optional `changes` summary;

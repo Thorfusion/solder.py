@@ -417,6 +417,11 @@ files alone while its version, artifact, and install target are unchanged. A
 new or updated package is still installed normally. Other downloaders and
 export formats ignore this setting. It applies to both JAR and ZIP packages and
 is primarily intended for user-editable config packs.
+The manifest's modpack-wide `update_policy.remove_unlisted_mod_files` value
+defaults to `false`. When enabled, a compatible SolderPy Modpack Loader removes
+files from the instance's `mods/` directory that are not part of the resolved
+new build during a build update. Other instance directories and other
+downloaders are unaffected.
 
 The route supports `cid`, `k`, `target`, and `from`, as documented in the
 [dedicated bootstrap API guide](bootstrap-api.md). It returns an `ETag` and

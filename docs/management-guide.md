@@ -296,6 +296,21 @@ build packages to the downloader. When that is SolderPy Modpack Loader, its API 
 still supply override, Modrinth/Maven, and Solder download URLs. See the
 [distribution guide](distribution-formats.md) for exact format behavior.
 
+### Mod folder cleanup during updates
+
+The **Clean mods** checkbox on the modpack library controls what SolderPy
+Modpack Loader does with extra files in the instance's `mods/` directory when
+the installed build changes:
+
+- Unchecked is the default and keeps unlisted mod files.
+- Checked removes files that are not part of the new resolved build and
+  optional selections.
+
+Strict cleanup applies only to SolderPy Modpack Loader. It does not clean
+configs or resource packs, and the Loader, runtime, and launcher-provided
+modloader files are preserved. Enable it only for controlled instances where
+user-added files in `mods/` should be removed during pack updates.
+
 ## Delete with care
 
 Removing a mod from one build only removes that build membership. Deleting a

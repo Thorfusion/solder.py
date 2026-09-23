@@ -114,6 +114,33 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         update_checkbox.assert_not_called()
 
+    def test_modpack_library_can_enable_strict_loader_mod_cleanup(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch("asite.ModpackBootstrapSettings.save") as save,
+            patch("api.clear_api_caches") as clear_caches,
+        ):
+            response = self.client.post(
+                "/modpacklibrary",
+                data={
+                    "cleanup_submit": "1",
+                    "modid": "3",
+                    "check": "1",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        save.assert_called_once_with("3", True)
+        clear_caches.assert_called_once_with()
+
     def test_user_id_prefix_does_not_authorize_another_users_password_change(self):
         with self.client.session_transaction() as flask_session:
             flask_session["token"] = "valid-test-token"
@@ -780,10 +807,6 @@ class ApplicationSmokeTests(unittest.TestCase):
             version_source,
         )
         self.assertIn(
-            "This setting applies to every version of",
-            version_source,
-        )
-        self.assertIn(
             'name="enforce"', new_mod_source
         )
         self.assertIn(
@@ -928,6 +951,18 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(">Export</button>", modpack_source)
         self.assertIn("export=1", modpack_source)
         self.assertNotIn("export_mcinstance", modpack_source)
+        self.assertNotIn('name="mod_cleanup_policy"', modpack_source)
+
+        modpack_library_source = (
+            template_root / "modpacklibrary.html"
+        ).read_text(encoding="utf-8")
+        self.assertIn(">Clean mods</th>", modpack_library_source)
+        self.assertIn('name="cleanup_submit"', modpack_library_source)
+        self.assertIn("mod.remove_unlisted_mod_files", modpack_library_source)
+        self.assertIn(
+            "Only SolderPy Modpack Loader uses this setting",
+            modpack_library_source,
+        )
 
         script_source = (
             Path(__file__).resolve().parents[1] / "static" / "js" / "solderpy.js"

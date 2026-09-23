@@ -89,6 +89,7 @@ from models.mod import DuplicateModError, Mod, UploadVerificationError
 from models.mod_bootstrap_settings import ModBootstrapSettings
 from models.mod_dependency import DependencyError, ModDependency
 from models.modpack import Modpack
+from models.modpack_bootstrap_settings import ModpackBootstrapSettings
 from models.modversion import IncompatibleModVersionError, MissingDependencyVersionError, Modversion
 from models.modversion_provider_id import (
     ModversionProviderId,
@@ -3138,6 +3139,14 @@ def modpacklibrary_post():
         if "server_submit" in request.form:
             common.update_checkbox(request.form["modid"], request.form["check"], "enable_server", "modpacks")
             flash("updated modpack", "success")
+        if "cleanup_submit" in request.form:
+            ModpackBootstrapSettings.save(
+                request.form["modid"], request.form["check"] == "1"
+            )
+            from api import clear_api_caches
+
+            clear_api_caches()
+            flash("updated SolderPy Modpack Loader cleanup policy", "success")
 
     return redirect(url_for('asite.modpacklibrary'))
 

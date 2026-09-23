@@ -972,6 +972,7 @@ class ApiTests(unittest.TestCase):
             name="Stable Pack",
             optional_mode=1,
             enable_server=1,
+            remove_unlisted_mod_files=True,
             get_build_api=Mock(return_value=build),
         )
         get_modpack.return_value = modpack
@@ -1028,6 +1029,9 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(payload["schema"], "solder.py/bootstrap")
         self.assertEqual(payload["schema_version"], 1)
         self.assertEqual(payload["optional_mode"]["name"], "advanced")
+        self.assertTrue(
+            payload["update_policy"]["remove_unlisted_mod_files"]
+        )
         self.assertEqual(payload["groups"][0]["key"], "World style")
         self.assertEqual(payload["groups"][0]["minimum"], 1)
         self.assertEqual(payload["groups"][0]["maximum"], 1)

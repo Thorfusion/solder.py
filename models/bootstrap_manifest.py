@@ -358,6 +358,11 @@ class BootstrapManifest:
             },
             "target": target,
             "source": source_mode,
+            "update_policy": {
+                "remove_unlisted_mod_files": bool(
+                    getattr(modpack, "remove_unlisted_mod_files", False)
+                ),
+            },
             "optional_mode": {
                 "id": optional_mode_id,
                 "name": "advanced" if optional_mode_id == 1 else "basic",
@@ -460,6 +465,14 @@ class BootstrapManifest:
             "added": added,
             "updated": updated,
             "removed": removed,
+            "update_policy_changed": previous.get(
+                "update_policy",
+                {"remove_unlisted_mod_files": False},
+            )
+            != current.get(
+                "update_policy",
+                {"remove_unlisted_mod_files": False},
+            ),
             "selection_changed": (
                 cls._selection_signature(previous)
                 != cls._selection_signature(current)

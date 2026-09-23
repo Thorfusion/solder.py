@@ -30,12 +30,13 @@ def package(identifier, membership_id, slug, state=0):
     )
 
 
-def modpack():
+def modpack(remove_unlisted_mod_files=False):
     return SimpleNamespace(
         id=1,
         slug="example",
         name="Example",
         optional_mode=1,
+        remove_unlisted_mod_files=remove_unlisted_mod_files,
     )
 
 
@@ -76,6 +77,20 @@ def group(identifier, membership_id):
 
 
 class BootstrapManifestTests(unittest.TestCase):
+    def test_modpack_can_request_strict_mod_folder_cleanup(self):
+        manifest = BootstrapManifest.render(
+            modpack(remove_unlisted_mod_files=True),
+            build(1, "1.0"),
+            [package(4, 10, "example-mod")],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+        )
+
+        self.assertTrue(
+            manifest["update_policy"]["remove_unlisted_mod_files"]
+        )
+
     def test_launcher_owned_dependency_stays_in_the_complete_graph(self):
         dependent = package(4, 10, "dependent")
         dependency = package(5, 11, "dependency")
@@ -335,7 +350,30 @@ class BootstrapManifestTests(unittest.TestCase):
         changes = BootstrapManifest.changes(previous, current)
 
         self.assertFalse(changes["selection_changed"])
+        self.assertFalse(changes["update_policy_changed"])
         self.assertEqual(changes["updated"], [])
+
+    def test_mod_cleanup_policy_change_is_reported(self):
+        previous = BootstrapManifest.render(
+            modpack(),
+            build(1, "1.0"),
+            [package(4, 10, "example-mod")],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+        )
+        current = BootstrapManifest.render(
+            modpack(remove_unlisted_mod_files=True),
+            build(2, "2.0"),
+            [package(4, 10, "example-mod")],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+        )
+
+        changes = BootstrapManifest.changes(previous, current)
+
+        self.assertTrue(changes["update_policy_changed"])
 
     def test_selection_change_is_reported_without_artifact_update(self):
         previous_package = package(4, 10, "graphics", 2)
