@@ -29,6 +29,20 @@ class ApiTests(unittest.TestCase):
             "get_active",
             return_value=None,
         ).start()
+        self.sign_bootstrap_manifest = patch.object(
+            api_module.BootstrapSigning,
+            "sign_manifest",
+            side_effect=lambda manifest: manifest.update(
+                {
+                    "signature": {
+                        "algorithm": "SHA256withECDSA",
+                        "key_id": "sha256:test",
+                        "encoding": "base64",
+                        "value": "test-signature",
+                    }
+                }
+            ) or manifest,
+        ).start()
         self.addCleanup(patch.stopall)
 
         # cachetools caches route responses at module scope. Clearing between
@@ -56,6 +70,7 @@ class ApiTests(unittest.TestCase):
                 "capabilities": {
                     "advanced_optionals": True,
                     "bootstrap_manifest": True,
+                    "bootstrap_signatures": True,
                     "bootstrap_schema": 1,
                     "build_channels": True,
                     "build_comparison": True,
@@ -1028,6 +1043,13 @@ class ApiTests(unittest.TestCase):
         payload = response.get_json()
         self.assertEqual(payload["schema"], "solder.py/bootstrap")
         self.assertEqual(payload["schema_version"], 1)
+        self.assertEqual(
+            payload["signature"]["algorithm"], "SHA256withECDSA"
+        )
+        self.assertEqual(payload["signature"]["key_id"], "sha256:test")
+        self.assertNotIn("public_key", payload["signature"])
+        self.assertNotIn("private", str(payload["signature"]).casefold())
+        self.sign_bootstrap_manifest.assert_called()
         self.assertEqual(payload["optional_mode"]["name"], "advanced")
         self.assertTrue(
             payload["update_policy"]["remove_unlisted_mod_files"]
@@ -1132,6 +1154,48 @@ class ApiTests(unittest.TestCase):
             hasattr(api_module, "_backfill_bootstrap_modrinth_downloads")
         )
         self.assertFalse(hasattr(api_module, "_bootstrap_maven_downloads"))
+
+    @patch.object(api_module.AdvancedOptional, "get_active_groups", return_value=[])
+    @patch.object(api_module.Modpack, "get_by_cid_slug_api")
+    @patch.object(api_module.Key, "get_key", return_value=None)
+    def test_bootstrap_manifest_fails_closed_without_signing_key(
+        self, _get_key, get_modpack, _get_groups
+    ):
+        build = Mock(
+            id=7,
+            version="42",
+            minecraft="1.20.1",
+            min_java="17",
+            java_runtime=None,
+            min_memory=4096,
+            forge="47.3.0",
+            modloader="FORGE",
+        )
+        build.get_modversions_api.return_value = []
+        get_modpack.return_value = SimpleNamespace(
+            id=2,
+            slug="stable",
+            name="Stable Pack",
+            optional_mode=0,
+            enable_server=1,
+            remove_unlisted_mod_files=False,
+            get_build_api=Mock(return_value=build),
+        )
+        self.sign_bootstrap_manifest.side_effect = (
+            api_module.BootstrapSigningError("missing")
+        )
+
+        with patch.object(api_module.logger, "exception") as logged:
+            response = self.client.get("/api/modpack/stable/42/bootstrap")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.get_json(),
+            {"error": "Bootstrap manifest signing is unavailable"},
+        )
+        logged.assert_called_once_with(
+            "Bootstrap manifest signing is unavailable"
+        )
 
     @patch.object(api_module.Modpack, "get_by_cid_slug_api")
     @patch.object(api_module.Key, "get_key", return_value=None)

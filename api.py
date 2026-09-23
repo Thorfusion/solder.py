@@ -20,6 +20,7 @@ from models.bootstrap_manifest import (
     BootstrapManifest,
     BootstrapManifestError,
 )
+from models.bootstrap_signing import BootstrapSigning, BootstrapSigningError
 from models.key import Key
 from models.cache_revision import CacheRevision
 from models.mod import Mod
@@ -328,6 +329,7 @@ def api_info():
             "capabilities": {
                 "advanced_optionals": True,
                 "bootstrap_manifest": True,
+                "bootstrap_signatures": True,
                 "bootstrap_schema": BOOTSTRAP_SCHEMA_VERSION,
                 "build_channels": True,
                 "build_comparison": True,
@@ -693,6 +695,14 @@ def modpack_bootstrap(slugstring: str, buildstring: str):
         # Stored integrity failures are not safe to expose to anonymous API
         # users, but should still produce a stable machine-readable response.
         return jsonify({"error": "Invalid bootstrap manifest data"}), 422
+
+    try:
+        BootstrapSigning.sign_manifest(manifest)
+    except BootstrapSigningError:
+        logger.exception("Bootstrap manifest signing is unavailable")
+        return jsonify(
+            {"error": "Bootstrap manifest signing is unavailable"}
+        ), 503
 
     response = jsonify(manifest)
     response_etag = manifest["manifest_hash"]

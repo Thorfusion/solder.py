@@ -82,6 +82,22 @@ def selected_downloader():
 
 
 class TechnicSolderPyLoaderTests(unittest.TestCase):
+    def setUp(self):
+        signing = patch(
+            "models.platform_export.BootstrapSigning.public_config",
+            return_value={
+                "required": True,
+                "algorithm": "SHA256withECDSA",
+                "curve": "secp256r1",
+                "publicKeyFormat": "X.509",
+                "encoding": "base64",
+                "keyId": "sha256:test",
+                "publicKey": "test-public-key",
+            },
+        )
+        signing.start()
+        self.addCleanup(signing.stop)
+
     def test_delivery_mode_is_validated_and_old_rows_default_to_loader(self):
         configured = TechnicSolderPyLoader._from_row(
             {

@@ -388,6 +388,15 @@ class Database:
             cur.execute(query)
 
     @staticmethod
+    def ensure_bootstrap_signing_key(cur) -> None:
+        # Import lazily because bootstrap_signing uses Database to read the
+        # key while serving manifests. The private key is created only by a
+        # writable management/schema-repair process.
+        from .bootstrap_signing import BootstrapSigning
+
+        BootstrapSigning.ensure_key(cur)
+
+    @staticmethod
     def verify_application_tables(cur) -> None:
         cur.execute("SHOW TABLES")
         present = {row[0] for row in cur.fetchall()}
@@ -1078,6 +1087,7 @@ class Database:
                           COLLATE=utf8mb4_unicode_ci"""
             )
             Database.create_additive_tables(cur)
+            Database.ensure_bootstrap_signing_key(cur)
             cur.execute(Database.PLATFORM_EXPORT_OVERRIDES_DEFAULT_SQL)
             Database.allow_ungrouped_advanced_optionals(cur)
             Database.normalize_table_collations(cur)
@@ -1169,6 +1179,7 @@ class Database:
             # Repair all additive tables before checking columns that may
             # belong to those tables.
             Database.create_additive_tables(cur)
+            Database.ensure_bootstrap_signing_key(cur)
             Database.normalize_legacy_timestamps(cur)
             Database.repair_columns(cur, column_migrations)
 
@@ -1223,6 +1234,7 @@ class Database:
             cur = con.cursor()
             Database.normalize_legacy_timestamps(cur)
             Database.create_additive_tables(cur)
+            Database.ensure_bootstrap_signing_key(cur)
             Database.allow_ungrouped_advanced_optionals(cur)
 
             Database.repair_columns(cur, Database.CURRENT_COLUMN_REPAIRS)

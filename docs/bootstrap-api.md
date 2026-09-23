@@ -25,7 +25,8 @@ Administrators can set an explicit target as an override.
 ## Discover and request the manifest
 
 First request `GET /api/`. A compatible server reports
-`bootstrap_manifest: true` and its `bootstrap_schema` version.
+`bootstrap_manifest: true`, `bootstrap_signatures: true`, and its
+`bootstrap_schema` version.
 
 Fetch a resolved build with:
 
@@ -223,13 +224,28 @@ This abbreviated example is a complete, valid schema-version 1 response:
       ]
     }
   ],
-  "manifest_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  "manifest_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "signature": {
+    "algorithm": "SHA256withECDSA",
+    "key_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "encoding": "base64",
+    "value": "MEUCIQD..."
+  }
 }
 ```
 
 `manifest_hash` is a stable SHA-256 identifier for the resolved manifest. It
 is not a package checksum. A `MOD` entry uses the verified raw-JAR MD5 stored
 by solder.py. Other package types use the Solder ZIP MD5.
+
+`signature` authenticates the entire JSON object except the `signature` field
+itself, including `manifest_hash` and an incremental `changes` object when one
+is present. Serialize that unsigned object as UTF-8 JSON with object keys
+sorted, no insignificant whitespace, and ASCII escaping enabled. Verify the
+base64 DER ECDSA signature with `SHA256withECDSA` and the X.509 public key
+pinned in the exported `config/solderpy-loader.json`. Reject the manifest
+before using any package URL when the signature, algorithm, or `key_id` does
+not match the exported verification configuration.
 
 Unknown fields must be ignored. A client must reject an unknown
 `schema_version` unless it explicitly supports that version.
@@ -413,7 +429,16 @@ example:
   "target": "client",
   "source": "hybrid",
   "platform": "modrinth",
-  "launcherOwnedMemberships": [91]
+  "launcherOwnedMemberships": [91],
+  "manifestVerification": {
+    "required": true,
+    "algorithm": "SHA256withECDSA",
+    "curve": "secp256r1",
+    "publicKeyFormat": "X.509",
+    "encoding": "base64",
+    "keyId": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE..."
+  }
 }
 ```
 
@@ -434,6 +459,7 @@ A bootstrap mod is compatible with schema version 1 when it:
 - honors `target`, `source`, `platform`, side filtering, `install_owner`, and the export's exact native membership list;
 - honors the mod-wide `enforce` package policy;
 - honors `update_policy.remove_unlisted_mod_files` without deleting outside the instance's `mods/` directory or removing launcher-owned files;
+- verifies `signature` with the exact public key and `keyId` pinned by the export before trusting the manifest;
 - verifies each ZIP's size and MD5 and extracts it safely;
 - tracks extracted-file ownership for reliable removal and rollback;
 - handles ETags, resolved channels, and the optional `changes` summary;

@@ -29,6 +29,15 @@ SHA1 = "1" * 40
 SHA512 = "2" * 128
 REPOSITORY = "https://cdn.example.test/mods/"
 APPLICATION = "https://solder.example.test/"
+SIGNING_CONFIG = {
+    "required": True,
+    "algorithm": "SHA256withECDSA",
+    "curve": "secp256r1",
+    "publicKeyFormat": "X.509",
+    "encoding": "base64",
+    "keyId": "sha256:test",
+    "publicKey": "test-public-key",
+}
 
 
 class FakeResponse:
@@ -260,8 +269,14 @@ class PlatformPackExportTests(unittest.TestCase):
         )
         self.get_downloader_version = modrinth.start()
         self.get_curseforge_file = curseforge.start()
+        signing = patch(
+            "models.platform_export.BootstrapSigning.public_config",
+            return_value=dict(SIGNING_CONFIG),
+        )
+        self.get_signing_config = signing.start()
         self.addCleanup(modrinth.stop)
         self.addCleanup(curseforge.stop)
+        self.addCleanup(signing.stop)
 
     def test_downloader_native_project_mappings_include_dependencies(self):
         loader = PlatformPackExport.native_project_mapping("5LpwENAj")
@@ -441,6 +456,8 @@ class PlatformPackExportTests(unittest.TestCase):
         self.assertEqual(config["api"], "https://solder.example.test/api/")
         self.assertEqual(config["modpack"], "example-pack")
         self.assertEqual(config["build"], "recommended")
+        self.assertEqual(config["manifestVerification"], SIGNING_CONFIG)
+        self.assertNotIn("privateKey", json.dumps(config))
 
     def test_solderpy_loader_export_adds_relauncher_java_policy(self):
         archive = PlatformPackExport.render_solderpy_loader(
@@ -469,6 +486,16 @@ class PlatformPackExportTests(unittest.TestCase):
             PlatformPackExport.render_solderpy_loader(
                 replace(build(), min_java="newest"), APPLICATION
             )
+
+    def test_solderpy_loader_export_fails_without_installation_signing_key(self):
+        from models.bootstrap_signing import BootstrapSigningError
+
+        self.get_signing_config.side_effect = BootstrapSigningError("missing")
+
+        with self.assertRaisesRegex(
+            PlatformExportError, "bootstrap signing key is unavailable"
+        ):
+            PlatformPackExport.render_solderpy_loader(build(), APPLICATION)
 
     def test_server_export_bundles_loader_relauncher_and_server_launcher(self):
         loader_body = b"verified solderpy loader"
@@ -692,6 +719,7 @@ class PlatformPackExportTests(unittest.TestCase):
                 "build": "recommended",
                 "target": "auto",
                 "source": "solder",
+                "manifestVerification": SIGNING_CONFIG,
                 "platform": "modrinth",
                 "launcherOwnedMemberships": [],
             },

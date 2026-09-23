@@ -304,8 +304,11 @@ config/solderpy-loader.json
 config/relauncher/config.cfg  (when Minimum Java Version is set)
 ```
 
-The configuration contains the public `APP_URL`, modpack slug, and selected
-exact build, `latest`, or `recommended` channel. Its target is `auto`, so
+The configuration contains the public `APP_URL`, modpack slug, selected exact
+build, `latest`, or `recommended` channel, and the installation's public
+manifest-verification key. The private key is generated once by writable
+database repair, stored only in `solder_settings`, and never included in an
+export or API response. Its target is `auto`, so
 Relauncher selects the client or dedicated-server manifest at launch. Extract
 the ZIP into an instance where SolderPy Modpack Loader and Relauncher are already
 installed. The build must be published and non-private. The bootstrap API owns

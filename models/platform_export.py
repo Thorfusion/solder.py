@@ -18,6 +18,7 @@ from .compatibility import (
     resolved_minecraft_versions,
     version_is_compatible,
 )
+from .bootstrap_signing import BootstrapSigning, BootstrapSigningError
 from .distribution import DistributionExport, FileDirectorExport, PackwizExport
 from .integration import (
     IntegrationError,
@@ -1078,6 +1079,13 @@ class PlatformPackExport:
             "target": target,
             "source": source_mode,
         }
+        try:
+            config["manifestVerification"] = BootstrapSigning.public_config()
+        except BootstrapSigningError as error:
+            raise PlatformExportError(
+                "The installation bootstrap signing key is unavailable. "
+                "Run database repair from the management instance."
+            ) from error
         if platform is not None:
             config["platform"] = platform
         if launcher_memberships is not None:
