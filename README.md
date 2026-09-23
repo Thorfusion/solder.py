@@ -391,7 +391,7 @@ Create a Compose `.env` file beside `compose.yml`. Use different, randomly
 generated values in production and do not commit this file:
 
 ```dotenv
-SOLDER_IMAGE=thorfusion/solderpy:1.10.1
+SOLDER_IMAGE=thorfusion/solderpy:1.10.2
 SOLDER_DB_PASSWORD=replace-with-a-long-random-password
 MYSQL_ROOT_PASSWORD=replace-with-another-long-random-password
 SOLDER_SECRET_KEY=replace-with-a-long-random-application-secret
