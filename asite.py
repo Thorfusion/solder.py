@@ -335,7 +335,7 @@ def modversion(id):
         upstream_versions=upstream_versions,
         upstream_error=upstream_error,
         legacy_modversion_adding=legacy_modversion_adding,
-        replace_on_launch_and_update=ModBootstrapSettings.get(id),
+        enforce=ModBootstrapSettings.get(id),
     )
 
 
@@ -638,7 +638,7 @@ def newmodversion(id):
             mod_side,
             mod_type,
             request.form.get("notes", request.form.get("internal_note", "")),
-            "replace_on_launch_and_update" in request.form,
+            "enforce" in request.form,
         )
         from api import clear_api_caches
 
@@ -750,9 +750,7 @@ def newmod():
                 mod_side,
                 mod_type,
                 request.form.get("notes", request.form.get("internal_note", "")),
-                replace_on_launch_and_update=(
-                    "replace_on_launch_and_update" in request.form
-                ),
+                enforce=("enforce" in request.form),
             )
         except DuplicateModError:
             flash(

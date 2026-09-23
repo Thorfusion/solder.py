@@ -235,8 +235,8 @@ class BootstrapManifest:
             if group is not None and owner == "launcher":
                 owner = "loader"
             managed = owner == "loader"
-            replace_on_launch_and_update = str(
-                getattr(package, "replace_on_launch_and_update", True)
+            enforce = str(
+                getattr(package, "enforce", True)
             ).strip().casefold() not in {"0", "false", "no", "off"}
             if managed and selected_by_default:
                 selected_defaults.append(membership_id)
@@ -305,9 +305,7 @@ class BootstrapManifest:
                     "modtype": modtype,
                     "install_owner": owner,
                     "bootstrap_managed": managed,
-                    "replace_on_launch_and_update": (
-                        replace_on_launch_and_update
-                    ),
+                    "enforce": enforce,
                     "url": download["url"],
                     "md5": download["md5"],
                     "filesize": download["filesize"],
@@ -452,8 +450,7 @@ class BootstrapManifest:
             if old and (
                 old["version"] != package["version"]
                 or old["md5"] != package["md5"]
-                or old.get("replace_on_launch_and_update", True)
-                != package.get("replace_on_launch_and_update", True)
+                or old.get("enforce", True) != package.get("enforce", True)
             ):
                 updated.append({"from": old, "to": package})
         return {

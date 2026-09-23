@@ -294,12 +294,12 @@ class BootstrapManifestTests(unittest.TestCase):
         self.assertTrue(result["url"].endswith("config-pack-1.0.zip"))
         self.assertEqual(result["download"]["format"], "solder_zip")
         self.assertEqual(result["download"]["extract_to"], ".")
-        self.assertTrue(result["replace_on_launch_and_update"])
+        self.assertTrue(result["enforce"])
 
-    def test_package_can_disable_launch_and_update_replacement(self):
+    def test_package_can_disable_launch_enforcement(self):
         selected = package(4, 10, "config-pack")
         selected.modtype = "CONFIG"
-        selected.replace_on_launch_and_update = False
+        selected.enforce = False
 
         manifest = BootstrapManifest.render(
             modpack(),
@@ -311,7 +311,7 @@ class BootstrapManifestTests(unittest.TestCase):
         )
 
         self.assertFalse(
-            manifest["packages"][0]["replace_on_launch_and_update"]
+            manifest["packages"][0]["enforce"]
         )
 
     def test_build_local_ids_do_not_report_selection_change(self):
@@ -365,10 +365,10 @@ class BootstrapManifestTests(unittest.TestCase):
         self.assertTrue(changes["selection_changed"])
         self.assertEqual(changes["updated"], [])
 
-    def test_replacement_policy_change_is_reported_as_package_update(self):
+    def test_enforcement_policy_change_is_reported_as_package_update(self):
         previous_package = package(4, 10, "config-pack")
         current_package = package(4, 10, "config-pack")
-        current_package.replace_on_launch_and_update = False
+        current_package.enforce = False
         previous = BootstrapManifest.render(
             modpack(),
             build(1, "1.0"),
@@ -391,7 +391,7 @@ class BootstrapManifestTests(unittest.TestCase):
         self.assertEqual(len(changes["updated"]), 1)
         self.assertEqual(changes["updated"][0]["to"]["name"], "config-pack")
         self.assertFalse(
-            changes["updated"][0]["to"]["replace_on_launch_and_update"]
+            changes["updated"][0]["to"]["enforce"]
         )
 
 

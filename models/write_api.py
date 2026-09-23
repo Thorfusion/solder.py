@@ -38,9 +38,9 @@ _WRITABLE_FIELDS = {
 
 _MOD_WITH_BOOTSTRAP_SQL = """SELECT mods.*,
           COALESCE(
-              mod_bootstrap_settings.replace_on_launch_and_update,
+              mod_bootstrap_settings.enforce,
               1
-          ) AS replace_on_launch_and_update
+          ) AS enforce
    FROM mods
    LEFT JOIN mod_bootstrap_settings
        ON mod_bootstrap_settings.mod_id = mods.id"""
@@ -461,13 +461,11 @@ class WriteApiStore:
     @classmethod
     def create_mod(cls, values, dependency_identifiers=None):
         values = dict(values)
-        replace_on_launch_and_update = values.pop(
-            "replace_on_launch_and_update", True
-        )
+        enforce = values.pop("enforce", True)
         try:
             with _transaction() as cur:
                 mod_id = cls._insert(cur, "mods", values)
-                if not replace_on_launch_and_update:
+                if not enforce:
                     ModBootstrapSettings.apply(cur, mod_id, False)
                 if dependency_identifiers is not None:
                     cls._sync_dependencies(cur, mod_id, dependency_identifiers)
@@ -482,9 +480,7 @@ class WriteApiStore:
     @classmethod
     def update_mod(cls, mod, values, dependency_identifiers=None):
         values = dict(values)
-        replace_on_launch_and_update = values.pop(
-            "replace_on_launch_and_update", None
-        )
+        enforce = values.pop("enforce", None)
         try:
             with _transaction() as cur:
                 if "name" in values and values["name"] != mod["name"]:
@@ -497,9 +493,9 @@ class WriteApiStore:
                             "A mod slug cannot be changed after versions exist.", 409
                         )
                 cls._update(cur, "mods", mod["id"], values)
-                if replace_on_launch_and_update is not None:
+                if enforce is not None:
                     ModBootstrapSettings.apply(
-                        cur, mod["id"], replace_on_launch_and_update
+                        cur, mod["id"], enforce
                     )
                 if dependency_identifiers is not None:
                     cls._sync_dependencies(cur, mod["id"], dependency_identifiers)

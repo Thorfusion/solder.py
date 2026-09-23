@@ -954,7 +954,7 @@ class ApiTests(unittest.TestCase):
         maven_url = "https://maven.example/releases/ui.jar"
         packages[1].download_source_provider = "MAVEN"
         packages[1].download_source_url = maven_url
-        packages[1].replace_on_launch_and_update = False
+        packages[1].enforce = False
         build = Mock(
             id=7,
             version="42",
@@ -1061,9 +1061,9 @@ class ApiTests(unittest.TestCase):
             by_name["pretty-world"]["download"]["sources"][1],
             {"provider": "maven", "url": maven_url},
         )
-        self.assertTrue(by_name["core"]["replace_on_launch_and_update"])
+        self.assertTrue(by_name["core"]["enforce"])
         self.assertFalse(
-            by_name["pretty-world"]["replace_on_launch_and_update"]
+            by_name["pretty-world"]["enforce"]
         )
         self.assertFalse(by_name["modpack"]["bootstrap_managed"])
         self.assertEqual(

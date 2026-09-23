@@ -35,7 +35,7 @@ Open **New Mod** and complete these fields:
 | Mod Website | Public project or documentation link |
 | Side | Whether the package belongs on the client, server, or both |
 | Type | What kind of Solder package this is |
-| Replace package on launch and update | Mod-wide SolderPy Modpack Loader policy. Enabled replaces the complete package; disabled merges it, which is useful for config packs that preserve local files. Other downloaders ignore it. |
+| Enforce package files on every launch | Mod-wide SolderPy Modpack Loader policy. Enabled verifies and repairs the installed files on every launch. Disabled allows users or mods to change them while the package is unchanged; a package update still installs normally and resets its managed files. Other downloaders ignore it. |
 | Notes (private) | Administrator-only notes; never returned by the read API |
 
 The slug becomes part of every repository filename and URL. Avoid changing it
@@ -73,13 +73,15 @@ When a manual JAR is uploaded, solder.py packages it as `MOD` because it has
 been detected as a runtime mod. Existing versions with a verified raw JAR hash
 are normalized to `MOD`, except deliberate `BOOTSTRAP` and `LAUNCHER` packages.
 
-The **Replace package on launch and update** choice belongs to the mod, not an
+The **Enforce package files on every launch** choice belongs to the mod, not an
 individual version, and only SolderPy Modpack Loader uses it. It is enabled by
 default and is returned for every JAR or ZIP version in the dedicated
-bootstrap API. Clear it only when the loader should merge the package into the
-instance without removing paths that are absent from a newer archive. The
-installed loader must implement the API field before this exception changes
-its installation behavior.
+bootstrap API. Clear it only when users or mods may change the installed files
+between package updates. While the version, artifact MD5, and install target
+remain unchanged, the Loader then skips inspection and repair for that
+package. A new or updated package is still installed normally and resets its
+managed files. The installed Loader must implement the API field before this
+exception changes its launch behavior.
 
 ## Add versions manually
 

@@ -10,17 +10,17 @@
         </div>
         <div class="form-check mb-3">
             <input class="form-check-input" type="checkbox"
-                name="replace_on_launch_and_update"
-                id="replace_on_launch_and_update" value="1"
-                {%if request.method != 'POST' or request.form.get('replace_on_launch_and_update')%}checked{%endif%}>
-            <label class="form-check-label" for="replace_on_launch_and_update">
-                Replace package on launch and update
+                name="enforce"
+                id="enforce" value="1"
+                {%if request.method != 'POST' or request.form.get('enforce')%}checked{%endif%}>
+            <label class="form-check-label" for="enforce">
+                Enforce package files on every launch
             </label>
             <div class="form-text">
                 Only SolderPy Modpack Loader uses this setting. It is enabled
-                by default. Clear it for config packs whose files should be
-                merged into the instance instead of replaced as one complete
-                package.
+                by default. Clear it to let users or mods change the installed
+                files while this package is unchanged. A package update still
+                installs normally and resets its managed files.
             </div>
         </div>
         <div class="mb-3">

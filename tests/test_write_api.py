@@ -75,7 +75,7 @@ def mod_row(**changes):
         "modtype": "MOD",
         "integration_provider": None,
         "integration_project_id": None,
-        "replace_on_launch_and_update": True,
+        "enforce": True,
         "created_at": None,
         "updated_at": None,
     }
@@ -250,7 +250,7 @@ class WriteApiRouteTests(unittest.TestCase):
             side="SERVER",
             modtype="CONFIG",
             notes="private",
-            replace_on_launch_and_update=False,
+            enforce=False,
         )
         with (
             patch("api_write.WriteApiStore.create_mod", return_value=created) as create,
@@ -265,7 +265,7 @@ class WriteApiRouteTests(unittest.TestCase):
                     "side": "server",
                     "modtype": "config",
                     "notes": "private",
-                    "replace_on_launch_and_update": False,
+                    "enforce": False,
                     "dependencies": [9, "library-mod"],
                 },
             )
@@ -274,9 +274,9 @@ class WriteApiRouteTests(unittest.TestCase):
         values, dependencies = create.call_args.args
         self.assertEqual(values["side"], "SERVER")
         self.assertEqual(values["modtype"], "CONFIG")
-        self.assertFalse(values["replace_on_launch_and_update"])
+        self.assertFalse(values["enforce"])
         self.assertEqual(dependencies, [9, "library-mod"])
-        self.assertFalse(response.get_json()["replace_on_launch_and_update"])
+        self.assertFalse(response.get_json()["enforce"])
 
     def test_create_modversion_accepts_compatibility_and_jar_hash(self):
         created = version_row(jarmd5="b" * 32, jarfilesize=456)
@@ -810,12 +810,12 @@ class WriteApiStoreTests(unittest.TestCase):
         pack_cleanup.assert_called_once_with(cursor, 3)
         connection.commit.assert_called_once_with()
 
-    def test_create_mod_stores_disabled_replacement_policy_separately(self):
+    def test_create_mod_stores_disabled_enforcement_policy_separately(self):
         connection = Mock()
         cursor = connection.cursor.return_value
         cursor.lastrowid = 4
         cursor.fetchone.return_value = mod_row(
-            replace_on_launch_and_update=False
+            enforce=False
         )
 
         with patch(
@@ -826,7 +826,7 @@ class WriteApiStoreTests(unittest.TestCase):
                 {
                     "name": "config-pack",
                     "pretty_name": "Config Pack",
-                    "replace_on_launch_and_update": False,
+                    "enforce": False,
                 }
             )
 
@@ -836,14 +836,14 @@ class WriteApiStoreTests(unittest.TestCase):
             for statement in statements
             if statement.startswith("INSERT INTO mods")
         )
-        self.assertNotIn("replace_on_launch_and_update", mods_insert)
+        self.assertNotIn("enforce", mods_insert)
         self.assertTrue(
             any(
                 "INSERT INTO mod_bootstrap_settings" in statement
                 for statement in statements
             )
         )
-        self.assertFalse(row["replace_on_launch_and_update"])
+        self.assertFalse(row["enforce"])
         connection.commit.assert_called_once_with()
 
     def test_create_modversion_writes_override_to_sparse_table(self):

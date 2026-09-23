@@ -760,7 +760,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("LAUNCHER (MODLOADER)", version_source)
         self.assertIn("LAUNCHER (MODLOADER)", new_mod_source)
         self.assertIn(
-            'name="replace_on_launch_and_update"', version_source
+            'name="enforce"', version_source
         )
         self.assertIn(
             "Only SolderPy Modpack Loader uses this setting",
@@ -771,7 +771,7 @@ class ApplicationSmokeTests(unittest.TestCase):
             version_source,
         )
         self.assertIn(
-            'name="replace_on_launch_and_update"', new_mod_source
+            'name="enforce"', new_mod_source
         )
         self.assertIn(
             "Only SolderPy Modpack Loader uses this setting",

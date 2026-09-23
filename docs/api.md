@@ -411,11 +411,12 @@ target path under `mods/`. If a legacy mod has no verified raw JAR, its normal
 Solder ZIP is returned instead so the build remains usable, at the cost of ZIP
 extraction during bootstrap. Non-mod content continues to use its Solder ZIP.
 Every package also includes the mod-wide
-`replace_on_launch_and_update` boolean. It defaults to `true`; `false` tells a
-compatible SolderPy Modpack Loader version to merge the package on
-launch/update instead of treating it as a complete replacement. Other
-downloaders and export formats ignore this setting. It applies to both JAR and
-ZIP packages and is primarily intended for config packs.
+`enforce` boolean. It defaults to `true`; `false` tells a
+compatible SolderPy Modpack Loader version to leave the package's installed
+files alone while its version, artifact, and install target are unchanged. A
+new or updated package is still installed normally. Other downloaders and
+export formats ignore this setting. It applies to both JAR and ZIP packages and
+is primarily intended for user-editable config packs.
 
 The route supports `cid`, `k`, `target`, and `from`, as documented in the
 [dedicated bootstrap API guide](bootstrap-api.md). It returns an `ETag` and

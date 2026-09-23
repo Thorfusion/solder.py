@@ -745,7 +745,7 @@ class ModelBehaviorTests(unittest.TestCase):
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
 
-    def test_new_mod_stores_disabled_replacement_policy_by_mod_id(self):
+    def test_new_mod_stores_disabled_enforcement_policy_by_mod_id(self):
         connection = Mock()
         cursor = connection.cursor.return_value
         cursor.lastrowid = 42
@@ -760,7 +760,7 @@ class ModelBehaviorTests(unittest.TestCase):
                 "BOTH",
                 "CONFIG",
                 "",
-                replace_on_launch_and_update=False,
+                enforce=False,
             )
 
         statements = [call.args[0] for call in cursor.execute.call_args_list]
@@ -770,7 +770,7 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertEqual(cursor.execute.call_args.args[1], (42,))
         connection.commit.assert_called_once_with()
 
-    def test_bootstrap_replacement_policy_defaults_to_enabled(self):
+    def test_bootstrap_enforcement_policy_defaults_to_enabled(self):
         connection = Mock()
         cursor = connection.cursor.return_value
         cursor.fetchone.return_value = None
@@ -932,16 +932,16 @@ class ModelBehaviorTests(unittest.TestCase):
             Database.MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL,
         )
 
-    def test_bootstrap_replacement_policy_uses_a_mod_wide_sparse_table(self):
+    def test_bootstrap_enforcement_policy_uses_a_mod_wide_sparse_table(self):
         schema = Database.MOD_BOOTSTRAP_SETTINGS_TABLE_SQL
 
         self.assertIn("mod_id INT NOT NULL PRIMARY KEY", schema)
         self.assertIn(
-            "replace_on_launch_and_update TINYINT(1) NOT NULL DEFAULT 1",
+            "enforce TINYINT(1) NOT NULL DEFAULT 1",
             schema,
         )
         self.assertNotIn(
-            "replace_on_launch_and_update",
+            "enforce",
             "\n".join(
                 query for _table, _column, query in Database.JAR_COLUMN_MIGRATIONS
             ),
@@ -1683,10 +1683,10 @@ class ModelBehaviorTests(unittest.TestCase):
                 "optional": 0,
             }
 
-        disabled_replacement = modversion_row(10, "example10")
-        disabled_replacement["replace_on_launch_and_update"] = 0
+        disabled_enforcement = modversion_row(10, "example10")
+        disabled_enforcement["enforce"] = 0
         cursor.fetchall.return_value = [
-            disabled_replacement,
+            disabled_enforcement,
             modversion_row(2, "Example2"),
             modversion_row(1, "alpha"),
         ]
@@ -1701,8 +1701,8 @@ class ModelBehaviorTests(unittest.TestCase):
             [version.modname for version in versions],
             ["alpha", "Example2", "example10"],
         )
-        self.assertTrue(versions[0].replace_on_launch_and_update)
-        self.assertFalse(versions[2].replace_on_launch_and_update)
+        self.assertTrue(versions[0].enforce)
+        self.assertFalse(versions[2].enforce)
         query, parameters = cursor.execute.call_args.args
         self.assertIn("mods.side IN ('CLIENT', 'BOTH')", query)
         self.assertIn("LEFT JOIN mod_bootstrap_settings", query)

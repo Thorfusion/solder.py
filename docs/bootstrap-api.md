@@ -135,7 +135,7 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "modtype": "MOD",
       "install_owner": "loader",
       "bootstrap_managed": true,
-      "replace_on_launch_and_update": true,
+      "enforce": true,
       "url": "https://cdn.example.com/mods/example-library/example-library-1.20.1-4.0.jar",
       "md5": "0123456789abcdef0123456789abcdef",
       "filesize": 24680,
@@ -185,7 +185,7 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "modtype": "CONFIG",
       "install_owner": "loader",
       "bootstrap_managed": true,
-      "replace_on_launch_and_update": false,
+      "enforce": false,
       "url": "https://cdn.example.com/mods/standard-world/standard-world-1.0.zip",
       "md5": "fedcba9876543210fedcba9876543210",
       "filesize": 6543,
@@ -305,21 +305,26 @@ rules. `platform=technic` is server-owned: Technic owns ungrouped required
 packages only when that build uses Technic delivery, while SolderPy Modpack Loader owns
 optional and advanced content.
 
-`replace_on_launch_and_update` is a mod-wide SolderPy Modpack Loader package
+`enforce` is a mod-wide SolderPy Modpack Loader package
 policy and defaults to `true`. Other downloaders and export formats ignore it.
 It applies to every version of that mod and to both JAR and ZIP downloads.
-When true, SolderPy Modpack Loader should treat the selected package as a
-complete replacement during launch and update. When false, it should merge the
-package into the instance and must not remove an existing file only because
-that path is absent from the newly downloaded package. This exception is
-mainly useful for config packs that intentionally preserve local or generated
-files. It does not weaken path validation, size checks, MD5 verification, or
-ownership checks for files the package actually writes.
+When true, SolderPy Modpack Loader retains its normal behavior: it verifies the
+package's owned files on every launch and repairs missing or modified outputs.
+When false, the Loader should trust an existing receipt without inspecting or
+repairing those outputs while the package version, artifact MD5, and install
+target remain unchanged. Users and mods may therefore change or remove the
+installed files between package updates. Initial installation and a change to
+the package version, artifact, or install target still install the package
+normally and reset its managed files to the new package. This exception is
+mainly useful for user-editable config packs. It does not weaken path
+validation, size checks, MD5 verification, transaction safety, or ownership
+checks when the package is installed or updated.
 
 The field is additive to schema version 1. Older SolderPy Modpack Loader
-versions that do not recognize it retain their existing replacement behavior.
+versions that do not recognize it retain their existing launch-enforcement
+behavior.
 The installed loader must support the field before administrators can rely on
-merge behavior.
+the unchanged-launch exception.
 
 `download.format: solder_zip` is used by `CONFIG`, `RES`, `NONE`, and other
 non-mod content. Download the archive, verify its byte size when supplied,
@@ -408,7 +413,7 @@ A bootstrap mod is compatible with schema version 1 when it:
 - keys saved choices by group key and package slug;
 - closes required dependencies before downloading;
 - honors `target`, `source`, `platform`, side filtering, `install_owner`, and the export's exact native membership list;
-- honors the mod-wide `replace_on_launch_and_update` package policy;
+- honors the mod-wide `enforce` package policy;
 - verifies each ZIP's size and MD5 and extracts it safely;
 - tracks extracted-file ownership for reliable removal and rollback;
 - handles ETags, resolved channels, and the optional `changes` summary;

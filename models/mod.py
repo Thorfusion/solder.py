@@ -88,7 +88,7 @@ class Mod:
         notes,
         integration_provider=None,
         integration_project_id=None,
-        replace_on_launch_and_update=True,
+        enforce=True,
     ):
         modtype = normalize_modtype(modtype)
         conn = Database.get_connection()
@@ -117,7 +117,7 @@ class Mod:
                 ),
             )
             mod_id = cur.lastrowid
-            if not replace_on_launch_and_update:
+            if not enforce:
                 ModBootstrapSettings.apply(cur, mod_id, False)
             conn.commit()
             return cls(
@@ -155,7 +155,7 @@ class Mod:
         side,
         modtype,
         notes,
-        replace_on_launch_and_update=None,
+        enforce=None,
     ):
         modtype = normalize_modtype(modtype)
         conn = Database.get_connection()
@@ -181,9 +181,9 @@ class Mod:
                     id,
                 ),
             )
-            if replace_on_launch_and_update is not None:
+            if enforce is not None:
                 ModBootstrapSettings.apply(
-                    cur, id, bool(replace_on_launch_and_update)
+                    cur, id, bool(enforce)
                 )
             conn.commit()
         except Exception:

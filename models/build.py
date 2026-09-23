@@ -408,9 +408,9 @@ class Build:
                            mods.integration_provider,
                            mods.integration_project_id,
                            COALESCE(
-                               mod_bootstrap_settings.replace_on_launch_and_update,
+                               mod_bootstrap_settings.enforce,
                                1
-                           ) AS replace_on_launch_and_update,
+                           ) AS enforce,
                            build_modversion.optional,
                            build_modversion.id AS membership_id
                     FROM modversions
@@ -461,9 +461,7 @@ class Build:
                 v.modtype = mv.get("modtype", "MOD")
                 v.integration_provider = mv.get("integration_provider")
                 v.integration_project_id = mv.get("integration_project_id")
-                v.replace_on_launch_and_update = bool(
-                    mv.get("replace_on_launch_and_update", 1)
-                )
+                v.enforce = bool(mv.get("enforce", 1))
                 v.download_source_provider = mv.get("download_source_provider")
                 v.download_source_url = mv.get("download_source_url")
                 v.download_source_filename = mv.get("download_source_filename")

@@ -71,12 +71,13 @@ omitting the field preserves its current value.
 
 Create-mod requests require `name` and `pretty_name`. They may include
 `author`, `description`, `link`, private management `notes`, `side`, `modtype`,
-`replace_on_launch_and_update`, and `dependencies`.
-`replace_on_launch_and_update` is a mod-wide boolean that defaults to `true`;
-set it to `false` for SolderPy Modpack Loader packages that must be merged
-instead of completely replaced. Other downloaders ignore it. Dependencies
-replace the mod's complete dependency list when supplied and may contain mod
-IDs or slugs.
+`enforce`, and `dependencies`.
+`enforce` is a mod-wide boolean that defaults to `true`;
+set it to `false` for SolderPy Modpack Loader packages whose installed files
+may be changed or removed while the package is unchanged. Initial installation
+and package updates still install and reset the managed files normally. Other
+downloaders ignore it. Dependencies replace the mod's complete dependency list
+when supplied and may contain mod IDs or slugs.
 
 Create-version requests require `version` and a 32-character `md5`. They may
 include `filesize`, `mcversion`, `modloader`, and the raw-JAR `jarmd5` and

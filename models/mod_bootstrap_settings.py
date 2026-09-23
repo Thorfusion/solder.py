@@ -4,11 +4,11 @@ from .database import Database
 
 
 class ModBootstrapSettings:
-    """Store exceptions to the default complete package replacement behavior."""
+    """Store exceptions to the default package enforcement behavior."""
 
     @staticmethod
-    def apply(cur, mod_id, replace_on_launch_and_update):
-        if replace_on_launch_and_update:
+    def apply(cur, mod_id, enforce):
+        if enforce:
             cur.execute(
                 "DELETE FROM mod_bootstrap_settings WHERE mod_id = %s",
                 (mod_id,),
@@ -16,10 +16,10 @@ class ModBootstrapSettings:
             return
         cur.execute(
             """INSERT INTO mod_bootstrap_settings
-                      (mod_id, replace_on_launch_and_update)
+                      (mod_id, enforce)
                VALUES (%s, 0)
                ON DUPLICATE KEY UPDATE
-                   replace_on_launch_and_update = 0,
+                   enforce = 0,
                    updated_at = CURRENT_TIMESTAMP""",
             (mod_id,),
         )
@@ -30,14 +30,14 @@ class ModBootstrapSettings:
         cur = conn.cursor(dictionary=True)
         try:
             cur.execute(
-                """SELECT replace_on_launch_and_update
+                """SELECT enforce
                    FROM mod_bootstrap_settings
                    WHERE mod_id = %s""",
                 (mod_id,),
             )
             row = cur.fetchone()
             return bool(
-                row["replace_on_launch_and_update"] if row else True
+                row["enforce"] if row else True
             )
         finally:
             cur.close()
