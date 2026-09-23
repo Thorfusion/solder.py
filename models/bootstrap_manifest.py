@@ -36,7 +36,6 @@ class BootstrapManifest:
         repository_url,
         modtype,
         native_downloads,
-        source_mode,
     ):
         slug = package.modname
         version = package.version
@@ -82,12 +81,11 @@ class BootstrapManifest:
                             {"provider": source_provider, "url": url}
                         )
 
-                if source_mode == "hybrid":
-                    add_source(
-                        "override",
-                        getattr(package, "jar_url_override", None),
-                    )
-                    add_source(source_provider.casefold(), native_url)
+                add_source(
+                    "override",
+                    getattr(package, "jar_url_override", None),
+                )
+                add_source(source_provider.casefold(), native_url)
                 add_source("solder", solder_url)
                 if len(sources) > 1:
                     download["sources"] = sources
@@ -237,6 +235,9 @@ class BootstrapManifest:
             if group is not None and owner == "launcher":
                 owner = "loader"
             managed = owner == "loader"
+            enforce = str(
+                getattr(package, "enforce", True)
+            ).strip().casefold() not in {"0", "false", "no", "off"}
             if managed and selected_by_default:
                 selected_defaults.append(membership_id)
             if managed and group is None and state == 0:
@@ -249,7 +250,6 @@ class BootstrapManifest:
                 repository_url,
                 modtype,
                 native_downloads,
-                source_mode,
             )
             package_dependencies = []
             for dependency in dependencies.get(
@@ -305,6 +305,7 @@ class BootstrapManifest:
                     "modtype": modtype,
                     "install_owner": owner,
                     "bootstrap_managed": managed,
+                    "enforce": enforce,
                     "url": download["url"],
                     "md5": download["md5"],
                     "filesize": download["filesize"],
@@ -449,6 +450,7 @@ class BootstrapManifest:
             if old and (
                 old["version"] != package["version"]
                 or old["md5"] != package["md5"]
+                or old.get("enforce", True) != package.get("enforce", True)
             ):
                 updated.append({"from": old, "to": package})
         return {

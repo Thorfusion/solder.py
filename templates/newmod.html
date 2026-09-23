@@ -8,6 +8,21 @@
             <label for="pretty_name" class="form-label">Mod Name</label>
             <input type="text" class="form-control" name="pretty_name" id="pretty_name" value="{{request.form.get('pretty_name', '')}}" required onkeyup="toslug('name', 'pretty_name')">
         </div>
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox"
+                name="enforce"
+                id="enforce" value="1"
+                {%if request.method != 'POST' or request.form.get('enforce')%}checked{%endif%}>
+            <label class="form-check-label" for="enforce">
+                Enforce package files on every launch
+            </label>
+            <div class="form-text">
+                Only SolderPy Modpack Loader uses this setting. It is enabled
+                by default. Clear it to let users or mods change the installed
+                files while this package is unchanged. A package update still
+                installs normally and resets its managed files.
+            </div>
+        </div>
         <div class="mb-3">
             <label for="name" class="form-label">Mod Slug</label>
             <input type="text" class="form-control" name="name" id="name" value="{{request.form.get('name', '')}}" required readonly>

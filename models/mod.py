@@ -8,6 +8,7 @@ from mysql.connector import IntegrityError, errorcode
 from werkzeug.utils import secure_filename
 
 from .database import Database
+from .mod_bootstrap_settings import ModBootstrapSettings
 from .modversion import Modversion
 import zipfile
 
@@ -87,6 +88,7 @@ class Mod:
         notes,
         integration_provider=None,
         integration_project_id=None,
+        enforce=True,
     ):
         modtype = normalize_modtype(modtype)
         conn = Database.get_connection()
@@ -114,9 +116,12 @@ class Mod:
                     integration_project_id,
                 ),
             )
+            mod_id = cur.lastrowid
+            if not enforce:
+                ModBootstrapSettings.apply(cur, mod_id, False)
             conn.commit()
             return cls(
-                cur.lastrowid,
+                mod_id,
                 name,
                 description,
                 author,
@@ -140,18 +145,78 @@ class Mod:
             conn.close()
 
     @staticmethod
-    def update(id, name, description, author, link, pretty_name, side, modtype, notes):
+    def update(
+        id,
+        name,
+        description,
+        author,
+        link,
+        pretty_name,
+        side,
+        modtype,
+        notes,
+        enforce=None,
+    ):
         modtype = normalize_modtype(modtype)
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("""UPDATE mods 
-            SET name = %s, description = %s, author = %s, link = %s, updated_at = %s, pretty_name = %s, side = %s, modtype = %s, notes = %s
-            WHERE id = %s;""", (name, description, author, link, now, pretty_name, side, modtype, notes, id))
-        conn.commit()
-        cur.execute("SELECT LAST_INSERT_ID() AS id")
-        id = cur.fetchone()["id"]
-        return None
+        try:
+            cur.execute(
+                """UPDATE mods
+                   SET name = %s, description = %s, author = %s,
+                       link = %s, updated_at = %s, pretty_name = %s,
+                       side = %s, modtype = %s, notes = %s
+                   WHERE id = %s""",
+                (
+                    name,
+                    description,
+                    author,
+                    link,
+                    now,
+                    pretty_name,
+                    side,
+                    modtype,
+                    notes,
+                    id,
+                ),
+            )
+            if enforce is not None:
+                ModBootstrapSettings.apply(
+                    cur, id, bool(enforce)
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
+
+    @staticmethod
+    def set_modtypes(ids, modtype):
+        """Set one system-managed role without rewriting mod metadata."""
+        modtype = normalize_modtype(modtype)
+        ids = tuple(dict.fromkeys(int(value) for value in ids))
+        if not ids:
+            return
+        conn = Database.get_connection()
+        if conn is None:
+            raise RuntimeError("Could not connect to the database.")
+        cur = conn.cursor()
+        now = datetime.datetime.now()
+        try:
+            cur.executemany(
+                "UPDATE mods SET modtype = %s, updated_at = %s WHERE id = %s",
+                [(modtype, now, mod_id) for mod_id in ids],
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def delete_mod(id):
@@ -170,6 +235,9 @@ class Mod:
         cur.execute(
             "DELETE FROM mod_dependencies WHERE mod_id = %s OR dependency_mod_id = %s",
             (id, id),
+        )
+        cur.execute(
+            "DELETE FROM mod_bootstrap_settings WHERE mod_id = %s", (id,)
         )
         cur.execute(
             """DELETE maven_versions FROM maven_versions
@@ -194,6 +262,15 @@ class Mod:
                INNER JOIN modversions
                    ON modversions.id =
                       modversion_download_sources.modversion_id
+               WHERE modversions.mod_id = %s""",
+            (id,),
+        )
+        cur.execute(
+            """DELETE modversion_provider_ids
+               FROM modversion_provider_ids
+               INNER JOIN modversions
+                   ON modversions.id =
+                      modversion_provider_ids.modversion_id
                WHERE modversions.mod_id = %s""",
             (id,),
         )

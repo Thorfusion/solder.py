@@ -35,6 +35,7 @@ Open **New Mod** and complete these fields:
 | Mod Website | Public project or documentation link |
 | Side | Whether the package belongs on the client, server, or both |
 | Type | What kind of Solder package this is |
+| Enforce package files on every launch | Mod-wide SolderPy Modpack Loader policy. Enabled verifies and repairs the installed files on every launch. Disabled allows users or mods to change them while the package is unchanged; a package update still installs normally and resets its managed files. Other downloaders ignore it. |
 | Notes (private) | Administrator-only notes; never returned by the read API |
 
 The slug becomes part of every repository filename and URL. Avoid changing it
@@ -72,12 +73,22 @@ When a manual JAR is uploaded, solder.py packages it as `MOD` because it has
 been detected as a runtime mod. Existing versions with a verified raw JAR hash
 are normalized to `MOD`, except deliberate `BOOTSTRAP` and `LAUNCHER` packages.
 
+The **Enforce package files on every launch** choice belongs to the mod, not an
+individual version, and only SolderPy Modpack Loader uses it. It is enabled by
+default and is returned for every JAR or ZIP version in the dedicated
+bootstrap API. Clear it only when users or mods may change the installed files
+between package updates. While the version, artifact MD5, and install target
+remain unchanged, the Loader then skips inspection and repair for that
+package. A new or updated package is still installed normally and resets its
+managed files. The installed Loader must implement the API field before this
+exception changes its launch behavior.
+
 ## Add versions manually
 
 Open the mod from **Mod Library** and add a version. A normal JAR upload is the
 preferred path: solder.py validates the JAR, gives it a canonical filename,
 wraps it in the normal Solder ZIP, and stores MD5 values for both artifacts.
-Those raw-JAR details allow MCIL, FileDirector, Modpack Director, and Packwiz to install the JAR
+Those raw-JAR details allow MCIL, FileDirector, and Packwiz to install the JAR
 without extracting a Solder ZIP.
 
 Set compatibility deliberately:
@@ -250,16 +261,16 @@ exact-one FileDirector group labels. An exact-one group always retains one
 default choice. An excluded entry must belong to a group so it cannot silently
 become unreachable.
 
-FileDirector, Modpack Director, and MCIL consume these advanced groups. Packwiz and the native
+FileDirector and MCIL consume these advanced groups. Packwiz and the native
 Modrinth index retain their basic optional model; an MRPack using FileDirector
 or MCIL can still carry grouped fallback packages through that downloader.
 Switching a modpack back to Basic is blocked while any membership is Excluded.
 
-For a build used by Technic Launcher, enable **SolderPy Loader** in
+For a build used by Technic Launcher, enable **SolderPy Modpack Loader** in
 Settings, open **Advanced optionals**, and configure **Technic launcher
-delivery**. solder.py downloads and verifies SolderPy Loader and Relauncher,
+delivery**. solder.py downloads and verifies SolderPy Modpack Loader and Relauncher,
 then adds one internal `BOOTSTRAP` package to that build's Technic manifest.
-Technic still installs its `LAUNCHER` package; SolderPy Loader supplies all
+Technic still installs its `LAUNCHER` package; SolderPy Modpack Loader supplies all
 other files and applies either the basic or advanced optional rules through the
 bootstrap API. If the setting or public build becomes unavailable, solder.py
 safely falls back to the normal manifest.
@@ -279,8 +290,11 @@ A practical release flow is:
 For alternative launchers, select **Export** from the build list or the build
 editor. Choose Solder API only or hybrid downloads and then
 choose whether supported metadata is included in the archive or served from
-solder.py. See the [distribution guide](distribution-formats.md) for exact
-format behavior.
+solder.py. Hybrid lets the platform install supported files natively while
+the selected downloader handles the remainder. Solder API only leaves ordinary
+build packages to the downloader. When that is SolderPy Modpack Loader, its API can
+still supply override, Modrinth/Maven, and Solder download URLs. See the
+[distribution guide](distribution-formats.md) for exact format behavior.
 
 ## Delete with care
 

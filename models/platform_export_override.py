@@ -100,6 +100,32 @@ class PlatformExportOverride:
         return cls.get_all(enabled=True)
 
     @classmethod
+    def get_by_modrinth_project_id(cls, project_id, *, enabled=None):
+        project_id = str(project_id or "").strip()
+        if not project_id:
+            return None
+        conn = Database.get_connection()
+        if conn is None:
+            return None
+        cursor = conn.cursor(dictionary=True)
+        try:
+            query = (
+                "SELECT * FROM platform_export_overrides "
+                "WHERE modrinth_project_id = %s"
+            )
+            parameters = [project_id]
+            if enabled is not None:
+                query += " AND enabled = %s"
+                parameters.append(1 if enabled else 0)
+            query += " LIMIT 1"
+            cursor.execute(query, tuple(parameters))
+            row = cursor.fetchone()
+            return cls.from_row(row) if row else None
+        finally:
+            cursor.close()
+            conn.close()
+
+    @classmethod
     def render_manifest(cls):
         mappings = cls.get_all()
         if len(mappings) > MAX_SYNC_MAPPINGS:

@@ -107,9 +107,9 @@ recorded in the ordinary `modversions` table. Technic-compatible API responses
 therefore continue to expose an ordinary Solder config package; this does not
 change Technic Solder's metadata-only/manual-MD5 model.
 
-Packwiz, FileDirector, and Modpack Director remain dynamic public solder.py
+Packwiz and FileDirector remain dynamic public solder.py
 routes. In the Docker setup, clients connect to Caddy and Caddy reverse-proxies
-`/packwiz/*`, `/filedirector/*`, and `/modpackdirector/*` to the API container;
+`/packwiz/*` and `/filedirector/*` to the API container;
 Caddy does not look for those generated responses in the static `/mods`
 directory.
 
@@ -165,7 +165,7 @@ repository origin. Standard timestamped `-SNAPSHOT` filenames are resolved from
 the version-level `maven-metadata.xml`.
 
 Enable **Use the Maven JAR URL directly** on an artifact when its repository is
-publicly reachable over HTTPS. Bootstrap manifests then give SolderPy Loader
+publicly reachable over HTTPS. Bootstrap manifests then give SolderPy Modpack Loader
 the exact Maven artifact URL followed by the Solder-hosted JAR fallback.
 Timestamped snapshots are resolved from version metadata when the manifest is
 generated. Both sources use the raw-JAR MD5 and size recorded during import.
@@ -214,19 +214,22 @@ CurseForge response.
 The following data is not API-derived and may be stored:
 
 - a project ID manually entered by an administrator;
+- a CurseForge file ID manually copied by an administrator for an exact local
+  Modrinth-backed mod version;
 - the installation's server-side API key;
 - a user's own author-upload token and manually entered publishing project ID;
   and
 - local Solder build, package, audit, and archive-digest data.
 
-CurseForge manifest generation must therefore query compatible files at export
-time, match entirely in memory, place the chosen project and file ID only in
-the archive returned by that request, close the response, and discard the
-metadata. Do not retain a server-side copy of the generated manifest. Failed
-or ambiguous matching must stop the export rather than save candidates for
-later selection. solder.py must not download, mirror, proxy, or redistribute a
-CurseForge-hosted mod file; the native manifest leaves delivery to the
-CurseForge-compatible client.
+When no manual file ID exists, CurseForge manifest generation queries compatible
+files at export time, matches entirely in memory, places the chosen project and
+file ID only in the returned archive, closes the response, and discards the
+metadata. API-derived file IDs are never copied into the manual-ID table. Do not
+retain a server-side copy of the generated manifest. Failed or ambiguous
+matching must stop the export rather than save candidates for later selection.
+solder.py must not download, mirror, proxy, or redistribute a CurseForge-hosted
+mod file; the native manifest leaves delivery to the CurseForge-compatible
+client.
 
 The terms also prohibit concealing API access through a proxy or VPN. Hosting
 the management interface behind a VPN is separate, but outbound CurseForge API

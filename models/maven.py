@@ -534,7 +534,7 @@ class MavenArtifact:
             raise MavenError("The Maven artifact no longer exists.")
         if enabled and urlparse(artifact.repository_url).scheme != "https":
             raise MavenError(
-                "SolderPy Loader direct downloads require an HTTPS Maven repository."
+                "SolderPy Modpack Loader direct downloads require an HTTPS Maven repository."
             )
         conn = Database.get_connection()
         cur = conn.cursor()

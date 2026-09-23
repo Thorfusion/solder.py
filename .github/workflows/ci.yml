@@ -22,7 +22,9 @@ jobs:
   test:
     # Keep this name stable: branch protection requires this exact status check.
     name: solder.py tests
-    runs-on: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ubuntu-latest' || 'self-hosted' }}
+    # The Docker smoke tests probe ports published to runner-local loopback.
+    # Keep this job on the same host as its Docker daemon for every event.
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       PIPENV_DONT_LOAD_ENV: "1"

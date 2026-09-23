@@ -11,13 +11,13 @@ write API.
 
 ## Reference client
 
-[SolderPy Loader](https://github.com/Thorfusion/solderpy_loader) implements
+[SolderPy Modpack Loader](https://github.com/Thorfusion/solderpy_loader) implements
 this contract and presents basic and advanced optional choices before mod
 discovery. Its distribution projects are Modrinth `5LpwENAj` and CurseForge
-`1702825`. SolderPy Loader requires Relauncher, published as Modrinth
+`1702825`. SolderPy Modpack Loader requires Relauncher, published as Modrinth
 `zCFNaupz` and CurseForge `1491728`.
 
-SolderPy Loader defaults its local `target` to `auto`. Relauncher detects the
+SolderPy Modpack Loader defaults its local `target` to `auto`. Relauncher detects the
 active client or dedicated-server side before restarting the JVM, allowing the
 loader to request the matching `target=client` or `target=server` manifest.
 Administrators can set an explicit target as an override.
@@ -40,8 +40,8 @@ The route accepts these query arguments:
 | Argument | Values | Default | Meaning |
 | --- | --- | --- | --- |
 | `target` | `client`, `server` | `client` | Filter packages by their configured side. |
-| `source` | `hybrid`, `solder` | `hybrid` | Include verified provider/override fallbacks, or restrict raw JARs to Solder. |
-| `platform` | `modrinth`, `curseforge`, `prism`, `technic` | none | Identify the native platform that installed SolderPy Loader and may own package files. |
+| `source` | `hybrid`, `solder` | `hybrid` | Choose native-platform ownership (`hybrid`) or Loader-owned build packages (`solder`). Both retain the same verified JAR URL fallbacks. |
+| `platform` | `modrinth`, `curseforge`, `prism`, `technic` | none | Identify the native platform that installed SolderPy Modpack Loader and may own package files. |
 | `ownership` | `server`, `explicit` | `server` | Generated exports use `explicit`; it keeps the complete graph Loader-owned until the exported Loader config applies its exact native membership list. |
 | `from` | Build version, `recommended`, or `latest` | none | Add changes from an installed build. |
 | `cid` | Client UUID | none | Read a private modpack associated with that client. |
@@ -135,6 +135,7 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "modtype": "MOD",
       "install_owner": "loader",
       "bootstrap_managed": true,
+      "enforce": true,
       "url": "https://cdn.example.com/mods/example-library/example-library-1.20.1-4.0.jar",
       "md5": "0123456789abcdef0123456789abcdef",
       "filesize": 24680,
@@ -184,6 +185,7 @@ This abbreviated example is a complete, valid schema-version 1 response:
       "modtype": "CONFIG",
       "install_owner": "loader",
       "bootstrap_managed": true,
+      "enforce": false,
       "url": "https://cdn.example.com/mods/standard-world/standard-world-1.0.zip",
       "md5": "fedcba9876543210fedcba9876543210",
       "filesize": 6543,
@@ -274,16 +276,20 @@ reasonable client download limit while streaming and still verify the MD5. A
 instruction, preserving legacy build compatibility while making the extra
 extraction cost explicit.
 
-A raw JAR in `source=hybrid` may include an ordered `download.sources` list. A per-version HTTPS
-override is first, a native Modrinth or enabled Maven source is second, and the
-Solder-hosted JAR is last. SolderPy Loader retries the next source after a
+A Loader-owned raw JAR may include an ordered `download.sources` list in
+**either** source mode. A per-version HTTPS override is first, a saved
+Modrinth or enabled direct Maven URL is second, and the Solder-hosted JAR is
+last. SolderPy Modpack Loader retries the next source after a
 transport, size, or MD5 failure. Every source represents the same bytes and
 therefore uses the one parent `download.md5` and `download.filesize`; renaming
 a file does not change either value. `download.url` remains the Solder-hosted
 URL, so clients that do not understand `sources` retain the existing behavior.
 If solder.py cannot use saved native-provider metadata, it still returns the
-override, when configured, and the Solder URL. `source=solder` returns only the
-Solder URL. The response always retains the complete dependency graph. Each
+override, when configured, and the Solder URL. `source=solder` means the
+platform is not asked to install ordinary build packages natively; it does
+**not** mean their bytes must come from Solder hosting. `source=hybrid` lets
+the platform install exact native matches and leaves the rest to the Loader.
+The response always retains the complete dependency graph. Each
 package has an `install_owner` of `loader`, `launcher`, or `ignored`, with the
 legacy `bootstrap_managed` boolean mirroring whether that value is `loader`.
 Launcher-owned dependencies therefore remain visible and can satisfy closure
@@ -296,8 +302,29 @@ finished export plan, not merely provider metadata: if native resolution falls
 back to Solder, the package remains Loader-owned. Advanced-group choices always
 remain Loader-owned because native manifests cannot enforce their selection
 rules. `platform=technic` is server-owned: Technic owns ungrouped required
-packages only when that build uses Technic delivery, while SolderPy Loader owns
+packages only when that build uses Technic delivery, while SolderPy Modpack Loader owns
 optional and advanced content.
+
+`enforce` is a mod-wide SolderPy Modpack Loader package
+policy and defaults to `true`. Other downloaders and export formats ignore it.
+It applies to every version of that mod and to both JAR and ZIP downloads.
+When true, SolderPy Modpack Loader retains its normal behavior: it verifies the
+package's owned files on every launch and repairs missing or modified outputs.
+When false, the Loader should trust an existing receipt without inspecting or
+repairing those outputs while the package version, artifact MD5, and install
+target remain unchanged. Users and mods may therefore change or remove the
+installed files between package updates. Initial installation and a change to
+the package version, artifact, or install target still install the package
+normally and reset its managed files to the new package. This exception is
+mainly useful for user-editable config packs. It does not weaken path
+validation, size checks, MD5 verification, transaction safety, or ownership
+checks when the package is installed or updated.
+
+The field is additive to schema version 1. Older SolderPy Modpack Loader
+versions that do not recognize it retain their existing launch-enforcement
+behavior.
+The installed loader must support the field before administrators can rely on
+the unchanged-launch exception.
 
 `download.format: solder_zip` is used by `CONFIG`, `RES`, `NONE`, and other
 non-mod content. Download the archive, verify its byte size when supplied,
@@ -386,6 +413,7 @@ A bootstrap mod is compatible with schema version 1 when it:
 - keys saved choices by group key and package slug;
 - closes required dependencies before downloading;
 - honors `target`, `source`, `platform`, side filtering, `install_owner`, and the export's exact native membership list;
+- honors the mod-wide `enforce` package policy;
 - verifies each ZIP's size and MD5 and extracts it safely;
 - tracks extracted-file ownership for reliable removal and rollback;
 - handles ETags, resolved channels, and the optional `changes` summary;

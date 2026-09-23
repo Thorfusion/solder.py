@@ -407,12 +407,18 @@ class Build:
                            mods.side, mods.modtype,
                            mods.integration_provider,
                            mods.integration_project_id,
+                           COALESCE(
+                               mod_bootstrap_settings.enforce,
+                               1
+                           ) AS enforce,
                            build_modversion.optional,
                            build_modversion.id AS membership_id
                     FROM modversions
                     INNER JOIN build_modversion
                         ON modversions.id = build_modversion.modversion_id
                     INNER JOIN mods ON modversions.mod_id = mods.id
+                    LEFT JOIN mod_bootstrap_settings
+                        ON mod_bootstrap_settings.mod_id = mods.id
                     {override_join}
                     {source_join}
                     WHERE build_modversion.build_id = %s
@@ -455,6 +461,7 @@ class Build:
                 v.modtype = mv.get("modtype", "MOD")
                 v.integration_provider = mv.get("integration_provider")
                 v.integration_project_id = mv.get("integration_project_id")
+                v.enforce = bool(mv.get("enforce", 1))
                 v.download_source_provider = mv.get("download_source_provider")
                 v.download_source_url = mv.get("download_source_url")
                 v.download_source_filename = mv.get("download_source_filename")

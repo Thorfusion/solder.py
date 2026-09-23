@@ -1033,6 +1033,10 @@ class Modversion:
             (id,),
         )
         cur.execute(
+            "DELETE FROM modversion_provider_ids WHERE modversion_id = %s",
+            (id,),
+        )
+        cur.execute(
             "DELETE FROM modversion_minecraft_versions WHERE modversion_id = %s",
             (id,),
         )

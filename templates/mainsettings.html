@@ -146,17 +146,23 @@
             <label class="form-check-label" for="mcil_enabled">
                 Enable MCInstance Loader exports
             </label>
+            <div class="form-text">
+                Enabling it imports the MCInstance Loader Modrinth project into
+                the mod library as a BOOTSTRAP entry.
+            </div>
         </div>
         <div class="form-check form-switch mb-3">
             <input class="form-check-input" type="checkbox" role="switch"
                 id="solderpy_loader_enabled" name="solderpy_loader_enabled"
                 {% if distribution_settings.solderpy_loader_enabled %}checked{% endif %}>
             <label class="form-check-label" for="solderpy_loader_enabled">
-                Enable SolderPy Loader
+                Enable SolderPy Modpack Loader
             </label>
             <div class="form-text">
-                Makes SolderPy Loader available for Technic delivery and as a
+                Makes SolderPy Modpack Loader available for Technic delivery and as a
                 Modrinth, CurseForge, or Prism bootstrap using the dedicated API.
+                Enabling it imports the SolderPy Modpack Loader and Relauncher Modrinth
+                projects into the mod library as BOOTSTRAP entries.
             </div>
         </div>
         <div class="form-check form-switch mb-3">
@@ -174,17 +180,9 @@
             <label class="form-check-label" for="filedirector_enabled">
                 Enable FileDirector files
             </label>
-        </div>
-        <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" role="switch"
-                id="modpack_director_enabled" name="modpack_director_enabled"
-                {% if distribution_settings.modpack_director_enabled %}checked{% endif %}>
-            <label class="form-check-label" for="modpack_director_enabled">
-                Enable Modpack Director exports
-            </label>
             <div class="form-text">
-                Generates compatible bundled or hosted configuration. The
-                official downloader is also available to CurseForge exports.
+                Enabling it imports the FileDirector Modrinth project into the
+                mod library as a BOOTSTRAP entry.
             </div>
         </div>
         <div class="form-check form-switch mb-3">
@@ -203,7 +201,7 @@
                 Enable CurseForge exports
             </label>
             <div class="form-text">
-                {%if curseforge_api_configured%}CURSEFORGE_API_KEY is configured.{%else%}Set CURSEFORGE_API_KEY before enabling this format.{%endif%}
+                {%if curseforge_api_configured%}CURSEFORGE_API_KEY is configured.{%else%}No API key is configured. Exports are available when compatible downloader, dependency, and synced-mod versions have manual CurseForge file IDs.{%endif%}
             </div>
         </div>
         <div class="form-check form-switch mb-3">

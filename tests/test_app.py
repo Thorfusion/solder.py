@@ -341,6 +341,19 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertNotIn("solder.py#installation", layout)
         self.assertNotIn("github.com/Thorfusion/solder.py/blob", layout)
 
+    def test_sidebar_overflow_is_clipped_to_the_viewport(self):
+        layout_css = (
+            Path(__file__).resolve().parents[1]
+            / "static"
+            / "css"
+            / "layout.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(".asideleft,\n.asideright", layout_css)
+        self.assertIn("height: 100vh", layout_css)
+        self.assertIn("max-height: 100vh", layout_css)
+        self.assertIn("overflow: hidden", layout_css)
+
     def test_flash_messages_are_bottom_centered_and_auto_dismiss(self):
         project_root = Path(__file__).resolve().parents[1]
         layout = (project_root / "templates" / "layout.html").read_text(
@@ -759,6 +772,24 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         self.assertIn("LAUNCHER (MODLOADER)", version_source)
         self.assertIn("LAUNCHER (MODLOADER)", new_mod_source)
+        self.assertIn(
+            'name="enforce"', version_source
+        )
+        self.assertIn(
+            "Only SolderPy Modpack Loader uses this setting",
+            version_source,
+        )
+        self.assertIn(
+            "This setting applies to every version of",
+            version_source,
+        )
+        self.assertIn(
+            'name="enforce"', new_mod_source
+        )
+        self.assertIn(
+            "Only SolderPy Modpack Loader uses this setting",
+            new_mod_source,
+        )
         self.assertIn("Launcher (modloader)", library_source)
         self.assertIn('id="dependency_search"', version_source)
         self.assertIn(
@@ -936,7 +967,8 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("Web hosted", export_fields_source)
         self.assertEqual(export_fields_source.count('name="selector"'), 1)
         self.assertIn("MCInstance Loader stores its configuration", export_fields_source)
-        self.assertIn("Hybrid (Modrinth/Curse where mapped)", export_fields_source)
+        self.assertIn("Hybrid (native platform + downloader)", export_fields_source)
+        self.assertIn("saved Modrinth/Maven URL", export_fields_source)
         self.assertIn("Solder API only", export_fields_source)
         self.assertIn("numbered patch", export_fields_source)
 
@@ -982,7 +1014,6 @@ class ApplicationSmokeTests(unittest.TestCase):
                     "solderpy_loader_enabled": True,
                     "packwiz_enabled": True,
                     "filedirector_enabled": False,
-                    "modpack_director_enabled": True,
                     "mrpack_enabled": False,
                     "curseforge_export_enabled": False,
                     "prism_export_enabled": True,
@@ -999,7 +1030,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(b'id="solderpy_loader_enabled"', response.data)
         self.assertIn(b'id="packwiz_enabled"', response.data)
         self.assertIn(b'id="filedirector_enabled"', response.data)
-        self.assertIn(b'id="modpack_director_enabled"', response.data)
         self.assertIn(b'id="mrpack_enabled"', response.data)
         self.assertIn(b'id="curseforge_export_enabled"', response.data)
         self.assertIn(b'id="prism_export_enabled"', response.data)
@@ -1024,29 +1054,36 @@ class ApplicationSmokeTests(unittest.TestCase):
         with (
             patch("asite.Session.verify_session", return_value=True),
             patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Session.get_user_id", return_value=4),
+            patch(
+                "asite.ModIntegration.ensure_bootstrap_projects",
+                return_value=((), 2),
+            ) as ensure_bootstrap,
             patch("asite.DistributionSettings.update_exports") as update,
         ):
             saved = self.client.post(
                 "/mainsettings",
                 data={
                     "export_settings_submit": "1",
+                    "mcil_enabled": "on",
                     "solderpy_loader_enabled": "on",
                     "filedirector_enabled": "on",
-                    "modpack_director_enabled": "on",
                 },
             )
 
         self.assertEqual(saved.status_code, 302)
         self.assertEqual(saved.headers["Location"], "/mainsettings")
         update.assert_called_once_with(
-            mcil=False,
+            mcil=True,
             solderpy_loader=True,
             packwiz=False,
             filedirector=True,
-            modpack_director=True,
             mrpack=False,
             curseforge=False,
             prism=False,
+        )
+        ensure_bootstrap.assert_called_once_with(
+            ("5LpwENAj", "zCFNaupz", "cUtsYbG5", "4dRu1OUz"), 4
         )
 
     def test_environment_settings_can_scan_legacy_jar_packages(self):
@@ -1115,7 +1152,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Modrinth-CurseForge sync", response.data)
         self.assertIn(b"How CurseForge matching works", response.data)
-        self.assertIn(b"No CurseForge file metadata", response.data)
+        self.assertIn(b"manually entered CurseForge file ID", response.data)
         self.assertIn(b"same filename and filesize", response.data)
         self.assertIn(b"CurseForge filename or display name", response.data)
         self.assertIn(b"TX Loader", response.data)
@@ -1544,46 +1581,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn("example-pack-2.0-packwiz.zip", response.headers["Content-Disposition"])
         self.assertEqual(render.call_args.kwargs["source_mode"], "hybrid")
 
-    def test_authenticated_user_can_export_modpack_director(self):
-        with self.client.session_transaction() as flask_session:
-            flask_session["token"] = "valid-test-token"
-
-        build = SimpleNamespace(
-            modpack_slug="example-pack",
-            version="2.0",
-            is_published=True,
-            private=False,
-        )
-        with (
-            patch("asite.DistributionSettings.is_enabled", return_value=True),
-            patch("asite.Session.verify_session", return_value=True),
-            patch("asite.User.get_permission_token", return_value=1),
-            patch("asite.Build.get_modpackid_by_id", return_value=3),
-            patch(
-                "asite.User_modpack.get_user_modpackpermission",
-                return_value=True,
-            ),
-            patch("asite.MCInstanceExport.load", return_value=(build, [])),
-            patch(
-                "asite.PlatformPackExport.render_modpack_director",
-                return_value=io.BytesIO(b"modpack director archive"),
-            ) as render,
-        ):
-            response = self.client.get(
-                "/modpackbuild/7/modpackdirector"
-                "?delivery=hosted&source=hybrid&selector=latest"
-            )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, b"modpack director archive")
-        self.assertIn(
-            "example-pack-2.0-modpack-director.zip",
-            response.headers["Content-Disposition"],
-        )
-        self.assertEqual(render.call_args.kwargs["source_mode"], "hybrid")
-        self.assertEqual(render.call_args.kwargs["delivery"], "hosted")
-        self.assertEqual(render.call_args.kwargs["selector"], "latest")
-
     def test_hosted_filedirector_export_can_follow_latest(self):
         with self.client.session_transaction() as flask_session:
             flask_session["token"] = "valid-test-token"
@@ -1769,6 +1766,41 @@ class ApplicationSmokeTests(unittest.TestCase):
         update.assert_called_once_with(
             12, 9, "https://override.example/mod.jar"
         )
+        clear_caches.assert_called_once_with()
+
+    def test_modversion_management_saves_manual_curseforge_file_id(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        mod = SimpleNamespace(
+            id=9,
+            integration_provider="MODRINTH",
+            integration_project_id="project-id",
+        )
+        version = SimpleNamespace(id=12, mod_id=9)
+        mapping = SimpleNamespace(curseforge_project_id=12345, enabled=True)
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Mod.get_by_id", return_value=mod),
+            patch("asite.Modversion.get_by_id", return_value=version),
+            patch(
+                "asite.PlatformExportOverride.get_by_modrinth_project_id",
+                return_value=mapping,
+            ),
+            patch("asite.ModversionProviderId.save") as save,
+            patch("api.clear_api_caches") as clear_caches,
+        ):
+            response = self.client.post(
+                "/modversion/9/manage/12",
+                data={
+                    "curseforge_file_id_submit": "1",
+                    "curseforge_file_id": "4920730",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        save.assert_called_once_with(12, "CURSEFORGE", 12345, "4920730")
         clear_caches.assert_called_once_with()
 
     def test_authenticated_user_can_export_technic_csv(self):
@@ -1969,7 +2001,9 @@ class ApplicationSmokeTests(unittest.TestCase):
             "modverid": 12,
             "integration_provider": "MODRINTH",
             "integration_version_id": "OLD",
-            "versions": [{"id": 12, "version": "1.0"}],
+            "versions": [
+                {"id": 12, "version": "1.0", "mcversion": "1.21.1"}
+            ],
         }
         stored_update = {
             "id": 42,
@@ -1978,8 +2012,9 @@ class ApplicationSmokeTests(unittest.TestCase):
             "integration_provider": None,
             "integration_version_id": None,
             "versions": [
-                {"id": 22, "version": "2.0"},
-                {"id": 21, "version": "1.0"},
+                {"id": 23, "version": "3.0", "mcversion": None},
+                {"id": 22, "version": "2.0", "mcversion": "1.21.1"},
+                {"id": 21, "version": "1.0", "mcversion": "1.21.1"},
             ],
         }
         provider_current = {
@@ -1991,8 +2026,27 @@ class ApplicationSmokeTests(unittest.TestCase):
             # The provider result is authoritative even if a later local row
             # exists for an integration-managed mod.
             "versions": [
-                {"id": 32, "version": "local-newer"},
-                {"id": 31, "version": "current"},
+                {
+                    "id": 32,
+                    "version": "local-newer",
+                    "mcversion": "1.21.1",
+                },
+                {
+                    "id": 31,
+                    "version": "current",
+                    "mcversion": "1.21.1",
+                },
+            ],
+        }
+        missing_minecraft = {
+            "id": 44,
+            "modid": 12,
+            "modverid": 41,
+            "integration_provider": None,
+            "integration_version_id": None,
+            "versions": [
+                {"id": 42, "version": "2.0", "mcversion": None},
+                {"id": 41, "version": "1.0", "mcversion": "1.21.1"},
             ],
         }
         editor = SimpleNamespace(
@@ -2000,7 +2054,12 @@ class ApplicationSmokeTests(unittest.TestCase):
             packbuild=build,
             packbuildname="Example Pack",
             listmodversions=[],
-            buildlist=[provider_update, stored_update, provider_current],
+            buildlist=[
+                provider_update,
+                stored_update,
+                provider_current,
+                missing_minecraft,
+            ],
             optional_mode=0,
         )
 
@@ -2062,6 +2121,8 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(stored_update["available_version"], "2.0")
         self.assertFalse(provider_current["update_available"])
         self.assertNotIn("available_version", provider_current)
+        self.assertFalse(missing_minecraft["update_available"])
+        self.assertNotIn("available_version", missing_minecraft)
         self.assertIs(render.call_args.kwargs["buildlist"], editor.buildlist)
         materialize.assert_not_called()
         update_all.assert_not_called()
@@ -2394,7 +2455,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         solderpy_downloader = SimpleNamespace(
             key="solderpyloader",
-            label="SolderPy Loader",
+            label="SolderPy Modpack Loader",
             supports_remote_config=True,
             releases=(release,),
         )
@@ -2460,7 +2521,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(b'>FileDirector</option>', response.data)
         self.assertIn(b'value="solderpy"', response.data)
         self.assertIn(b'>Dedicated server</option>', response.data)
-        self.assertIn(b'>Modpack Director</option>', response.data)
         self.assertIn(b'>Packwiz</option>', response.data)
         self.assertIn(b'>Modrinth</option>', response.data)
         self.assertIn(b'>CurseForge</option>', response.data)

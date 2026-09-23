@@ -32,11 +32,16 @@ from models.mod_dependency import (  # noqa: E402
     DuplicateDependencyError,
     ModDependency,
 )
+from models.mod_bootstrap_settings import ModBootstrapSettings  # noqa: E402
 from models.modpack import Modpack  # noqa: E402
 from models.modversion import (  # noqa: E402
     IncompatibleModVersionError,
     MissingDependencyVersionError,
     Modversion,
+)
+from models.modversion_provider_id import (  # noqa: E402
+    ModversionProviderId,
+    ModversionProviderIdError,
 )
 from models.passhasher import Passhasher  # noqa: E402
 from models.session import Session  # noqa: E402
@@ -361,6 +366,35 @@ class ModelSerializationTests(unittest.TestCase):
 
 
 class ModelBehaviorTests(unittest.TestCase):
+    def test_manual_curseforge_file_id_is_validated_and_upserted(self):
+        connection = MagicMock()
+        cursor = connection.cursor.return_value
+        with patch(
+            "models.modversion_provider_id.Database.get_connection",
+            return_value=connection,
+        ):
+            stored = ModversionProviderId.save(
+                12, "CURSEFORGE", "0012345", "004920730"
+            )
+
+        self.assertEqual(stored, "4920730")
+        cursor.execute.assert_called_once()
+        self.assertEqual(
+            cursor.execute.call_args.args[1],
+            (12, "CURSEFORGE", "12345", "4920730"),
+        )
+        connection.commit.assert_called_once_with()
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_manual_curseforge_file_id_rejects_non_numeric_values(self):
+        with self.assertRaisesRegex(
+            ModversionProviderIdError, "numeric CurseForge file ID"
+        ):
+            ModversionProviderId.save(
+                12, "CURSEFORGE", "12345", "not-a-file"
+            )
+
     def test_additive_table_repair_includes_login_throttle(self):
         cursor = MagicMock()
         Database.create_additive_tables(cursor)
@@ -711,6 +745,46 @@ class ModelBehaviorTests(unittest.TestCase):
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
 
+    def test_new_mod_stores_disabled_enforcement_policy_by_mod_id(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.lastrowid = 42
+
+        with patch("models.mod.Database.get_connection", return_value=connection):
+            Mod.new(
+                "config-pack",
+                "Description",
+                "Author",
+                "https://example.test/config",
+                "Config Pack",
+                "BOTH",
+                "CONFIG",
+                "",
+                enforce=False,
+            )
+
+        statements = [call.args[0] for call in cursor.execute.call_args_list]
+        self.assertTrue(
+            any("INSERT INTO mod_bootstrap_settings" in sql for sql in statements)
+        )
+        self.assertEqual(cursor.execute.call_args.args[1], (42,))
+        connection.commit.assert_called_once_with()
+
+    def test_bootstrap_enforcement_policy_defaults_to_enabled(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.fetchone.return_value = None
+
+        with patch(
+            "models.mod_bootstrap_settings.Database.get_connection",
+            return_value=connection,
+        ):
+            enabled = ModBootstrapSettings.get(42)
+
+        self.assertTrue(enabled)
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
     def test_dependency_ensure_reuses_existing_relationship(self):
         with patch.object(
             ModDependency,
@@ -856,6 +930,21 @@ class ModelBehaviorTests(unittest.TestCase):
         self.assertIn(
             "PRIMARY KEY",
             Database.MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL,
+        )
+
+    def test_bootstrap_enforcement_policy_uses_a_mod_wide_sparse_table(self):
+        schema = Database.MOD_BOOTSTRAP_SETTINGS_TABLE_SQL
+
+        self.assertIn("mod_id INT NOT NULL PRIMARY KEY", schema)
+        self.assertIn(
+            "enforce TINYINT(1) NOT NULL DEFAULT 1",
+            schema,
+        )
+        self.assertNotIn(
+            "enforce",
+            "\n".join(
+                query for _table, _column, query in Database.JAR_COLUMN_MIGRATIONS
+            ),
         )
 
     def test_integration_download_metadata_uses_a_sparse_table(self):
@@ -1594,8 +1683,10 @@ class ModelBehaviorTests(unittest.TestCase):
                 "optional": 0,
             }
 
+        disabled_enforcement = modversion_row(10, "example10")
+        disabled_enforcement["enforce"] = 0
         cursor.fetchall.return_value = [
-            modversion_row(10, "example10"),
+            disabled_enforcement,
             modversion_row(2, "Example2"),
             modversion_row(1, "alpha"),
         ]
@@ -1610,8 +1701,11 @@ class ModelBehaviorTests(unittest.TestCase):
             [version.modname for version in versions],
             ["alpha", "Example2", "example10"],
         )
+        self.assertTrue(versions[0].enforce)
+        self.assertFalse(versions[2].enforce)
         query, parameters = cursor.execute.call_args.args
         self.assertIn("mods.side IN ('CLIENT', 'BOTH')", query)
+        self.assertIn("LEFT JOIN mod_bootstrap_settings", query)
         self.assertNotIn("LEFT JOIN modversion_download_overrides", query)
         self.assertNotIn("LEFT JOIN modversion_download_sources", query)
         self.assertEqual(parameters, (1, 0, 0))
@@ -1896,6 +1990,9 @@ class ModelBehaviorTests(unittest.TestCase):
 
         self.assertEqual(updated, 1)
         self.assertEqual(cursor.execute.call_args.args[1], (7,))
+        update_query = cursor.execute.call_args.args[0]
+        self.assertIn("candidate.mcversion IS NOT NULL", update_query)
+        self.assertIn("candidate.mcversion <> ''", update_query)
         cursor.executemany.assert_called_once_with(
             """UPDATE build_modversion
                        SET modversion_id = %s
@@ -1906,6 +2003,7 @@ class ModelBehaviorTests(unittest.TestCase):
         connection.rollback.assert_not_called()
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
+
         add_dependencies.assert_called_once_with(
             cursor, 7, "1.21.1", 1, "FABRIC"
         )

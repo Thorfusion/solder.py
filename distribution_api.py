@@ -203,20 +203,8 @@ def filedirector_bundle(pack_slug, selector, bundle_name):
     )
 
 
-@distribution_api.get(
-    "/modpackdirector/<pack_slug>/<selector>/<bundle_name>.bundle.json"
-)
-def modpack_director_bundle(pack_slug, selector, bundle_name):
-    return _director_bundle(
-        pack_slug,
-        selector,
-        bundle_name,
-        DistributionSettings.MODPACK_DIRECTOR,
-    )
-
-
 def _director_bundle(pack_slug, selector, bundle_name, setting):
-    """Render the shared bundle schema accepted by both Director projects."""
+    """Render a FileDirector bundle for one public build selector."""
     _require_enabled(setting)
     if bundle_name not in {
         "mods",
@@ -283,19 +271,6 @@ def filedirector_remote(pack_slug, selector, bundle_name):
     )
 
 
-@distribution_api.get(
-    "/modpackdirector/<pack_slug>/<selector>/<bundle_name>.remote.json"
-)
-def modpack_director_remote(pack_slug, selector, bundle_name):
-    return _director_remote(
-        pack_slug,
-        selector,
-        bundle_name,
-        DistributionSettings.MODPACK_DIRECTOR,
-        "distribution_api.modpack_director_bundle",
-    )
-
-
 def _director_remote(pack_slug, selector, bundle_name, setting, bundle_endpoint):
     _require_enabled(setting)
     if bundle_name not in {
@@ -331,13 +306,6 @@ def _director_remote(pack_slug, selector, bundle_name, setting, bundle_endpoint)
 def filedirector_version(pack_slug, selector):
     return _director_version(
         pack_slug, selector, DistributionSettings.FILEDIRECTOR
-    )
-
-
-@distribution_api.get("/modpackdirector/<pack_slug>/<selector>/version.txt")
-def modpack_director_version(pack_slug, selector):
-    return _director_version(
-        pack_slug, selector, DistributionSettings.MODPACK_DIRECTOR
     )
 
 

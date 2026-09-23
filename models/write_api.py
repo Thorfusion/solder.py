@@ -9,6 +9,7 @@ from .advanced_optional import AdvancedOptional
 from .build import Build
 from .database import Database
 from .modpack import Modpack
+from .mod_bootstrap_settings import ModBootstrapSettings
 from .modversion import Modversion
 
 
@@ -34,6 +35,15 @@ _WRITABLE_FIELDS = {
     },
     "clients": {"name", "uuid"},
 }
+
+_MOD_WITH_BOOTSTRAP_SQL = """SELECT mods.*,
+          COALESCE(
+              mod_bootstrap_settings.enforce,
+              1
+          ) AS enforce
+   FROM mods
+   LEFT JOIN mod_bootstrap_settings
+       ON mod_bootstrap_settings.mod_id = mods.id"""
 
 
 class WriteApiProblem(ValueError):
@@ -82,7 +92,10 @@ class WriteApiStore:
 
     @classmethod
     def get_mod(cls, slug):
-        return cls._one("SELECT * FROM mods WHERE name = %s", (slug,))
+        return cls._one(
+            _MOD_WITH_BOOTSTRAP_SQL + " WHERE mods.name = %s",
+            (slug,),
+        )
 
     @classmethod
     def get_modversion(cls, mod_id, version):
@@ -447,18 +460,27 @@ class WriteApiStore:
 
     @classmethod
     def create_mod(cls, values, dependency_identifiers=None):
+        values = dict(values)
+        enforce = values.pop("enforce", True)
         try:
             with _transaction() as cur:
                 mod_id = cls._insert(cur, "mods", values)
+                if not enforce:
+                    ModBootstrapSettings.apply(cur, mod_id, False)
                 if dependency_identifiers is not None:
                     cls._sync_dependencies(cur, mod_id, dependency_identifiers)
-                cur.execute("SELECT * FROM mods WHERE id = %s", (mod_id,))
+                cur.execute(
+                    _MOD_WITH_BOOTSTRAP_SQL + " WHERE mods.id = %s",
+                    (mod_id,),
+                )
                 return cur.fetchone()
         except IntegrityError as error:
             cls._duplicate(error, "A mod with that slug already exists.")
 
     @classmethod
     def update_mod(cls, mod, values, dependency_identifiers=None):
+        values = dict(values)
+        enforce = values.pop("enforce", None)
         try:
             with _transaction() as cur:
                 if "name" in values and values["name"] != mod["name"]:
@@ -471,9 +493,16 @@ class WriteApiStore:
                             "A mod slug cannot be changed after versions exist.", 409
                         )
                 cls._update(cur, "mods", mod["id"], values)
+                if enforce is not None:
+                    ModBootstrapSettings.apply(
+                        cur, mod["id"], enforce
+                    )
                 if dependency_identifiers is not None:
                     cls._sync_dependencies(cur, mod["id"], dependency_identifiers)
-                cur.execute("SELECT * FROM mods WHERE id = %s", (mod["id"],))
+                cur.execute(
+                    _MOD_WITH_BOOTSTRAP_SQL + " WHERE mods.id = %s",
+                    (mod["id"],),
+                )
                 return cur.fetchone()
         except IntegrityError as error:
             cls._duplicate(error, "A mod with that slug already exists.")
@@ -510,6 +539,15 @@ class WriteApiStore:
                 (mod_id,),
             )
             cur.execute(
+                """DELETE modversion_provider_ids
+                   FROM modversion_provider_ids
+                   INNER JOIN modversions
+                       ON modversions.id =
+                          modversion_provider_ids.modversion_id
+                   WHERE modversions.mod_id = %s""",
+                (mod_id,),
+            )
+            cur.execute(
                 """DELETE modversion_minecraft_versions
                    FROM modversion_minecraft_versions
                    INNER JOIN modversions
@@ -522,6 +560,10 @@ class WriteApiStore:
             cur.execute(
                 "DELETE FROM mod_dependencies WHERE mod_id = %s OR dependency_mod_id = %s",
                 (mod_id, mod_id),
+            )
+            cur.execute(
+                "DELETE FROM mod_bootstrap_settings WHERE mod_id = %s",
+                (mod_id,),
             )
             cur.execute(
                 """DELETE maven_versions FROM maven_versions
@@ -815,6 +857,11 @@ class WriteApiStore:
             )
             cur.execute(
                 "DELETE FROM modversion_download_sources "
+                "WHERE modversion_id = %s",
+                (modversion_id,),
+            )
+            cur.execute(
+                "DELETE FROM modversion_provider_ids "
                 "WHERE modversion_id = %s",
                 (modversion_id,),
             )

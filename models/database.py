@@ -51,7 +51,9 @@ class Database:
         "mod_dependencies",
         "modversion_download_overrides",
         "modversion_download_sources",
+        "modversion_provider_ids",
         "modversion_minecraft_versions",
+        "mod_bootstrap_settings",
         "publishing_provider_accounts",
         "modpack_publication_targets",
         "modpack_publication_runs",
@@ -193,6 +195,18 @@ class Database:
         INDEX idx_modversion_download_sources_provider (provider, modversion_id)
     )""" + TABLE_OPTIONS
 
+    MODVERSION_PROVIDER_IDS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS modversion_provider_ids (
+        modversion_id INT NOT NULL,
+        provider VARCHAR(32) NOT NULL,
+        project_id VARCHAR(191) NOT NULL,
+        version_id VARCHAR(191) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (modversion_id, provider),
+        INDEX idx_modversion_provider_ids_lookup
+            (provider, project_id, version_id)
+    )""" + TABLE_OPTIONS
+
     MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS modversion_minecraft_versions (
         modversion_id INT NOT NULL,
         minecraft_version VARCHAR(64) NOT NULL,
@@ -201,6 +215,13 @@ class Database:
         PRIMARY KEY (modversion_id, minecraft_version),
         INDEX idx_modversion_minecraft_compatibility
             (minecraft_version, modversion_id)
+    )""" + TABLE_OPTIONS
+
+    MOD_BOOTSTRAP_SETTINGS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS mod_bootstrap_settings (
+        mod_id INT NOT NULL PRIMARY KEY,
+        enforce TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )""" + TABLE_OPTIONS
 
     PUBLISHING_TABLES_SQL = (
@@ -337,7 +358,9 @@ class Database:
         MOD_DEPENDENCIES_TABLE_SQL,
         MODVERSION_DOWNLOAD_OVERRIDES_TABLE_SQL,
         MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL,
+        MODVERSION_PROVIDER_IDS_TABLE_SQL,
         MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL,
+        MOD_BOOTSTRAP_SETTINGS_TABLE_SQL,
         *PUBLISHING_TABLES_SQL,
         PERSONAL_ACCESS_TOKENS_TABLE_SQL,
         USER_MODPACK_TABLE_SQL,

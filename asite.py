@@ -86,9 +86,14 @@ from models.maven import (
     MavenVersion,
 )
 from models.mod import DuplicateModError, Mod, UploadVerificationError
+from models.mod_bootstrap_settings import ModBootstrapSettings
 from models.mod_dependency import DependencyError, ModDependency
 from models.modpack import Modpack
 from models.modversion import IncompatibleModVersionError, MissingDependencyVersionError, Modversion
+from models.modversion_provider_id import (
+    ModversionProviderId,
+    ModversionProviderIdError,
+)
 from models.session import Session
 from models.user import User
 from mysql import connector
@@ -330,6 +335,7 @@ def modversion(id):
         upstream_versions=upstream_versions,
         upstream_error=upstream_error,
         legacy_modversion_adding=legacy_modversion_adding,
+        enforce=ModBootstrapSettings.get(id),
     )
 
 
@@ -388,6 +394,40 @@ def manage_modversion(mod_id, version_id):
                 clear_api_caches()
                 action = "Verified" if was_ready else "Created"
                 flash(f"{action} the raw JAR ({jar_md5}).", "success")
+        elif "curseforge_file_id_submit" in request.form:
+            mapping = None
+            if str(getattr(mod, "integration_provider", "") or "").upper() == MODRINTH:
+                mapping = PlatformPackExport.native_project_mapping(
+                    getattr(mod, "integration_project_id", None)
+                )
+                if mapping is None:
+                    mapping = PlatformExportOverride.get_by_modrinth_project_id(
+                        getattr(mod, "integration_project_id", None)
+                    )
+            try:
+                if mapping is None:
+                    raise ModversionProviderIdError(
+                        "Configure a Modrinth-CurseForge sync mapping for this "
+                        "mod before adding a CurseForge file ID."
+                    )
+                value = request.form.get("curseforge_file_id", "").strip()
+                if value:
+                    ModversionProviderId.save(
+                        version.id,
+                        ModversionProviderId.CURSEFORGE,
+                        mapping.curseforge_project_id,
+                        value,
+                    )
+                    flash("Saved the manual CurseForge file ID.", "success")
+                else:
+                    ModversionProviderId.delete(
+                        version.id, ModversionProviderId.CURSEFORGE
+                    )
+                    flash("Removed the manual CurseForge file ID.", "success")
+            except ModversionProviderIdError as error:
+                flash(str(error), "error")
+            else:
+                clear_api_caches()
         else:
             value = request.form.get("jar_url_override", "")
             try:
@@ -414,6 +454,22 @@ def manage_modversion(mod_id, version_id):
     maven_artifact = None
     if getattr(mod, "integration_provider", None) == MAVEN:
         maven_artifact = MavenArtifact.get_by_mod_id(mod.id)
+    curseforge_mapping = None
+    curseforge_file_id = None
+    if str(getattr(mod, "integration_provider", "") or "").upper() == MODRINTH:
+        curseforge_mapping = PlatformPackExport.native_project_mapping(
+            getattr(mod, "integration_project_id", None)
+        )
+        if curseforge_mapping is None:
+            curseforge_mapping = PlatformExportOverride.get_by_modrinth_project_id(
+                getattr(mod, "integration_project_id", None)
+            )
+        if curseforge_mapping is not None:
+            curseforge_file_id = ModversionProviderId.get(
+                version.id,
+                ModversionProviderId.CURSEFORGE,
+                curseforge_mapping.curseforge_project_id,
+            )
     return render_template(
         "manage_modversion.html",
         mod=mod,
@@ -421,6 +477,8 @@ def manage_modversion(mod_id, version_id):
         mirror_url=public_repo_url,
         builds=version.get_management_builds(),
         maven_artifact=maven_artifact,
+        curseforge_mapping=curseforge_mapping,
+        curseforge_file_id=curseforge_file_id,
         jar_ready=MCInstanceJar.is_ready(version.jarmd5),
     )
 
@@ -570,7 +628,21 @@ def newmodversion(id):
     if "form-submit" in request.form:
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
-        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form.get("notes", request.form.get("internal_note", "")))
+        Mod.update(
+            id,
+            request.form["name"],
+            request.form["description"],
+            request.form["author"],
+            request.form["link"],
+            request.form["pretty_name"],
+            mod_side,
+            mod_type,
+            request.form.get("notes", request.form.get("internal_note", "")),
+            "enforce" in request.form,
+        )
+        from api import clear_api_caches
+
+        clear_api_caches()
         flash("updated " + id, "success")
         return redirect(url_for("asite.modversion", id=id))
     if "deleteversion_submit" in request.form:
@@ -669,7 +741,17 @@ def newmod():
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
         try:
-            Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form.get("notes", request.form.get("internal_note", "")))
+            Mod.new(
+                request.form["name"],
+                request.form["description"],
+                request.form["author"],
+                request.form["link"],
+                request.form["pretty_name"],
+                mod_side,
+                mod_type,
+                request.form.get("notes", request.form.get("internal_note", "")),
+                enforce=("enforce" in request.form),
+            )
         except DuplicateModError:
             flash(
                 f'A mod with the slug "{request.form["name"]}" already exists.',
@@ -1027,7 +1109,7 @@ def maven_artifact(artifact_id):
                 from api import clear_api_caches
 
                 clear_api_caches()
-                flash("updated SolderPy Loader Maven downloads", "success")
+                flash("updated SolderPy Modpack Loader Maven downloads", "success")
             elif "refresh_versions" in request.form:
                 versions = MavenCatalog.refresh(artifact)
                 flash(f"loaded {len(versions)} Maven version(s)", "success")
@@ -1238,18 +1320,46 @@ def mainsettings():
 
     if request.method == "POST" and "export_settings_submit" in request.form:
         try:
+            mcil_enabled = "mcil_enabled" in request.form
+            solderpy_loader_enabled = "solderpy_loader_enabled" in request.form
+            filedirector_enabled = "filedirector_enabled" in request.form
+            imported_bootstrap_projects = 0
+            enabled_bootstrap_downloaders = tuple(
+                key
+                for key, enabled in (
+                    ("solderpyloader", solderpy_loader_enabled),
+                    ("mcil", mcil_enabled),
+                    ("filedirector", filedirector_enabled),
+                )
+                if enabled
+            )
+            bootstrap_project_ids = PlatformPackExport.bootstrap_project_ids(
+                enabled_bootstrap_downloaders
+            )
+            if bootstrap_project_ids:
+                _mods, imported_bootstrap_projects = (
+                    ModIntegration.ensure_bootstrap_projects(
+                        bootstrap_project_ids,
+                        Session.get_user_id(session["token"]),
+                    )
+                )
             DistributionSettings.update_exports(
-                mcil="mcil_enabled" in request.form,
-                solderpy_loader="solderpy_loader_enabled" in request.form,
+                mcil=mcil_enabled,
+                solderpy_loader=solderpy_loader_enabled,
                 packwiz="packwiz_enabled" in request.form,
-                filedirector="filedirector_enabled" in request.form,
-                modpack_director="modpack_director_enabled" in request.form,
+                filedirector=filedirector_enabled,
                 mrpack="mrpack_enabled" in request.form,
                 curseforge="curseforge_export_enabled" in request.form,
                 prism="prism_export_enabled" in request.form,
             )
-            flash("Distribution settings updated.", "success")
-        except DistributionSettingsError as error:
+            message = "Distribution settings updated."
+            if imported_bootstrap_projects:
+                message += (
+                    f" Imported {imported_bootstrap_projects} downloader "
+                    "bootstrap project(s) from Modrinth."
+                )
+            flash(message, "success")
+        except (DistributionSettingsError, IntegrationError) as error:
             ErrorPrinter.message("Unable to update distribution settings", error)
             flash(str(error), "error")
         return redirect(url_for("asite.mainsettings"))
@@ -1841,7 +1951,11 @@ def modpackbuild(id):
     if request.args.get("check_updates") == "1":
         update_memberships = set()
         for combo in editor.buildlist:
-            compatible = combo.get("versions") or []
+            compatible = [
+                version
+                for version in (combo.get("versions") or [])
+                if str(version.get("mcversion") or "").strip()
+            ]
             if (
                 compatible
                 and int(compatible[0]["id"]) != int(combo["modverid"])
@@ -1927,7 +2041,7 @@ def modpackbuild(id):
             server_downloader_error = resolved_error
             if not server_downloaders and server_downloader_error is None:
                 server_downloader_error = (
-                    "No compatible SolderPy Loader release was found for "
+                    "No compatible SolderPy Modpack Loader release was found for "
                     "this build."
                 )
     if (
@@ -2015,7 +2129,7 @@ def advanced_optionals(build_id):
                     DistributionSettings.SOLDERPY_LOADER
                 ):
                     raise TechnicSolderPyLoaderError(
-                        "Enable SolderPy Loader in Settings first."
+                        "Enable SolderPy Modpack Loader in Settings first."
                     )
                 build = Build.get_by_id(build_id)
                 if build is None:
@@ -2043,7 +2157,7 @@ def advanced_optionals(build_id):
             elif "disable_technic_solderpy_loader" in request.form:
                 TechnicSolderPyLoader.disable(build_id)
                 flash(
-                    "SolderPy Loader disabled for this Technic build.",
+                    "SolderPy Modpack Loader disabled for this Technic build.",
                     "success",
                 )
             elif "set_optional_mode" in request.form:
@@ -2091,10 +2205,10 @@ def advanced_optionals(build_id):
             flash(str(error), "error")
         except Exception as error:
             ErrorPrinter.message(
-                "failed to update Technic SolderPy Loader delivery", error
+                "failed to update Technic SolderPy Modpack Loader delivery", error
             )
             flash(
-                "The Technic SolderPy Loader configuration could not be updated. "
+                "The Technic SolderPy Modpack Loader configuration could not be updated. "
                 "Check the server log.",
                 "error",
             )
@@ -2141,7 +2255,7 @@ def advanced_optionals(build_id):
     if request.args.get("solderpy_loader") == "configure":
         if not distribution_settings[DistributionSettings.SOLDERPY_LOADER]:
             solderpy_loader_error = (
-                "Enable SolderPy Loader in Settings first."
+                "Enable SolderPy Modpack Loader in Settings first."
             )
         else:
             spec = PlatformPackExport.downloader_spec("solderpyloader")
@@ -2155,7 +2269,7 @@ def advanced_optionals(build_id):
                     solderpy_loader_releases = available[0].releases
                 else:
                     solderpy_loader_error = (
-                        "No compatible SolderPy Loader release was found for "
+                        "No compatible SolderPy Modpack Loader release was found for "
                         "this Minecraft and modloader version."
                     )
             except PlatformExportError as error:
@@ -2586,50 +2700,6 @@ def export_filedirector(id):
 
     filename = secure_filename(
         f"{build.modpack_slug}-{build.version}-filedirector.zip"
-    )
-    return send_file(
-        archive,
-        mimetype="application/zip",
-        as_attachment=True,
-        download_name=filename,
-    )
-
-
-@asite.route("/modpackbuild/<int:id>/modpackdirector", methods=["GET"])
-def export_modpack_director(id):
-    if not DistributionSettings.is_enabled(
-        DistributionSettings.MODPACK_DIRECTOR
-    ):
-        return render_template("404.html", error="Not Found"), 404
-
-    loaded, failure = _platform_export_build(id)
-    if failure is not None:
-        return failure
-    build, packages = loaded
-    try:
-        source_mode = PlatformPackExport.source_mode(request.args.get("source"))
-        delivery = PlatformPackExport.delivery_mode(request.args.get("delivery"))
-        selector = request.args.get("selector")
-        if delivery == "hosted" and not _hosted_export_allowed(build):
-            return redirect(url_for("asite.modpackbuild", id=id))
-        archive = PlatformPackExport.render_modpack_director(
-            build,
-            packages,
-            public_repo_url,
-            app_url,
-            source_mode=source_mode,
-            delivery=delivery,
-            selector=selector,
-            optional_groups=AdvancedOptional.get_active_groups_for_packages(
-                id, packages
-            ),
-        )
-    except PlatformExportError as error:
-        flash(str(error), "error")
-        return redirect(url_for("asite.modpackbuild", id=id))
-
-    filename = secure_filename(
-        f"{build.modpack_slug}-{build.version}-modpack-director.zip"
     )
     return send_file(
         archive,

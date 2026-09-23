@@ -255,7 +255,7 @@ def _mod_manifest_entries(modversions, build_id, expanded=False, extended=False)
 def _technic_solderpy_loader_manifest(
     modversions, build, modpack, *, target, expanded=False, extended=False
 ):
-    """Let SolderPy Loader own packages for one configured Technic build."""
+    """Let SolderPy Modpack Loader own packages for one configured Technic build."""
     if target != "client":
         return modversions, []
     configuration = TechnicSolderPyLoader.get_active(build.id)
@@ -266,7 +266,7 @@ def _technic_solderpy_loader_manifest(
         == TechnicSolderPyLoader.TECHNIC_DELIVERY
     ):
         # This list already contains only the normal Technic/basic selection.
-        # SolderPy Loader receives optional and excluded packages separately.
+        # SolderPy Modpack Loader receives optional and excluded packages separately.
         retained = modversions
     else:
         # Technic must still install its modloader and the initial bootstrap.
@@ -543,7 +543,7 @@ def modpack_slug_build(slugstring: str, buildstring: str):
 def modpack_bootstrap(slugstring: str, buildstring: str):
     """Return the complete build model for a dedicated bootstrap client.
 
-    This deliberately does not use the Technic/SolderPy Loader transformation:
+    This deliberately does not use the Technic/SolderPy Modpack Loader transformation:
     a Solder-aware client needs every stored package and the source advanced
     selection rules so that it can make the choice itself.
     """

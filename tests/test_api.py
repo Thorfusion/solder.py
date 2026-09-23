@@ -954,6 +954,7 @@ class ApiTests(unittest.TestCase):
         maven_url = "https://maven.example/releases/ui.jar"
         packages[1].download_source_provider = "MAVEN"
         packages[1].download_source_url = maven_url
+        packages[1].enforce = False
         build = Mock(
             id=7,
             version="42",
@@ -1060,6 +1061,10 @@ class ApiTests(unittest.TestCase):
             by_name["pretty-world"]["download"]["sources"][1],
             {"provider": "maven", "url": maven_url},
         )
+        self.assertTrue(by_name["core"]["enforce"])
+        self.assertFalse(
+            by_name["pretty-world"]["enforce"]
+        )
         self.assertFalse(by_name["modpack"]["bootstrap_managed"])
         self.assertEqual(
             payload["selection_policy"]["required_memberships"], [11]
@@ -1075,6 +1080,42 @@ class ApiTests(unittest.TestCase):
             include_download_overrides=True,
             include_download_sources=True,
         )
+
+        solder_response = self.client.get(
+            "/api/modpack/stable/42/bootstrap?cid=client-123&source=solder"
+        )
+        self.assertEqual(solder_response.status_code, 200)
+        solder_payload = solder_response.get_json()
+        self.assertEqual(solder_payload["source"], "solder")
+        solder_packages = {
+            package["name"]: package for package in solder_payload["packages"]
+        }
+        for name in ("core", "pretty-world"):
+            self.assertEqual(
+                solder_packages[name]["download"]["sources"],
+                by_name[name]["download"]["sources"],
+            )
+
+        for source_mode, expected_owner in (
+            ("hybrid", "launcher"),
+            ("solder", "loader"),
+        ):
+            with self.subTest(source_mode=source_mode):
+                platform_response = self.client.get(
+                    "/api/modpack/stable/42/bootstrap?cid=client-123"
+                    f"&platform=modrinth&source={source_mode}"
+                )
+                self.assertEqual(platform_response.status_code, 200)
+                core = next(
+                    package
+                    for package in platform_response.get_json()["packages"]
+                    if package["name"] == "core"
+                )
+                self.assertEqual(core["install_owner"], expected_owner)
+                self.assertEqual(
+                    core["download"]["sources"][0],
+                    {"provider": "modrinth", "url": modrinth_url},
+                )
 
         conditional = self.client.get(
             "/api/modpack/stable/42/bootstrap?cid=client-123",

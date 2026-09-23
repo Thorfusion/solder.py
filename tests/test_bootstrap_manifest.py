@@ -197,7 +197,7 @@ class BootstrapManifestTests(unittest.TestCase):
         )
         self.assertEqual(download["url"], download["sources"][1]["url"])
 
-    def test_solder_source_ignores_override_and_provider_urls(self):
+    def test_solder_source_keeps_override_provider_and_solder_urls(self):
         selected = package(4, 10, "example-mod")
         selected.integration_provider = "MODRINTH"
         selected.integration_project_id = "project-id"
@@ -217,7 +217,17 @@ class BootstrapManifestTests(unittest.TestCase):
         )
 
         download = manifest["packages"][0]["download"]
-        self.assertNotIn("sources", download)
+        self.assertEqual(
+            download["sources"],
+            [
+                {"provider": "override", "url": "https://override.example/mod.jar"},
+                {"provider": "modrinth", "url": "https://cdn.modrinth.com/mod.jar"},
+                {
+                    "provider": "solder",
+                    "url": "https://cdn.example.test/mods/example-mod/example-mod-1.0.jar",
+                },
+            ],
+        )
         self.assertEqual(
             download["url"],
             "https://cdn.example.test/mods/example-mod/example-mod-1.0.jar",
@@ -234,35 +244,38 @@ class BootstrapManifestTests(unittest.TestCase):
         selected.jar_url_override = "https://override.example/mod.jar"
         maven_url = "https://maven.example/releases/mod-1.0.jar"
 
-        manifest = BootstrapManifest.render(
-            modpack(),
-            build(1, "1.0"),
-            [selected],
-            [],
-            "https://cdn.example.test/mods/",
-            {},
-            native_downloads={
-                ("MAVEN", "7", "version-id"): maven_url
-            },
-        )
+        for source_mode in ("hybrid", "solder"):
+            with self.subTest(source_mode=source_mode):
+                manifest = BootstrapManifest.render(
+                    modpack(),
+                    build(1, "1.0"),
+                    [selected],
+                    [],
+                    "https://cdn.example.test/mods/",
+                    {},
+                    native_downloads={
+                        ("MAVEN", "7", "version-id"): maven_url
+                    },
+                    source_mode=source_mode,
+                )
 
-        self.assertEqual(
-            manifest["packages"][0]["download"]["sources"],
-            [
-                {
-                    "provider": "override",
-                    "url": "https://override.example/mod.jar",
-                },
-                {"provider": "maven", "url": maven_url},
-                {
-                    "provider": "solder",
-                    "url": (
-                        "https://cdn.example.test/mods/example-mod/"
-                        "example-mod-1.0.jar"
-                    ),
-                },
-            ],
-        )
+                self.assertEqual(
+                    manifest["packages"][0]["download"]["sources"],
+                    [
+                        {
+                            "provider": "override",
+                            "url": "https://override.example/mod.jar",
+                        },
+                        {"provider": "maven", "url": maven_url},
+                        {
+                            "provider": "solder",
+                            "url": (
+                                "https://cdn.example.test/mods/example-mod/"
+                                "example-mod-1.0.jar"
+                            ),
+                        },
+                    ],
+                )
 
     def test_config_download_remains_a_solder_zip(self):
         selected = package(4, 10, "config-pack")
@@ -281,6 +294,25 @@ class BootstrapManifestTests(unittest.TestCase):
         self.assertTrue(result["url"].endswith("config-pack-1.0.zip"))
         self.assertEqual(result["download"]["format"], "solder_zip")
         self.assertEqual(result["download"]["extract_to"], ".")
+        self.assertTrue(result["enforce"])
+
+    def test_package_can_disable_launch_enforcement(self):
+        selected = package(4, 10, "config-pack")
+        selected.modtype = "CONFIG"
+        selected.enforce = False
+
+        manifest = BootstrapManifest.render(
+            modpack(),
+            build(1, "1.0"),
+            [selected],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+        )
+
+        self.assertFalse(
+            manifest["packages"][0]["enforce"]
+        )
 
     def test_build_local_ids_do_not_report_selection_change(self):
         previous = BootstrapManifest.render(
@@ -332,6 +364,35 @@ class BootstrapManifestTests(unittest.TestCase):
 
         self.assertTrue(changes["selection_changed"])
         self.assertEqual(changes["updated"], [])
+
+    def test_enforcement_policy_change_is_reported_as_package_update(self):
+        previous_package = package(4, 10, "config-pack")
+        current_package = package(4, 10, "config-pack")
+        current_package.enforce = False
+        previous = BootstrapManifest.render(
+            modpack(),
+            build(1, "1.0"),
+            [previous_package],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+        )
+        current = BootstrapManifest.render(
+            modpack(),
+            build(2, "2.0"),
+            [current_package],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+        )
+
+        changes = BootstrapManifest.changes(previous, current)
+
+        self.assertEqual(len(changes["updated"]), 1)
+        self.assertEqual(changes["updated"][0]["to"]["name"], "config-pack")
+        self.assertFalse(
+            changes["updated"][0]["to"]["enforce"]
+        )
 
 
 if __name__ == "__main__":

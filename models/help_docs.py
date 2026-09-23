@@ -37,7 +37,7 @@ HELP_DOCUMENTS = (
     HelpDocument(
         "distribution-formats",
         "Distribution formats",
-        "Export servers, MCIL, FileDirector, Modpack Director, Packwiz, Modrinth and CurseForge packs.",
+        "Export servers, MCIL, FileDirector, Packwiz, Modrinth and CurseForge packs.",
         "distribution-formats.md",
     ),
     HelpDocument(

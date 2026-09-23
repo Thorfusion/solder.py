@@ -105,10 +105,10 @@ outside the management interface.
 
 ### More distribution formats
 
-A build can be exported as CSV, MCInstance Loader, FileDirector, Modpack Director, Packwiz,
+A build can be exported as CSV, MCInstance Loader, FileDirector, Packwiz,
 Modrinth MRPack, CurseForge pack, or a directly importable Prism Launcher
 instance. Exports can use only Solder-hosted files or use exact Modrinth files
-where mappings exist. Packwiz, FileDirector, and Modpack Director can be served as web-hosted
+where mappings exist. Packwiz and FileDirector can be served as web-hosted
 metadata; supported archives can instead include their configuration.
 
 Global Modrinth-CurseForge sync mappings can map a bootstrap mod's Modrinth project to

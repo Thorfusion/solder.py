@@ -1,4 +1,4 @@
-"""SolderPy Loader bootstrap package exposed through the Technic read API."""
+"""SolderPy Modpack Loader bootstrap package exposed through the Technic read API."""
 
 from dataclasses import dataclass
 import hashlib
@@ -35,7 +35,7 @@ class TechnicSolderPyLoader:
         mode = str(value or cls.LOADER_DELIVERY).strip().upper()
         if mode not in {cls.LOADER_DELIVERY, cls.TECHNIC_DELIVERY}:
             raise TechnicSolderPyLoaderError(
-                "Choose either Technic Solder API or SolderPy Loader delivery."
+                "Choose either Technic Solder API or SolderPy Modpack Loader delivery."
             )
         return mode
 
@@ -110,7 +110,7 @@ class TechnicSolderPyLoader:
         """Materialize and remember one self-contained Technic bootstrap ZIP."""
         if getattr(selected, "key", None) != "solderpyloader":
             raise TechnicSolderPyLoaderError(
-                "Select a SolderPy Loader release for Technic delivery."
+                "Select a SolderPy Modpack Loader release for Technic delivery."
             )
         if (
             not bool(getattr(build, "is_published", False))
@@ -119,18 +119,18 @@ class TechnicSolderPyLoader:
             or bool(getattr(modpack, "private", False))
         ):
             raise TechnicSolderPyLoaderError(
-                "SolderPy Loader requires a published, public build and modpack."
+                "SolderPy Modpack Loader requires a published, public build and modpack."
             )
 
         version_id = str(getattr(selected.release, "selector", "") or "")
         version_name = str(getattr(selected.release, "version", "") or "")
         if not version_id or len(version_id) > 64 or not version_name:
             raise TechnicSolderPyLoaderError(
-                "Modrinth returned an invalid SolderPy Loader version."
+                "Modrinth returned an invalid SolderPy Modpack Loader version."
             )
         if len(version_name) > 255:
             raise TechnicSolderPyLoaderError(
-                "The SolderPy Loader version name is too long."
+                "The SolderPy Modpack Loader version name is too long."
             )
 
         delivery_mode = cls.normalize_delivery_mode(delivery_mode)
@@ -184,7 +184,7 @@ class TechnicSolderPyLoader:
             conn = Database.get_connection()
             if conn is None:
                 raise TechnicSolderPyLoaderError(
-                    "Could not save the Technic SolderPy Loader configuration."
+                    "Could not save the Technic SolderPy Modpack Loader configuration."
                 )
             cursor = conn.cursor()
             try:
@@ -312,7 +312,7 @@ class TechnicSolderPyLoader:
         conn = Database.get_connection()
         if conn is None:
             raise TechnicSolderPyLoaderError(
-                "Could not disable Technic SolderPy Loader delivery."
+                "Could not disable Technic SolderPy Modpack Loader delivery."
             )
         cursor = conn.cursor()
         try:
@@ -347,10 +347,10 @@ class TechnicSolderPyLoader:
         if expanded:
             entry.update(
                 {
-                    "pretty_name": "SolderPy Loader bootstrap",
+                    "pretty_name": "SolderPy Modpack Loader bootstrap",
                     "author": "Thorfusion",
                     "description": (
-                        "Installs SolderPy Loader, Relauncher, and this build's "
+                        "Installs SolderPy Modpack Loader, Relauncher, and this build's "
                         "bootstrap API configuration."
                     ),
                     "link": "https://github.com/Thorfusion/solderpy_loader",

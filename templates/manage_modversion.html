@@ -61,7 +61,7 @@
 
     <div class="card mb-3">
             <div class="card-body">
-            <h5 class="card-title">SolderPy Loader JAR source override</h5>
+            <h5 class="card-title">SolderPy Modpack Loader JAR source override</h5>
             <p class="text-muted">This HTTPS URL has the highest priority. A native Maven or Modrinth URL is tried next when available, followed by the Solder-hosted JAR. Before saving, solder.py downloads the override and requires it to match the stored JAR MD5.</p>
             <form method="post">
                 <label class="form-label" for="jar_url_override">Override JAR URL</label>
@@ -75,6 +75,30 @@
             {%endif%}
         </div>
     </div>
+
+    {%if curseforge_mapping%}
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">CurseForge sync</h5>
+            <p class="text-muted">
+                This Modrinth project is mapped to CurseForge project
+                <strong>{{curseforge_mapping.curseforge_project_id}}</strong>.
+                Enter the numeric CurseForge file ID for this exact version to
+                include it in CurseForge manifests without looking it up through
+                the CurseForge API.
+            </p>
+            {%if not curseforge_mapping.enabled%}
+            <div class="alert alert-warning py-2">This sync mapping is disabled, so exports will not use it until it is enabled.</div>
+            {%endif%}
+            <form method="post">
+                <label class="form-label" for="curseforge_file_id">CurseForge file ID</label>
+                <input class="form-control" type="number" name="curseforge_file_id" id="curseforge_file_id" min="1" step="1" value="{{curseforge_file_id or ''}}" placeholder="4920730">
+                <div class="form-text">This value is trusted as entered and cannot be verified without API access. Leave empty and save to remove it; automatic API matching remains the fallback when no manual ID is stored.</div>
+                <button class="btn btn-success mt-3" type="submit" name="curseforge_file_id_submit" value="1">Save CurseForge file ID</button>
+            </form>
+        </div>
+    </div>
+    {%endif%}
 
     <h4>Used by builds</h4>
     {%if builds%}
