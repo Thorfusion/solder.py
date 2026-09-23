@@ -5,21 +5,27 @@
     gap: 0.5vw;
 }
 
+.asideleft,
+.asideright {
+    align-self: start;
+    height: 100vh;
+    max-height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+    position: sticky;
+    top: 0;
+}
+
 .asideleft {
     grid-column: 1;
     grid-row: 1;
-    top: 0;
     left: 0;
-    position: sticky;
 }
 
 .asideright {
     grid-column: 3;
     grid-row: 1;
-    top: 0;
     right: 0;
-    position: sticky;
-    height: 100vh;
     min-width: 12em;
     padding-left: 0.5vw;
     padding-right: 0.5vw;

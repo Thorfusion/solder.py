@@ -341,6 +341,19 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertNotIn("solder.py#installation", layout)
         self.assertNotIn("github.com/Thorfusion/solder.py/blob", layout)
 
+    def test_sidebar_overflow_is_clipped_to_the_viewport(self):
+        layout_css = (
+            Path(__file__).resolve().parents[1]
+            / "static"
+            / "css"
+            / "layout.css"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(".asideleft,\n.asideright", layout_css)
+        self.assertIn("height: 100vh", layout_css)
+        self.assertIn("max-height: 100vh", layout_css)
+        self.assertIn("overflow: hidden", layout_css)
+
     def test_flash_messages_are_bottom_centered_and_auto_dismiss(self):
         project_root = Path(__file__).resolve().parents[1]
         layout = (project_root / "templates" / "layout.html").read_text(
