@@ -313,6 +313,9 @@ def _mod_json(row):
     )
     result = {field: row.get(field) for field in fields}
     result["type"] = result["modtype"]
+    result["replace_on_launch_and_update"] = bool(
+        row.get("replace_on_launch_and_update", True)
+    )
     result["dependencies"] = ModDependency.get_by_mod_api(row["id"])
     return result
 
@@ -609,6 +612,15 @@ def _mod_values(data, *, partial=False):
     if modtype is not _MISSING:
         modtype = normalize_modtype(modtype)
     _include(values, "modtype", modtype)
+    _include(
+        values,
+        "replace_on_launch_and_update",
+        _boolean(
+            data,
+            "replace_on_launch_and_update",
+            _MISSING if partial else True,
+        ),
+    )
     return values
 
 

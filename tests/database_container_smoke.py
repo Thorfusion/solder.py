@@ -606,7 +606,7 @@ def verify_fresh_schema(database_container: str) -> None:
     )
     if technic_solderpy_loader_table_count != "1":
         raise AssertionError(
-            "Fresh schema did not create Technic SolderPy Loader settings"
+            "Fresh schema did not create Technic SolderPy Modpack Loader settings"
         )
     technic_delivery_column_count = mysql(
         database_container,
@@ -2187,7 +2187,7 @@ def test_fixture(image: str, fixture: Path | None, migrate: bool) -> None:
         )
         if technic_solderpy_loader_table_count != "1":
             raise AssertionError(
-                "Application startup did not create Technic SolderPy Loader settings"
+                "Application startup did not create Technic SolderPy Modpack Loader settings"
             )
         technic_delivery_column_count = mysql(
             database_container,

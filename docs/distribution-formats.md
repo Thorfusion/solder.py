@@ -1,7 +1,7 @@
 # Distribution usage and format guide
 
 solder.py keeps the Technic Solder API as its primary distribution interface,
-but the same build can also be exported for SolderPy Loader, MCInstance Loader,
+but the same build can also be exported for SolderPy Modpack Loader, MCInstance Loader,
 FileDirector, Packwiz, Modrinth, CurseForge, or Prism
 Launcher. This guide covers both the management workflow and the files each
 format receives.
@@ -11,13 +11,13 @@ format receives.
 | Output | Use it for | Delivery |
 | --- | --- | --- |
 | CSV | Auditing a build or moving a simple mod list into another tool | Downloaded CSV |
-| SolderPy Loader | Runtime installation from the dedicated bootstrap API, including interactive basic and advanced optionals | Dedicated configuration ZIP, or Loader delivery through Modrinth, CurseForge, Prism, or Technic |
-| Dedicated server | A small, updateable server installation backed by SolderPy Loader | Downloaded ZIP containing the bootstrap JARs and the build's server launcher JAR |
+| SolderPy Modpack Loader | Runtime installation from the dedicated bootstrap API, including interactive basic and advanced optionals | Dedicated configuration ZIP, or Loader delivery through Modrinth, CurseForge, Prism, or Technic |
+| Dedicated server | A small, updateable server installation backed by SolderPy Modpack Loader | Downloaded ZIP containing the bootstrap JARs and the build's server launcher JAR |
 | MCInstance Loader (MCIL) | A self-contained MCIL pack with downloadable mods and bundled overrides | Downloaded `.mcinstance` archive |
 | FileDirector | Installing individual files or Solder ZIPs with optional and side metadata | Downloaded config ZIP or hosted config |
 | Packwiz | A standard Packwiz pack made from raw JAR-ready mods | Downloaded metadata ZIP or hosted metadata |
 | Modrinth | A Modrinth `.mrpack`, with exact Modrinth files kept native | Downloaded `.mrpack` archive |
-| CurseForge | A CurseForge pack that bootstraps SolderPy Loader, MCIL, or FileDirector | Downloaded CurseForge ZIP |
+| CurseForge | A CurseForge pack that bootstraps SolderPy Modpack Loader, MCIL, or FileDirector | Downloaded CurseForge ZIP |
 | Prism Launcher | A directly importable bootstrap or self-contained instance | Downloaded Prism instance ZIP |
 
 The Technic API remains the right choice for Technic Launcher. Its builds still
@@ -35,7 +35,7 @@ The exporters use these application settings:
 | --- | --- |
 | `PUBLIC_REPO_LOCATION` | Public HTTP or HTTPS base URL from which players can download Solder ZIPs and raw JARs |
 | `MD5_REPO_LOCATION` | Server-side repository path or URL used to inspect and hash existing packages; a local path is allowed |
-| `APP_URL` | Public HTTP or HTTPS URL of solder.py, used by SolderPy Loader and in hosted FileDirector pointers |
+| `APP_URL` | Public HTTP or HTTPS URL of solder.py, used by SolderPy Modpack Loader and in hosted FileDirector pointers |
 | `CURSEFORGE_API_KEY` | CurseForge third-party API key used for automatic CurseForge file and downloader-version lookup; manually mapped version IDs do not use it |
 
 `PUBLIC_REPO_LOCATION` and `MD5_REPO_LOCATION` deliberately serve different
@@ -48,7 +48,7 @@ solder.py application, including `/packwiz/*` and `/filedirector/*`.
 
 All distribution formats are disabled by default. Open **Settings > Env
 Settings**, enable each required format, and select **Save distribution
-settings**. SolderPy Loader, MCInstance Loader, Packwiz, FileDirector, Modpack
+settings**. SolderPy Modpack Loader, MCInstance Loader, Packwiz, FileDirector, Modpack
 Director, Modrinth MRPack, CurseForge, and Prism Launcher have independent
 switches.
 
@@ -148,10 +148,10 @@ state. The **Advanced optionals** page stores named groups
 while retaining one Technic/basic state per configured entry:
 `0` is required, `1` is optional, and `2` is excluded. State `2` is never
 returned to Technic, Packwiz, or the native MRPack file list. It remains
-available to SolderPy Loader, FileDirector, or MCIL only when
+available to SolderPy Modpack Loader, FileDirector, or MCIL only when
 assigned to an active group.
 
-SolderPy Loader obtains all optional definitions and defaults from the
+SolderPy Modpack Loader obtains all optional definitions and defaults from the
 bootstrap API and presents them interactively before mod discovery.
 FileDirector renders independent choices as checkboxes and
 exact-one named groups as radio choices. MCIL renders every named group as a separate menu,
@@ -161,10 +161,10 @@ blocked until all excluded entries have been changed to required or optional.
 While in Basic mode, the page lists only the build's existing legacy optional
 entries (`optional = 1`), regardless of the saved advanced work list.
 
-### SolderPy Loader in Technic Launcher
+### SolderPy Modpack Loader in Technic Launcher
 
-For a public, published build, the optionals page can enable SolderPy Loader
-inside Technic Launcher. Select a compatible SolderPy Loader release from
+For a public, published build, the optionals page can enable SolderPy Modpack Loader
+inside Technic Launcher. Select a compatible SolderPy Modpack Loader release from
 Modrinth. solder.py verifies both its JAR and required Relauncher JAR, then
 writes one internal Solder ZIP containing both JARs and
 `config/solderpy-loader.json`. This is a virtual API entry, not a mod in the
@@ -172,16 +172,16 @@ management library.
 
 Choose **Technic Solder API** when configuring the build to let Technic install
 the normal state `0` required packages, its `LAUNCHER` package such as the
-legacy `bin/modpack.jar`, and the `BOOTSTRAP` entry. SolderPy Loader then obtains
+legacy `bin/modpack.jar`, and the `BOOTSTRAP` entry. SolderPy Modpack Loader then obtains
 only state `1` optional and state `2` excluded content from the bootstrap API.
 This is the smaller Loader workload and keeps most file delivery on Technic's
 native Solder path.
 
-Choose **SolderPy Loader** to retain the alternative behavior: Technic installs
+Choose **SolderPy Modpack Loader** to retain the alternative behavior: Technic installs
 only the `LAUNCHER` and `BOOTSTRAP` entries, while Loader obtains all other
 packages from the bootstrap API. Both choices avoid duplicate installs and use
 the same advanced optional rules. Existing configured builds keep this Loader
-mode until changed. Disabling SolderPy Loader exports, or making the build or
+mode until changed. Disabling SolderPy Modpack Loader exports, or making the build or
 modpack private, automatically restores normal Technic Solder delivery.
 
 Activating this delivery always disables the modpack's legacy Technic optional
@@ -228,14 +228,14 @@ CurseForge.
 The window contains a shared group of settings:
 
 - **Download source — Solder API only** keeps ordinary build packages out of
-  the platform's native file list. With SolderPy Loader, its bootstrap API owns
+  the platform's native file list. With SolderPy Modpack Loader, its bootstrap API owns
   those packages and can offer a verified HTTPS override, saved Modrinth or
   direct Maven URL, then the Solder-hosted JAR as fallback. "API only" describes
   who manages the download, not a requirement to download every byte from
   `PUBLIC_REPO_LOCATION`.
 - **Download source — Hybrid** combines native platform downloads for exact
   compatible mappings with downloader-managed delivery for the remaining
-  packages. SolderPy Loader uses the same ordered URL choices for packages it
+  packages. SolderPy Modpack Loader uses the same ordered URL choices for packages it
   owns in either mode.
 - **Modloader version** temporarily overrides the exported Forge, NeoForge, or
   other loader version. It
@@ -249,7 +249,7 @@ The window contains a shared group of settings:
 
 Formats use only the controls they support. CSV ignores the shared controls,
 and MCInstance Loader always includes its configuration in the archive.
-SolderPy Loader always uses its bootstrap API, includes its API configuration, and honors
+SolderPy Modpack Loader always uses its bootstrap API, includes its API configuration, and honors
 the selected build channel. Prism uses source and delivery when MCIL or
 FileDirector is selected, and still uses a temporary modloader-version
 override when one is entered. Modrinth and CurseForge also show a compatible
@@ -259,13 +259,13 @@ MCIL, FileDirector, and Packwiz write direct download URLs
 into their generated files; they do not consult the SolderPy bootstrap API.
 For those formats, Solder API only uses the Solder repository URLs and Hybrid
 may use exact supported provider URLs. The broader API URL fallbacks above
-apply specifically when SolderPy Loader handles a package.
+apply specifically when SolderPy Modpack Loader handles a package.
 
 Hybrid generation resolves exact platform mappings when the export is made.
 The upstream filename, URL, hashes, and file size are validated at that time
 and are not duplicated in `modversions`. If a native platform build was already
 published and the Solder build changes, publishing sends the next numbered
-patch. A Solder API only, web-hosted SolderPy Loader export follows the selected
+patch. A Solder API only, web-hosted SolderPy Modpack Loader export follows the selected
 build channel automatically instead.
 
 ## CSV
@@ -279,25 +279,25 @@ mod_name,mod_slug,version,md5,filesize
 This export is always available to an authenticated user with access to the
 modpack and does not require a distribution-format switch.
 
-## SolderPy Loader
+## SolderPy Modpack Loader
 
-Enable **SolderPy Loader** to add **Export SolderPy Loader**, Technic delivery,
+Enable **SolderPy Modpack Loader** to add **Export SolderPy Modpack Loader**, Technic delivery,
 and the Modrinth, CurseForge, and Prism downloader selectors. The dedicated
 export contains configuration only. The launcher-specific exports deliver the
 Loader and Relauncher themselves. The registered projects are Modrinth
 `5LpwENAj` and CurseForge `1702825`; its required Relauncher dependency is
 Modrinth `zCFNaupz` or CurseForge `1491728`.
 
-Saving distribution settings with SolderPy Loader, MCInstance Loader, or
+Saving distribution settings with SolderPy Modpack Loader, MCInstance Loader, or
 FileDirector enabled automatically imports the corresponding Modrinth projects
-into the mod library. SolderPy Loader also imports Relauncher. They are stored
+into the mod library. SolderPy Modpack Loader also imports Relauncher. They are stored
 as `BOOTSTRAP`, so they can hold imported upstream versions and manual
 CurseForge file IDs without being treated as ordinary build content. The
 operation is idempotent: existing linked projects are reused.
 
-SolderPy Loader uses the dedicated bootstrap API, so it supports basic
+SolderPy Modpack Loader uses the dedicated bootstrap API, so it supports basic
 optionals and advanced independent or exact-one groups without generating a
-FileDirector-style package list. Select **Export SolderPy Loader** to download:
+FileDirector-style package list. Select **Export SolderPy Modpack Loader** to download:
 
 ```text
 config/solderpy-loader.json
@@ -307,7 +307,7 @@ config/relauncher/config.cfg  (when Minimum Java Version is set)
 The configuration contains the public `APP_URL`, modpack slug, and selected
 exact build, `latest`, or `recommended` channel. Its target is `auto`, so
 Relauncher selects the client or dedicated-server manifest at launch. Extract
-the ZIP into an instance where SolderPy Loader and Relauncher are already
+the ZIP into an instance where SolderPy Modpack Loader and Relauncher are already
 installed. The build must be published and non-private. The bootstrap API owns
 the complete package plan for this dedicated export: there is no outer native
 platform file list. It requests `source=solder`, but each raw JAR can still
@@ -329,7 +329,7 @@ unsupported Relauncher keys because 1.1.x would treat them as JVM arguments.
 ### Dedicated server export
 
 **Export Server** creates a small server archive instead of copying every mod
-and configuration ZIP into the download. Choose the SolderPy Loader version in
+and configuration ZIP into the download. Choose the SolderPy Modpack Loader version in
 the export window. The resulting archive contains:
 
 ```text
@@ -525,11 +525,11 @@ an exact compatible Modrinth version.
 
 In Solder API only mode, the MRPack bootstraps the selected downloader without
 putting ordinary build packages in its native Modrinth file list. With
-SolderPy Loader, the bootstrap API owns all those packages and can provide
+SolderPy Modpack Loader, the bootstrap API owns all those packages and can provide
 override, saved Modrinth/Maven, and Solder fallback URLs. MCIL and
 FileDirector instead use Solder repository URLs in their generated configs.
 
-The downloader selector queries Modrinth for SolderPy Loader, MCInstance
+The downloader selector queries Modrinth for SolderPy Modpack Loader, MCInstance
 Loader, and FileDirector releases compatible with the build's Minecraft
 version and modloader. The newest
 result is marked recommended, and the selected ID is resolved again during
@@ -537,7 +537,7 @@ export. The downloader is not created as a Solder mod and its JAR is not stored
 in the Solder repository. Its corresponding distribution switch must be
 enabled before it appears as a choice.
 
-SolderPy Loader always uses its API pointer and supports both source modes. In
+SolderPy Modpack Loader always uses its API pointer and supports both source modes. In
 hybrid mode the bootstrap API omits files already owned by the MRPack, so they
 are not installed twice.
 FileDirector may use a bundled config or a hosted pointer. Hosted delivery
@@ -549,7 +549,7 @@ requires a published, non-private build and can follow this build, `latest`, or
 Enable **CurseForge exports** and select **Export CurseForge** from a compatible
 Forge build. The ZIP contains
 `manifest.json` and `overrides/`. Its native `files` array contains the selected
-SolderPy Loader, MCInstance Loader, or FileDirector release,
+SolderPy Modpack Loader, MCInstance Loader, or FileDirector release,
 its required dependencies, and any enabled Modrinth-CurseForge sync overrides.
 
 With `CURSEFORGE_API_KEY`, the selector loads compatible files from the official
@@ -568,7 +568,7 @@ API into a stored manual value. Manual IDs are trusted as entered, so confirm
 that each ID belongs to the mapped CurseForge project and exact local version.
 
 In Solder API only mode, no ordinary build package is native to the CurseForge
-manifest; the selected downloader handles them. SolderPy Loader obtains their
+manifest; the selected downloader handles them. SolderPy Modpack Loader obtains their
 download choices from the bootstrap API, including verified overrides, saved
 Modrinth/Maven URLs, and Solder fallbacks. MCIL and FileDirector direct configs
 use Solder repository URLs in this mode. In hybrid mode, exact
@@ -580,7 +580,7 @@ Ordinary Modrinth project mappings are not guessed or translated into
 CurseForge IDs. Only explicit mappings under **Settings > Modrinth-CurseForge sync**
 are installed natively on both platforms.
 
-SolderPy Loader always uses its API pointer and supports both source modes. In
+SolderPy Modpack Loader always uses its API pointer and supports both source modes. In
 hybrid mode the bootstrap API omits enabled native CurseForge sync mappings,
 so they are not installed twice.
 FileDirector configuration can be included in the archive or hosted by
@@ -590,7 +590,7 @@ configuration is always included.
 ## Prism Launcher instance
 
 Enable **Prism Launcher instance exports** and select **Export Prism**. Choose
-a compatible SolderPy Loader, MCInstance Loader, or FileDirector release to
+a compatible SolderPy Modpack Loader, MCInstance Loader, or FileDirector release to
 create a lightweight bootstrap, or choose **Self-contained archive** when no
 downloader can be used. Prism Launcher and compatible MultiMC importers can open either ZIP
 directly. Every export contains:
@@ -607,7 +607,7 @@ version is used; a Minecraft prefix such as `1.7.10-` is removed where Prism's
 component metadata expects the loader-only version. `LAUNCHER` and `BOOTSTRAP`
 packages are omitted because Prism installs the declared loader itself.
 
-### SolderPy Loader, MCIL, or FileDirector bootstrap
+### SolderPy Modpack Loader, MCIL, or FileDirector bootstrap
 
 Compatible releases are loaded from Modrinth only when the export window is
 opened. The chosen downloader JAR is downloaded by solder.py, checked against
@@ -616,9 +616,9 @@ Modrinth's declared size, SHA-1, and SHA-512, and included under
 install the bootstrap after it has been generated. Required bootstrap
 dependencies such as Relauncher are resolved, verified, and included too.
 
-SolderPy Loader receives `config/solderpy-loader.json`, uses the dedicated
+SolderPy Modpack Loader receives `config/solderpy-loader.json`, uses the dedicated
 bootstrap API, and supports Solder API only or hybrid delivery. Prism itself
-does not own the mod files, so SolderPy Loader manages the complete selected
+does not own the mod files, so SolderPy Modpack Loader manages the complete selected
 build in either mode. MCIL receives its normal
 `pack.mcinstance` beneath
 `.minecraft/config/mcinstanceloader/`. Its configuration is always included
@@ -633,7 +633,7 @@ because package ZIPs and JARs are downloaded after the instance starts.
 
 MCIL and FileDirector support **Solder API only** and **Hybrid**. Hybrid uses validated
 Modrinth CDN URLs for exact mapped versions and Solder URLs for everything
-else; Solder API only uses Solder URLs in their direct configs. SolderPy Loader
+else; Solder API only uses Solder URLs in their direct configs. SolderPy Modpack Loader
 instead uses its bootstrap API's ordered URL choices in both modes. The
 selectors only offer downloader families enabled in Settings and
 versions compatible with the build. The built-in MCIL and FileDirector
@@ -694,7 +694,7 @@ content, not package artifacts.
 - **A hosted export is rejected:** publish the build and make it non-private.
 - **A client receives a local path:** set `PUBLIC_REPO_LOCATION` to the public
   repository URL; keep local paths in `MD5_REPO_LOCATION` only.
-- **A SolderPy Loader or Director pointer has the wrong hostname:** set
+- **A SolderPy Modpack Loader or Director pointer has the wrong hostname:** set
   `APP_URL` to the public solder.py URL.
 - **A mod is absent from Packwiz:** it needs a stored raw JAR MD5. Open the mod
   version's management page and use **Create JAR** for a compatible legacy

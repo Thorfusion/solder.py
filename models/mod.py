@@ -8,6 +8,7 @@ from mysql.connector import IntegrityError, errorcode
 from werkzeug.utils import secure_filename
 
 from .database import Database
+from .mod_bootstrap_settings import ModBootstrapSettings
 from .modversion import Modversion
 import zipfile
 
@@ -87,6 +88,7 @@ class Mod:
         notes,
         integration_provider=None,
         integration_project_id=None,
+        replace_on_launch_and_update=True,
     ):
         modtype = normalize_modtype(modtype)
         conn = Database.get_connection()
@@ -114,9 +116,12 @@ class Mod:
                     integration_project_id,
                 ),
             )
+            mod_id = cur.lastrowid
+            if not replace_on_launch_and_update:
+                ModBootstrapSettings.apply(cur, mod_id, False)
             conn.commit()
             return cls(
-                cur.lastrowid,
+                mod_id,
                 name,
                 description,
                 author,
@@ -140,18 +145,53 @@ class Mod:
             conn.close()
 
     @staticmethod
-    def update(id, name, description, author, link, pretty_name, side, modtype, notes):
+    def update(
+        id,
+        name,
+        description,
+        author,
+        link,
+        pretty_name,
+        side,
+        modtype,
+        notes,
+        replace_on_launch_and_update=None,
+    ):
         modtype = normalize_modtype(modtype)
         conn = Database.get_connection()
         cur = conn.cursor(dictionary=True)
         now = datetime.datetime.now()
-        cur.execute("""UPDATE mods 
-            SET name = %s, description = %s, author = %s, link = %s, updated_at = %s, pretty_name = %s, side = %s, modtype = %s, notes = %s
-            WHERE id = %s;""", (name, description, author, link, now, pretty_name, side, modtype, notes, id))
-        conn.commit()
-        cur.execute("SELECT LAST_INSERT_ID() AS id")
-        id = cur.fetchone()["id"]
-        return None
+        try:
+            cur.execute(
+                """UPDATE mods
+                   SET name = %s, description = %s, author = %s,
+                       link = %s, updated_at = %s, pretty_name = %s,
+                       side = %s, modtype = %s, notes = %s
+                   WHERE id = %s""",
+                (
+                    name,
+                    description,
+                    author,
+                    link,
+                    now,
+                    pretty_name,
+                    side,
+                    modtype,
+                    notes,
+                    id,
+                ),
+            )
+            if replace_on_launch_and_update is not None:
+                ModBootstrapSettings.apply(
+                    cur, id, bool(replace_on_launch_and_update)
+                )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            cur.close()
+            conn.close()
 
     @staticmethod
     def set_modtypes(ids, modtype):
@@ -195,6 +235,9 @@ class Mod:
         cur.execute(
             "DELETE FROM mod_dependencies WHERE mod_id = %s OR dependency_mod_id = %s",
             (id, id),
+        )
+        cur.execute(
+            "DELETE FROM mod_bootstrap_settings WHERE mod_id = %s", (id,)
         )
         cur.execute(
             """DELETE maven_versions FROM maven_versions

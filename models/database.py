@@ -53,6 +53,7 @@ class Database:
         "modversion_download_sources",
         "modversion_provider_ids",
         "modversion_minecraft_versions",
+        "mod_bootstrap_settings",
         "publishing_provider_accounts",
         "modpack_publication_targets",
         "modpack_publication_runs",
@@ -216,6 +217,13 @@ class Database:
             (minecraft_version, modversion_id)
     )""" + TABLE_OPTIONS
 
+    MOD_BOOTSTRAP_SETTINGS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS mod_bootstrap_settings (
+        mod_id INT NOT NULL PRIMARY KEY,
+        replace_on_launch_and_update TINYINT(1) NOT NULL DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )""" + TABLE_OPTIONS
+
     PUBLISHING_TABLES_SQL = (
         """CREATE TABLE IF NOT EXISTS publishing_provider_accounts (
             id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
@@ -352,6 +360,7 @@ class Database:
         MODVERSION_DOWNLOAD_SOURCES_TABLE_SQL,
         MODVERSION_PROVIDER_IDS_TABLE_SQL,
         MODVERSION_MINECRAFT_VERSIONS_TABLE_SQL,
+        MOD_BOOTSTRAP_SETTINGS_TABLE_SQL,
         *PUBLISHING_TABLES_SQL,
         PERSONAL_ACCESS_TOKENS_TABLE_SQL,
         USER_MODPACK_TABLE_SQL,

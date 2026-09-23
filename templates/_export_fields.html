@@ -8,7 +8,7 @@
 <div class="form-text mb-2">
     Hybrid installs exact supported mappings through the native platform and
     leaves the rest to the selected downloader. Solder API only leaves ordinary
-    build packages to the downloader. With SolderPy Loader, both modes can try
+    build packages to the downloader. With SolderPy Modpack Loader, both modes can try
     a verified override, saved Modrinth/Maven URL, then Solder as fallback.
 </div>
 <label for="export_forge_version" class="form-label">Modloader version</label>
@@ -34,14 +34,14 @@
     <option value="recommended">Follow recommended</option>
 </select>
 <div class="form-text mb-3">
-    SolderPy Loader follows this build, latest, or recommended through the
+    SolderPy Modpack Loader follows this build, latest, or recommended through the
     bootstrap API. FileDirector and Packwiz use the selected
     hosted pointer. MCInstance Loader stores its configuration in the export,
     so it ignores this selector. Prism uses it when a downloader is selected.
 </div>
 <div class="alert alert-info py-2" role="note">
     Hybrid platform exports are snapshots; publishing a changed live build
-    sends the next numbered patch. Solder API only with web-hosted SolderPy Loader
+    sends the next numbered patch. Solder API only with web-hosted SolderPy Modpack Loader
     synchronizes from the selected build channel automatically.
 </div>
 {%endmacro%}

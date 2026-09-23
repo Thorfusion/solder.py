@@ -30,7 +30,7 @@ optional groups, dependency resolution, updates, and safe archive ownership.
 Management-side Modrinth, GitHub config, and Maven imports are documented in the
 [integration guide](docs/integrations.md).
 
-SolderPy Loader, MCInstance Loader, Packwiz, FileDirector,
+SolderPy Modpack Loader, MCInstance Loader, Packwiz, FileDirector,
 Modrinth, CurseForge, and Prism setup,
 export usage, and file layouts are documented in the
 [distribution usage and format guide](docs/distribution-formats.md).
@@ -106,17 +106,17 @@ export usage, and file layouts are documented in the
 
   + **Advanced optional groups**
 
-    Give SolderPy Loader, MCIL, and FileDirector choices
+    Give SolderPy Modpack Loader, MCIL, and FileDirector choices
     names, independent or exact-one selection rules, defaults, and a
     Technic/basic state of Required, Optional, or Excluded. Public builds can
-    optionally bootstrap SolderPy Loader through a normal Technic Solder
+    optionally bootstrap SolderPy Modpack Loader through a normal Technic Solder
     package so the same choices are available before mod discovery.
 
   + **Server shadow build**
 
     Mark mods for the client, server, or both and expose a server-compatible
     view of the same build. Export a small dedicated-server ZIP containing
-    SolderPy Loader and Relauncher in `mods/` plus one verified server-side
+    SolderPy Modpack Loader and Relauncher in `mods/` plus one verified server-side
     `LAUNCHER` JAR, such as Crucible, at the archive root; the remaining
     server content is installed and updated from the bootstrap API.
 
@@ -129,9 +129,9 @@ export usage, and file layouts are documented in the
   Export a build from its management page as an MCInstanceLoader
   `.mcinstance` archive.
 
-+ **SolderPy Loader, Packwiz, and FileDirector support**
++ **SolderPy Modpack Loader, Packwiz, and FileDirector support**
 
-  Export a SolderPy Loader configuration ZIP, or let Technic, Modrinth,
+  Export a SolderPy Modpack Loader configuration ZIP, or let Technic, Modrinth,
   CurseForge, and Prism deliver the Loader and Relauncher while using the same
   dedicated API. Packwiz metadata and FileDirector bundles remain available as
   separate formats. Each format is independently enabled in the settings GUI,
@@ -141,13 +141,13 @@ export usage, and file layouts are documented in the
 
   Export a build as an MRPack or CurseForge archive. Modrinth-mapped versions
   remain native in MRPack; other packages are installed from Solder through
-  SolderPy Loader, MCInstance Loader, or FileDirector where
+  SolderPy Modpack Loader, MCInstance Loader, or FileDirector where
   available.
   CurseForge packs contain only the selected
   downloader and any enabled Modrinth-CurseForge sync mappings as native projects.
   Hybrid combines native platform downloads with a downloader for the
   remaining packages. Solder API only leaves ordinary build packages to the
-  downloader; with SolderPy Loader, its API can offer verified override,
+  downloader; with SolderPy Modpack Loader, its API can offer verified override,
   Modrinth/Maven, and Solder fallback URLs. The export window lets you
   choose a compatible downloader release loaded from the
   target platform API and temporarily override the exported Forge/modloader
@@ -156,7 +156,7 @@ export usage, and file layouts are documented in the
 + **Prism Launcher instance exports**
 
   Export a directly importable Prism/MultiMC instance containing
-  `mmc-pack.json` and `instance.cfg`. Use a verified SolderPy Loader, MCIL, or
+  `mmc-pack.json` and `instance.cfg`. Use a verified SolderPy Modpack Loader, MCIL, or
   FileDirector bootstrap for a small archive, or use the self-contained
   fallback when the build cannot use a downloader. Minecraft and the modloader remain
   launcher-managed.
@@ -227,7 +227,7 @@ JAR is downloaded, checksum-verified when Maven publishes a standard checksum
 sidecar, validated as a JAR, and packaged into the normal Solder repository.
 Timestamped Maven snapshots are resolved through their version-level metadata.
 On an artifact's management page, **Use the Maven JAR URL directly** lets
-SolderPy Loader download that exact native Maven artifact before falling back
+SolderPy Modpack Loader download that exact native Maven artifact before falling back
 to the Solder-hosted JAR. This is opt-in and requires a public HTTPS Maven
 repository. The downloaded bytes are always checked against the raw-JAR MD5
 stored when solder.py imported the version.
@@ -239,7 +239,7 @@ See the [integration guide](docs/integrations.md) for the complete workflow.
 Enable the required formats under **Settings > Env Settings**, then open a
 build's **Export** window. The complete
 [distribution usage and format guide](docs/distribution-formats.md) explains
-the shared Solder API only and hybrid options, SolderPy Loader and MCInstance
+the shared Solder API only and hybrid options, SolderPy Modpack Loader and MCInstance
 Loader archive mapping, Packwiz and FileDirector hosting,
 Modrinth or CurseForge fallback exports, and Prism Launcher bootstrap or
 self-contained instance exports.

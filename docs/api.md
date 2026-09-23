@@ -231,8 +231,8 @@ The default target is the client and optional packages are excluded. The mods
 are returned in deterministic natural-name order. `java` is a free-form string,
 so complete Java versions such as `1.8.0_51` are preserved unchanged.
 
-When a public build explicitly enables SolderPy Loader for Technic, solder.py
-adds one internal `solderpy-loader-bootstrap` entry containing SolderPy Loader,
+When a public build explicitly enables SolderPy Modpack Loader for Technic, solder.py
+adds one internal `solderpy-loader-bootstrap` entry containing SolderPy Modpack Loader,
 Relauncher, and the build configuration. `LAUNCHER` and `BOOTSTRAP` entries
 remain in the Technic response; every other package is supplied by the
 dedicated bootstrap API before mod discovery. If that integration becomes
@@ -403,13 +403,19 @@ package state (`0` required, `1` optional, and `2` excluded), named advanced
 optional groups, defaults, dependencies, stable download instructions, and
 whether the bootstrap should manage each package. It always returns the source
 build data, even when the normal Technic response delegates delivery to
-SolderPy Loader.
+SolderPy Modpack Loader.
 
 `MOD` packages prefer their canonical raw `.jar` repository URL and verified
 JAR MD5. Their download instruction uses `format: "jar"` and supplies the
 target path under `mods/`. If a legacy mod has no verified raw JAR, its normal
 Solder ZIP is returned instead so the build remains usable, at the cost of ZIP
 extraction during bootstrap. Non-mod content continues to use its Solder ZIP.
+Every package also includes the mod-wide
+`replace_on_launch_and_update` boolean. It defaults to `true`; `false` tells a
+compatible SolderPy Modpack Loader version to merge the package on
+launch/update instead of treating it as a complete replacement. Other
+downloaders and export formats ignore this setting. It applies to both JAR and
+ZIP packages and is primarily intended for config packs.
 
 The route supports `cid`, `k`, `target`, and `from`, as documented in the
 [dedicated bootstrap API guide](bootstrap-api.md). It returns an `ETag` and

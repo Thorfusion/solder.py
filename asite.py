@@ -86,6 +86,7 @@ from models.maven import (
     MavenVersion,
 )
 from models.mod import DuplicateModError, Mod, UploadVerificationError
+from models.mod_bootstrap_settings import ModBootstrapSettings
 from models.mod_dependency import DependencyError, ModDependency
 from models.modpack import Modpack
 from models.modversion import IncompatibleModVersionError, MissingDependencyVersionError, Modversion
@@ -334,6 +335,7 @@ def modversion(id):
         upstream_versions=upstream_versions,
         upstream_error=upstream_error,
         legacy_modversion_adding=legacy_modversion_adding,
+        replace_on_launch_and_update=ModBootstrapSettings.get(id),
     )
 
 
@@ -626,7 +628,21 @@ def newmodversion(id):
     if "form-submit" in request.form:
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
-        Mod.update(id, request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form.get("notes", request.form.get("internal_note", "")))
+        Mod.update(
+            id,
+            request.form["name"],
+            request.form["description"],
+            request.form["author"],
+            request.form["link"],
+            request.form["pretty_name"],
+            mod_side,
+            mod_type,
+            request.form.get("notes", request.form.get("internal_note", "")),
+            "replace_on_launch_and_update" in request.form,
+        )
+        from api import clear_api_caches
+
+        clear_api_caches()
         flash("updated " + id, "success")
         return redirect(url_for("asite.modversion", id=id))
     if "deleteversion_submit" in request.form:
@@ -725,7 +741,19 @@ def newmod():
         mod_side = request.form['flexRadioDefault']
         mod_type = request.form['type']
         try:
-            Mod.new(request.form["name"], request.form["description"], request.form["author"], request.form["link"], request.form["pretty_name"], mod_side, mod_type, request.form.get("notes", request.form.get("internal_note", "")))
+            Mod.new(
+                request.form["name"],
+                request.form["description"],
+                request.form["author"],
+                request.form["link"],
+                request.form["pretty_name"],
+                mod_side,
+                mod_type,
+                request.form.get("notes", request.form.get("internal_note", "")),
+                replace_on_launch_and_update=(
+                    "replace_on_launch_and_update" in request.form
+                ),
+            )
         except DuplicateModError:
             flash(
                 f'A mod with the slug "{request.form["name"]}" already exists.',
@@ -1083,7 +1111,7 @@ def maven_artifact(artifact_id):
                 from api import clear_api_caches
 
                 clear_api_caches()
-                flash("updated SolderPy Loader Maven downloads", "success")
+                flash("updated SolderPy Modpack Loader Maven downloads", "success")
             elif "refresh_versions" in request.form:
                 versions = MavenCatalog.refresh(artifact)
                 flash(f"loaded {len(versions)} Maven version(s)", "success")
@@ -2015,7 +2043,7 @@ def modpackbuild(id):
             server_downloader_error = resolved_error
             if not server_downloaders and server_downloader_error is None:
                 server_downloader_error = (
-                    "No compatible SolderPy Loader release was found for "
+                    "No compatible SolderPy Modpack Loader release was found for "
                     "this build."
                 )
     if (
@@ -2103,7 +2131,7 @@ def advanced_optionals(build_id):
                     DistributionSettings.SOLDERPY_LOADER
                 ):
                     raise TechnicSolderPyLoaderError(
-                        "Enable SolderPy Loader in Settings first."
+                        "Enable SolderPy Modpack Loader in Settings first."
                     )
                 build = Build.get_by_id(build_id)
                 if build is None:
@@ -2131,7 +2159,7 @@ def advanced_optionals(build_id):
             elif "disable_technic_solderpy_loader" in request.form:
                 TechnicSolderPyLoader.disable(build_id)
                 flash(
-                    "SolderPy Loader disabled for this Technic build.",
+                    "SolderPy Modpack Loader disabled for this Technic build.",
                     "success",
                 )
             elif "set_optional_mode" in request.form:
@@ -2179,10 +2207,10 @@ def advanced_optionals(build_id):
             flash(str(error), "error")
         except Exception as error:
             ErrorPrinter.message(
-                "failed to update Technic SolderPy Loader delivery", error
+                "failed to update Technic SolderPy Modpack Loader delivery", error
             )
             flash(
-                "The Technic SolderPy Loader configuration could not be updated. "
+                "The Technic SolderPy Modpack Loader configuration could not be updated. "
                 "Check the server log.",
                 "error",
             )
@@ -2229,7 +2257,7 @@ def advanced_optionals(build_id):
     if request.args.get("solderpy_loader") == "configure":
         if not distribution_settings[DistributionSettings.SOLDERPY_LOADER]:
             solderpy_loader_error = (
-                "Enable SolderPy Loader in Settings first."
+                "Enable SolderPy Modpack Loader in Settings first."
             )
         else:
             spec = PlatformPackExport.downloader_spec("solderpyloader")
@@ -2243,7 +2271,7 @@ def advanced_optionals(build_id):
                     solderpy_loader_releases = available[0].releases
                 else:
                     solderpy_loader_error = (
-                        "No compatible SolderPy Loader release was found for "
+                        "No compatible SolderPy Modpack Loader release was found for "
                         "this Minecraft and modloader version."
                     )
             except PlatformExportError as error:

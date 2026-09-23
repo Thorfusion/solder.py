@@ -759,6 +759,24 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         self.assertIn("LAUNCHER (MODLOADER)", version_source)
         self.assertIn("LAUNCHER (MODLOADER)", new_mod_source)
+        self.assertIn(
+            'name="replace_on_launch_and_update"', version_source
+        )
+        self.assertIn(
+            "Only SolderPy Modpack Loader uses this setting",
+            version_source,
+        )
+        self.assertIn(
+            "This setting applies to every version of",
+            version_source,
+        )
+        self.assertIn(
+            'name="replace_on_launch_and_update"', new_mod_source
+        )
+        self.assertIn(
+            "Only SolderPy Modpack Loader uses this setting",
+            new_mod_source,
+        )
         self.assertIn("Launcher (modloader)", library_source)
         self.assertIn('id="dependency_search"', version_source)
         self.assertIn(
@@ -2424,7 +2442,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         solderpy_downloader = SimpleNamespace(
             key="solderpyloader",
-            label="SolderPy Loader",
+            label="SolderPy Modpack Loader",
             supports_remote_config=True,
             releases=(release,),
         )

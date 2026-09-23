@@ -372,7 +372,7 @@ class CurseForgeDownloaderAPI:
 DOWNLOADERS = (
     DownloaderSpec(
         key="solderpyloader",
-        label="SolderPy Loader",
+        label="SolderPy Modpack Loader",
         setting_key="solderpy_loader_enabled",
         modrinth_project_id="5LpwENAj",
         curseforge_project_id=1702825,
@@ -1045,10 +1045,10 @@ class PlatformPackExport:
         platform=None,
         launcher_memberships=None,
     ):
-        """Create the launch-time bootstrap API pointer for SolderPy Loader."""
+        """Create the launch-time bootstrap API pointer for SolderPy Modpack Loader."""
         if not build.is_published or build.private:
             raise PlatformExportError(
-                "SolderPy Loader requires a published, non-private build."
+                "SolderPy Modpack Loader requires a published, non-private build."
             )
         base = DistributionExport.application_base(application_url)
         slug = modpack_slug or getattr(build, "modpack_slug", None)
@@ -1057,7 +1057,7 @@ class PlatformPackExport:
         DistributionExport._validate_component(selector, "build selector")
         target = str(target or "auto").strip().lower()
         if target not in {"auto", "client", "server"}:
-            raise PlatformExportError("Unknown SolderPy Loader target.")
+            raise PlatformExportError("Unknown SolderPy Modpack Loader target.")
         source_mode = PlatformPackExport.source_mode(
             source_mode, default="hybrid"
         )
@@ -1069,7 +1069,7 @@ class PlatformPackExport:
             "prism",
             "technic",
         }:
-            raise PlatformExportError("Unknown SolderPy Loader platform.")
+            raise PlatformExportError("Unknown SolderPy Modpack Loader platform.")
         config = {
             "enabled": True,
             "api": f"{base}/api/",
@@ -1106,7 +1106,7 @@ class PlatformPackExport:
         major = int(match.group("legacy") or match.group("modern"))
         if major < 8:
             raise PlatformExportError(
-                "SolderPy Loader and Relauncher require Java 8 or newer."
+                "SolderPy Modpack Loader and Relauncher require Java 8 or newer."
             )
 
         return (
@@ -1123,18 +1123,18 @@ class PlatformPackExport:
     ):
         """Write one verified Loader/Relauncher pair into an archive."""
         if getattr(selected, "key", None) != "solderpyloader":
-            raise PlatformExportError("Select a SolderPy Loader release.")
+            raise PlatformExportError("Select a SolderPy Modpack Loader release.")
         native_files = (
             selected.modrinth,
             *selected.modrinth_dependencies,
         )
         if native_files[0] is None:
             raise PlatformExportError(
-                "The selected SolderPy Loader release has no Modrinth file."
+                "The selected SolderPy Modpack Loader release has no Modrinth file."
             )
         if len(native_files) < 2 or native_files[1] is None:
             raise PlatformExportError(
-                "The selected SolderPy Loader release has no compatible "
+                "The selected SolderPy Modpack Loader release has no compatible "
                 "Relauncher dependency."
             )
 
@@ -1160,7 +1160,7 @@ class PlatformPackExport:
     def render_solderpy_loader_archive(
         cls, selected, config, *, relauncher_config=None, http=None
     ):
-        """Bundle one verified SolderPy Loader release and its runtime."""
+        """Bundle one verified SolderPy Modpack Loader release and its runtime."""
         with cls._zip_archive() as (archive, target):
             cls._write_solderpy_loader_jars(
                 target, selected, http=http
@@ -1282,7 +1282,7 @@ class PlatformPackExport:
         )
         if selected.key != "solderpyloader":
             raise PlatformExportError(
-                "Server export requires a SolderPy Loader release."
+                "Server export requires a SolderPy Modpack Loader release."
             )
         config = cls.solderpy_loader_config(
             build,

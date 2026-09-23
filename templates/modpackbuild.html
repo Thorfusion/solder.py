@@ -136,7 +136,7 @@
                         <div class="mb-3">
                             <label for="export_destination" class="form-label">Export to</label>
                             <select class="form-select" id="export_destination" onchange="updateexportdestination(this)">
-                                {%if distribution_settings.solderpy_loader_enabled%}<option value="solderpy" data-family="solderpy" data-action="{{url_for('asite.export_solderpy_loader', id=packbuild.id)}}" data-label="Export SolderPy Loader" selected>SolderPy Loader</option>{%endif%}
+                                {%if distribution_settings.solderpy_loader_enabled%}<option value="solderpy" data-family="solderpy" data-action="{{url_for('asite.export_solderpy_loader', id=packbuild.id)}}" data-label="Export SolderPy Modpack Loader" selected>SolderPy Modpack Loader</option>{%endif%}
                                 <option value="csv" data-family="csv" data-action="{{url_for('asite.export_build_csv', id=packbuild.id)}}" data-label="Export CSV">CSV</option>
                                 {%if distribution_settings.solderpy_loader_enabled%}<option value="server" data-family="server" data-action="{{url_for('asite.export_server', id=packbuild.id)}}" data-label="Export server">Dedicated server</option>{%endif%}
                                 {%if distribution_settings.mcil_enabled%}<option value="mcil" data-family="mcil" data-action="{{url_for('asite.export_mcinstance', id=packbuild.id)}}" data-label="Export MCIL">MCInstance Loader</option>{%endif%}
@@ -161,15 +161,15 @@
 
                         {%if distribution_settings.solderpy_loader_enabled%}
                         <div class="border-top pt-3" data-export-for="solderpy">
-                        <h6>SolderPy Loader</h6>
+                        <h6>SolderPy Modpack Loader</h6>
                         <div class="form-text mb-2">Exports this build's Solder API configuration. Install the Loader and Relauncher through Modrinth, CurseForge, or Technic.</div>
                         </div>
 
                         <div class="border-top pt-3" data-export-for="server" hidden>
                         <h6>Dedicated server</h6>
                         {%if server_downloader_error%}<div class="alert alert-warning" role="alert">{{server_downloader_error}}</div>{%endif%}
-                        {{downloader_select('server_downloader', 'server_downloader', 'SolderPy Loader version', server_downloaders)}}
-                        <div class="form-text mb-2">Creates a small server archive containing SolderPy Loader and Relauncher in <code>mods/</code>, plus the build's required server-side <code>LAUNCHER</code> JAR (for example, Crucible) at the archive root.</div>
+                        {{downloader_select('server_downloader', 'server_downloader', 'SolderPy Modpack Loader version', server_downloaders)}}
+                        <div class="form-text mb-2">Creates a small server archive containing SolderPy Modpack Loader and Relauncher in <code>mods/</code>, plus the build's required server-side <code>LAUNCHER</code> JAR (for example, Crucible) at the archive root.</div>
                         </div>
                         {%endif%}
 
@@ -224,7 +224,7 @@
 
                         <div class="border-top pt-3">
                             {%if distribution_settings.solderpy_loader_enabled%}
-                            <button class="btn btn-primary" id="export_destination_submit" type="submit" formaction="{{url_for('asite.export_solderpy_loader', id=packbuild.id)}}">Export SolderPy Loader</button>
+                            <button class="btn btn-primary" id="export_destination_submit" type="submit" formaction="{{url_for('asite.export_solderpy_loader', id=packbuild.id)}}">Export SolderPy Modpack Loader</button>
                             {%else%}
                             <button class="btn btn-primary" id="export_destination_submit" type="submit" formaction="{{url_for('asite.export_build_csv', id=packbuild.id)}}">Export CSV</button>
                             {%endif%}

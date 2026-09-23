@@ -75,6 +75,7 @@ def mod_row(**changes):
         "modtype": "MOD",
         "integration_provider": None,
         "integration_project_id": None,
+        "replace_on_launch_and_update": True,
         "created_at": None,
         "updated_at": None,
     }
@@ -245,7 +246,12 @@ class WriteApiRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_create_mod_accepts_side_type_notes_and_dependencies(self):
-        created = mod_row(side="SERVER", modtype="CONFIG", notes="private")
+        created = mod_row(
+            side="SERVER",
+            modtype="CONFIG",
+            notes="private",
+            replace_on_launch_and_update=False,
+        )
         with (
             patch("api_write.WriteApiStore.create_mod", return_value=created) as create,
             patch("api_write.ModDependency.get_by_mod_api", return_value=[]),
@@ -259,6 +265,7 @@ class WriteApiRouteTests(unittest.TestCase):
                     "side": "server",
                     "modtype": "config",
                     "notes": "private",
+                    "replace_on_launch_and_update": False,
                     "dependencies": [9, "library-mod"],
                 },
             )
@@ -267,7 +274,9 @@ class WriteApiRouteTests(unittest.TestCase):
         values, dependencies = create.call_args.args
         self.assertEqual(values["side"], "SERVER")
         self.assertEqual(values["modtype"], "CONFIG")
+        self.assertFalse(values["replace_on_launch_and_update"])
         self.assertEqual(dependencies, [9, "library-mod"])
+        self.assertFalse(response.get_json()["replace_on_launch_and_update"])
 
     def test_create_modversion_accepts_compatibility_and_jar_hash(self):
         created = version_row(jarmd5="b" * 32, jarfilesize=456)
@@ -799,6 +808,42 @@ class WriteApiStoreTests(unittest.TestCase):
 
         build_cleanup.assert_called_once_with(cursor, 12)
         pack_cleanup.assert_called_once_with(cursor, 3)
+        connection.commit.assert_called_once_with()
+
+    def test_create_mod_stores_disabled_replacement_policy_separately(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+        cursor.lastrowid = 4
+        cursor.fetchone.return_value = mod_row(
+            replace_on_launch_and_update=False
+        )
+
+        with patch(
+            "models.write_api.Database.get_connection",
+            return_value=connection,
+        ):
+            row = WriteApiStore.create_mod(
+                {
+                    "name": "config-pack",
+                    "pretty_name": "Config Pack",
+                    "replace_on_launch_and_update": False,
+                }
+            )
+
+        statements = [call.args[0] for call in cursor.execute.call_args_list]
+        mods_insert = next(
+            statement
+            for statement in statements
+            if statement.startswith("INSERT INTO mods")
+        )
+        self.assertNotIn("replace_on_launch_and_update", mods_insert)
+        self.assertTrue(
+            any(
+                "INSERT INTO mod_bootstrap_settings" in statement
+                for statement in statements
+            )
+        )
+        self.assertFalse(row["replace_on_launch_and_update"])
         connection.commit.assert_called_once_with()
 
     def test_create_modversion_writes_override_to_sparse_table(self):

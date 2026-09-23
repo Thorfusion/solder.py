@@ -165,7 +165,7 @@ repository origin. Standard timestamped `-SNAPSHOT` filenames are resolved from
 the version-level `maven-metadata.xml`.
 
 Enable **Use the Maven JAR URL directly** on an artifact when its repository is
-publicly reachable over HTTPS. Bootstrap manifests then give SolderPy Loader
+publicly reachable over HTTPS. Bootstrap manifests then give SolderPy Modpack Loader
 the exact Maven artifact URL followed by the Solder-hosted JAR fallback.
 Timestamped snapshots are resolved from version metadata when the manifest is
 generated. Both sources use the raw-JAR MD5 and size recorded during import.

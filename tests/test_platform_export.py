@@ -227,7 +227,7 @@ def downloader_version(project_id, version_id):
 
 def curseforge_file(project_id, file_id):
     names = {
-        (1702825, 7000000): "SolderPy Loader 0.1.0",
+        (1702825, 7000000): "SolderPy Modpack Loader 0.1.0",
         (1491728, 7100000): "Relauncher 1.1.1",
         (576287, 4920730): "1.7.10 - 2.7",
         (576287, 4428492): "1.7.10-2.6",
@@ -1722,7 +1722,7 @@ class PlatformPackExportTests(unittest.TestCase):
             ),
             self.assertRaisesRegex(
                 PlatformExportError,
-                "SolderPy Loader downloader versions could not be loaded",
+                "SolderPy Modpack Loader downloader versions could not be loaded",
             ),
         ):
             PlatformPackExport.available_downloaders(
