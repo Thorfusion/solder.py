@@ -8,9 +8,17 @@ on:
     - cron: '0 12 * * 2'
 
 jobs:
+  select-runner:
+    name: Select an available runner
+    uses: ./.github/workflows/select-runner.yml
+    permissions:
+      actions: write
+      contents: read
+
   push_to_registry:
     name: Push latest image to Docker Hub
-    runs-on: self-hosted
+    needs: select-runner
+    runs-on: ${{ needs.select-runner.outputs.runner }}
     timeout-minutes: 45
     permissions:
       contents: read

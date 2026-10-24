@@ -13,9 +13,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  select-runner:
+    name: Select an available runner
+    uses: ./.github/workflows/select-runner.yml
+    permissions:
+      actions: write
+      contents: read
+
   update:
     name: Update, test, and open pull request
-    runs-on: self-hosted
+    needs: select-runner
+    runs-on: ${{ needs.select-runner.outputs.runner }}
     timeout-minutes: 45
     env:
       PIPENV_DONT_LOAD_ENV: "1"

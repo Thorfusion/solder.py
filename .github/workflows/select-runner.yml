@@ -1,0 +1,101 @@
+name: Select runner
+
+on:
+  workflow_call:
+    inputs:
+      prefer_self_hosted:
+        description: Probe and use a self-hosted runner when one is available
+        required: false
+        default: true
+        type: boolean
+    outputs:
+      runner:
+        description: Runner label selected for the calling workflow
+        value: ${{ jobs.select.outputs.runner }}
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  select:
+    name: Select an available runner
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    outputs:
+      runner: ${{ steps.select.outputs.runner }}
+
+    steps:
+      - name: Probe the self-hosted runner
+        id: select
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREFER_SELF_HOSTED: ${{ inputs.prefer_self_hosted }}
+          PROBE_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          PROBE_REF: ${{ github.ref_name }}
+        run: |
+          fallback='ubuntu-24.04'
+          selected="$fallback"
+          probe_title="Self-hosted runner probe ${PROBE_ID}"
+          probe_run_id=''
+
+          if [[ "$PREFER_SELF_HOSTED" != 'true' ]]; then
+            echo "Selected runner: $selected"
+            echo "runner=$selected" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! gh workflow run runner-probe.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref "$PROBE_REF" \
+            --field "probe_id=${PROBE_ID}"; then
+            echo 'Could not dispatch the self-hosted probe; using GitHub-hosted runner.'
+            echo "runner=$selected" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for _ in {1..15}; do
+            runs_json="$(
+              gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/runner-probe.yml/runs?event=workflow_dispatch&per_page=20" \
+                2>/dev/null || true
+            )"
+            probe_run_id="$(
+              jq -r --arg title "$probe_title" \
+                '[.workflow_runs[]? | select(.display_title == $title)][0].id // empty' \
+                <<< "$runs_json"
+            )"
+            if [[ -n "$probe_run_id" ]]; then
+              break
+            fi
+            sleep 2
+          done
+
+          if [[ -n "$probe_run_id" ]]; then
+            for _ in {1..15}; do
+              run_json="$(
+                gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${probe_run_id}" \
+                  2>/dev/null || true
+              )"
+              status="$(jq -r '.status // ""' <<< "$run_json")"
+              conclusion="$(jq -r '.conclusion // ""' <<< "$run_json")"
+
+              if [[ "$status" == 'completed' ]]; then
+                if [[ "$conclusion" == 'success' ]]; then
+                  selected='self-hosted'
+                fi
+                break
+              fi
+              sleep 2
+            done
+          fi
+
+          if [[ "$selected" == "$fallback" && -n "$probe_run_id" ]]; then
+            gh api --method POST \
+              "repos/${GITHUB_REPOSITORY}/actions/runs/${probe_run_id}/cancel" \
+              >/dev/null 2>&1 || true
+          fi
+
+          echo "Selected runner: $selected"
+          echo "runner=$selected" >> "$GITHUB_OUTPUT"
