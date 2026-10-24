@@ -17,6 +17,7 @@ def docker(*arguments: str, **kwargs):
 
 def main(image: str) -> None:
     container = f"solderpy-smoke-{uuid.uuid4().hex}"
+    container_port = "5081"
     started = False
 
     try:
@@ -26,7 +27,9 @@ def main(image: str) -> None:
             "--name",
             container,
             "--publish",
-            "127.0.0.1:0:5000",
+            f"127.0.0.1:0:{container_port}",
+            "--env",
+            f"APP_PORT={container_port}",
             "--env",
             "AWS_EC2_METADATA_DISABLED=true",
             "--env",
@@ -57,11 +60,11 @@ def main(image: str) -> None:
         started = True
 
         port_mapping = subprocess.check_output(
-            ["docker", "port", container, "5000/tcp"], text=True
+            ["docker", "port", container, f"{container_port}/tcp"], text=True
         ).strip()
         port = port_mapping.rsplit(":", 1)[1]
         endpoint = f"http://127.0.0.1:{port}/api/"
-        deadline = time.monotonic() + 45
+        deadline = time.monotonic() + 90
         last_error: Exception | None = None
 
         while time.monotonic() < deadline:
@@ -73,11 +76,26 @@ def main(image: str) -> None:
                     and payload.get("api") == "solder.py"
                     and payload.get("capabilities", {}).get("write_api") is False
                 ):
-                    print(f"Container smoke test passed: {payload}")
-                    return
-                last_error = RuntimeError(
-                    f"Unexpected response status/payload: {response.status} {payload}"
-                )
+                    health = subprocess.check_output(
+                        [
+                            "docker",
+                            "inspect",
+                            "--format",
+                            "{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}",
+                            container,
+                        ],
+                        text=True,
+                    ).strip()
+                    if health == "healthy":
+                        print(f"Container smoke test passed: {payload}")
+                        return
+                    last_error = RuntimeError(
+                        f"API is ready but Docker health status is {health!r}"
+                    )
+                else:
+                    last_error = RuntimeError(
+                        f"Unexpected response status/payload: {response.status} {payload}"
+                    )
             except (OSError, ValueError, urllib.error.URLError) as error:
                 last_error = error
 
