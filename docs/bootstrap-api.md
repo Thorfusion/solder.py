@@ -78,7 +78,8 @@ This abbreviated example is a complete, valid schema-version 1 response:
   "target": "client",
   "source": "hybrid",
   "update_policy": {
-    "remove_unlisted_mod_files": false
+    "remove_unlisted_mod_files": false,
+    "always_hash_files": false
   },
   "optional_mode": {
     "id": 1,
@@ -360,6 +361,20 @@ back safely. Other downloaders and export formats ignore this policy.
 This field is also additive to schema version 1. Older SolderPy Modpack Loader
 versions ignore it and keep unlisted mod files.
 
+`update_policy.always_hash_files` is a modpack-wide integrity requirement and
+defaults to `false`. When true, compatible SolderPy Modpack Loader versions
+must calculate the content MD5 of every enforced Loader-owned file and every
+launcher-owned mod during verification. They must not accept a file solely
+because its saved path, size, and last-modified time are unchanged. This API
+policy overrides a local preference for the metadata fast path; a local
+always-hash preference may still make verification stricter when the API value
+is false. The policy is part of the signed manifest, so it cannot be weakened
+without invalidating the manifest signature.
+
+This field is additive to schema version 1. Older Loader versions ignore it,
+so administrators must update the installed Loader before relying on forced
+content hashing.
+
 `download.format: solder_zip` is used by `CONFIG`, `RES`, `NONE`, and other
 non-mod content. Download the archive, verify its byte size when supplied,
 verify its MD5, and extract its contents relative to `download.extract_to`.
@@ -459,6 +474,7 @@ A bootstrap mod is compatible with schema version 1 when it:
 - honors `target`, `source`, `platform`, side filtering, `install_owner`, and the export's exact native membership list;
 - honors the mod-wide `enforce` package policy;
 - honors `update_policy.remove_unlisted_mod_files` without deleting outside the instance's `mods/` directory or removing launcher-owned files;
+- honors `update_policy.always_hash_files` for both Loader-owned and launcher-owned files;
 - verifies `signature` with the exact public key and `keyId` pinned by the export before trusting the manifest;
 - verifies each ZIP's size and MD5 and extracts it safely;
 - tracks extracted-file ownership for reliable removal and rollback;

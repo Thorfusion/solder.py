@@ -423,6 +423,10 @@ defaults to `false`. When enabled, a compatible SolderPy Modpack Loader removes
 files from the instance's `mods/` directory that are not part of the resolved
 new build during a build update. Other instance directories and other
 downloaders are unaffected.
+The modpack-wide `update_policy.always_hash_files` value also defaults to
+`false`. When enabled, compatible Loader versions bypass the local file-metadata
+cache and verify the contents of enforced Loader-owned and launcher-owned files
+on every launch.
 
 The route supports `cid`, `k`, `target`, and `from`, as documented in the
 [dedicated bootstrap API guide](bootstrap-api.md). It returns an `ETag` and

@@ -18,6 +18,17 @@ from models.integration import IntegrationError  # noqa: E402
 from models.dashboard import Dashboard  # noqa: E402
 from models.distribution_settings import DistributionSettings  # noqa: E402
 from models.mod import DuplicateModError  # noqa: E402
+from models.common import resolve_session_cookie_secure  # noqa: E402
+
+
+class SecurityConfigurationTests(unittest.TestCase):
+    def test_empty_cookie_setting_uses_request_scheme_detection(self):
+        self.assertIsNone(resolve_session_cookie_secure(None))
+        self.assertIsNone(resolve_session_cookie_secure(""))
+
+    def test_explicit_cookie_setting_overrides_detection(self):
+        self.assertFalse(resolve_session_cookie_secure("false"))
+        self.assertTrue(resolve_session_cookie_secure("true"))
 
 
 class ApplicationSmokeTests(unittest.TestCase):
@@ -39,7 +50,7 @@ class ApplicationSmokeTests(unittest.TestCase):
 
     def test_management_session_cookie_has_safe_defaults(self):
         self.assertTrue(self.app_module.app.config["SESSION_COOKIE_HTTPONLY"])
-        self.assertTrue(self.app_module.app.config["SESSION_COOKIE_SECURE"])
+        self.assertIsNone(self.app_module.app.config["SESSION_COOKIE_SECURE"])
         self.assertEqual(
             self.app_module.app.config["SESSION_COOKIE_SAMESITE"], "Lax"
         )
@@ -132,6 +143,35 @@ class ApplicationSmokeTests(unittest.TestCase):
                 "/modpacklibrary",
                 data={
                     "cleanup_submit": "1",
+                    "modid": "3",
+                    "check": "1",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        save.assert_called_once_with("3", True)
+        clear_caches.assert_called_once_with()
+
+    def test_modpack_library_can_require_full_loader_hashing(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch(
+                "asite.User_modpack.get_user_modpackpermission",
+                return_value=True,
+            ),
+            patch(
+                "asite.ModpackBootstrapSettings.save_always_hash_files"
+            ) as save,
+            patch("api.clear_api_caches") as clear_caches,
+        ):
+            response = self.client.post(
+                "/modpacklibrary",
+                data={
+                    "always_hash_submit": "1",
                     "modid": "3",
                     "check": "1",
                 },
@@ -959,6 +999,8 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(">Clean mods</th>", modpack_library_source)
         self.assertIn('name="cleanup_submit"', modpack_library_source)
         self.assertIn("mod.remove_unlisted_mod_files", modpack_library_source)
+        self.assertIn('name="always_hash_submit"', modpack_library_source)
+        self.assertIn("mod.always_hash_files", modpack_library_source)
         self.assertIn(
             "Only SolderPy Modpack Loader uses this setting",
             modpack_library_source,
@@ -1091,6 +1133,10 @@ class ApplicationSmokeTests(unittest.TestCase):
             patch("asite.User.get_permission_token", return_value=1),
             patch("asite.Session.get_user_id", return_value=4),
             patch(
+                "asite.DistributionSettings.get_all",
+                return_value=dict(DistributionSettings.DEFAULTS),
+            ),
+            patch(
                 "asite.ModIntegration.ensure_bootstrap_projects",
                 return_value=((), 2),
             ) as ensure_bootstrap,
@@ -1119,6 +1165,96 @@ class ApplicationSmokeTests(unittest.TestCase):
         )
         ensure_bootstrap.assert_called_once_with(
             ("5LpwENAj", "zCFNaupz", "cUtsYbG5", "4dRu1OUz"), 4
+        )
+
+    def test_distribution_settings_do_not_reimport_unchanged_downloaders(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        current = dict(DistributionSettings.DEFAULTS)
+        current[DistributionSettings.SOLDERPY_LOADER] = True
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.DistributionSettings.get_all", return_value=current),
+            patch(
+                "asite.ModIntegration.ensure_bootstrap_projects"
+            ) as ensure_bootstrap,
+            patch("asite.DistributionSettings.update_exports") as update,
+        ):
+            response = self.client.post(
+                "/mainsettings",
+                data={
+                    "export_settings_submit": "1",
+                    "solderpy_loader_enabled": "on",
+                    "packwiz_enabled": "on",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        update.assert_called_once()
+        ensure_bootstrap.assert_not_called()
+
+    def test_bootstrap_import_failure_does_not_undo_distribution_settings(self):
+        with self.client.session_transaction() as flask_session:
+            flask_session["token"] = "valid-test-token"
+
+        update = Mock()
+
+        def fail_after_save(*_args, **_kwargs):
+            self.assertTrue(update.called)
+            raise IntegrationError(
+                "Modrinth could not find the requested resource; "
+                "it may be private or unpublished."
+            )
+
+        with (
+            patch("asite.Session.verify_session", return_value=True),
+            patch("asite.User.get_permission_token", return_value=1),
+            patch("asite.Session.get_user_id", return_value=4),
+            patch(
+                "asite.DistributionSettings.get_all",
+                return_value=dict(DistributionSettings.DEFAULTS),
+            ),
+            patch(
+                "asite.ModIntegration.ensure_bootstrap_projects",
+                side_effect=fail_after_save,
+            ) as ensure_bootstrap,
+            patch(
+                "asite.DistributionSettings.update_exports", update
+            ),
+            patch("asite.ErrorPrinter.message") as report,
+        ):
+            response = self.client.post(
+                "/mainsettings",
+                data={
+                    "export_settings_submit": "1",
+                    "solderpy_loader_enabled": "on",
+                },
+            )
+
+        self.assertEqual(response.status_code, 302)
+        update.assert_called_once()
+        ensure_bootstrap.assert_called_once_with(
+            ("5LpwENAj", "zCFNaupz"), 4
+        )
+        report.assert_called_once()
+        with self.client.session_transaction() as flask_session:
+            flashes = flask_session.get("_flashes", [])
+        self.assertTrue(
+            any(
+                category == "success"
+                and "Distribution settings updated" in message
+                for category, message in flashes
+            )
+        )
+        self.assertTrue(
+            any(
+                category == "warning"
+                and "settings were saved" in message
+                and "private or unpublished" in message
+                for category, message in flashes
+            )
         )
 
     def test_environment_settings_can_scan_legacy_jar_packages(self):

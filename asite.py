@@ -1321,29 +1321,10 @@ def mainsettings():
 
     if request.method == "POST" and "export_settings_submit" in request.form:
         try:
+            current_settings = DistributionSettings.get_all()
             mcil_enabled = "mcil_enabled" in request.form
             solderpy_loader_enabled = "solderpy_loader_enabled" in request.form
             filedirector_enabled = "filedirector_enabled" in request.form
-            imported_bootstrap_projects = 0
-            enabled_bootstrap_downloaders = tuple(
-                key
-                for key, enabled in (
-                    ("solderpyloader", solderpy_loader_enabled),
-                    ("mcil", mcil_enabled),
-                    ("filedirector", filedirector_enabled),
-                )
-                if enabled
-            )
-            bootstrap_project_ids = PlatformPackExport.bootstrap_project_ids(
-                enabled_bootstrap_downloaders
-            )
-            if bootstrap_project_ids:
-                _mods, imported_bootstrap_projects = (
-                    ModIntegration.ensure_bootstrap_projects(
-                        bootstrap_project_ids,
-                        Session.get_user_id(session["token"]),
-                    )
-                )
             DistributionSettings.update_exports(
                 mcil=mcil_enabled,
                 solderpy_loader=solderpy_loader_enabled,
@@ -1353,16 +1334,62 @@ def mainsettings():
                 curseforge="curseforge_export_enabled" in request.form,
                 prism="prism_export_enabled" in request.form,
             )
-            message = "Distribution settings updated."
-            if imported_bootstrap_projects:
-                message += (
-                    f" Imported {imported_bootstrap_projects} downloader "
-                    "bootstrap project(s) from Modrinth."
-                )
-            flash(message, "success")
-        except (DistributionSettingsError, IntegrationError) as error:
+        except DistributionSettingsError as error:
             ErrorPrinter.message("Unable to update distribution settings", error)
             flash(str(error), "error")
+            return redirect(url_for("asite.mainsettings"))
+
+        newly_enabled_downloaders = tuple(
+            key
+            for key, setting, enabled in (
+                (
+                    "solderpyloader",
+                    DistributionSettings.SOLDERPY_LOADER,
+                    solderpy_loader_enabled,
+                ),
+                ("mcil", DistributionSettings.MCIL, mcil_enabled),
+                (
+                    "filedirector",
+                    DistributionSettings.FILEDIRECTOR,
+                    filedirector_enabled,
+                ),
+            )
+            if enabled and not current_settings.get(setting, False)
+        )
+        imported_bootstrap_projects = 0
+        import_error = None
+        bootstrap_project_ids = PlatformPackExport.bootstrap_project_ids(
+            newly_enabled_downloaders
+        )
+        if bootstrap_project_ids:
+            try:
+                _mods, imported_bootstrap_projects = (
+                    ModIntegration.ensure_bootstrap_projects(
+                        bootstrap_project_ids,
+                        Session.get_user_id(session["token"]),
+                    )
+                )
+            except IntegrationError as error:
+                import_error = error
+                ErrorPrinter.message(
+                    "Distribution settings saved but bootstrap import failed",
+                    error,
+                )
+
+        message = "Distribution settings updated."
+        if imported_bootstrap_projects:
+            message += (
+                f" Imported {imported_bootstrap_projects} downloader "
+                "bootstrap project(s) from Modrinth."
+            )
+        flash(message, "success")
+        if import_error is not None:
+            flash(
+                "The settings were saved, but downloader bootstrap projects "
+                f"could not be imported from Modrinth: {import_error} "
+                "Disable and re-enable the affected downloader to retry.",
+                "warning",
+            )
         return redirect(url_for("asite.mainsettings"))
 
     distribution_settings = DistributionSettings.get_all()
@@ -3147,6 +3174,14 @@ def modpacklibrary_post():
 
             clear_api_caches()
             flash("updated SolderPy Modpack Loader cleanup policy", "success")
+        if "always_hash_submit" in request.form:
+            ModpackBootstrapSettings.save_always_hash_files(
+                request.form["modid"], request.form["check"] == "1"
+            )
+            from api import clear_api_caches
+
+            clear_api_caches()
+            flash("updated SolderPy Modpack Loader hashing policy", "success")
 
     return redirect(url_for('asite.modpacklibrary'))
 

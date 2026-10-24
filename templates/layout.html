@@ -94,7 +94,7 @@
         {% if messages %}
         <div class="flash-message-container" aria-live="polite" aria-atomic="true">
             {% for category, message in messages %}
-            <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show shadow" role="{{ 'status' if category == 'success' else 'alert' }}" data-flash-message>
+            <div class="alert alert-{{ 'success' if category == 'success' else ('warning' if category == 'warning' else 'danger') }} alert-dismissible fade show shadow" role="{{ 'status' if category == 'success' else 'alert' }}" data-flash-message>
                 {{ message }}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>

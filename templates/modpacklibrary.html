@@ -16,6 +16,7 @@
                 <th scope="col">Optional</th>
                 <th scope="col">Server</th>
                 <th scope="col" title="SolderPy Modpack Loader removes unlisted files from mods/ when changing builds">Clean mods</th>
+                <th scope="col" title="Require SolderPy Modpack Loader to hash every managed file on every launch">Always hash</th>
                 <th scope="col" class="action">Action</th>
             </tr>
         </thead>
@@ -32,6 +33,7 @@
                 <td><input class="form-check-input" type="checkbox" value="" id="optional_{{mod.id}}" onclick="submitecheckedpress('modid', '{{mod.id}}', 'check', 'optional_{{mod.id}}', 'optional_submit')" {% if mod.enable_optionals %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="server_{{mod.id}}" onclick="submitecheckedpress('modid', '{{mod.id}}', 'check', 'server_{{mod.id}}', 'server_submit')" {% if mod.enable_server %}checked{% endif %}></td>
                 <td><input class="form-check-input" type="checkbox" value="" id="cleanup_{{mod.id}}" aria-label="Delete unlisted mod files for {{mod.name}} when changing builds" title="Only SolderPy Modpack Loader uses this setting: delete unlisted files from mods/ when changing builds" onclick="submitecheckedpress('modid', '{{mod.id}}', 'check', 'cleanup_{{mod.id}}', 'cleanup_submit')" {% if mod.remove_unlisted_mod_files %}checked{% endif %}></td>
+                <td><input class="form-check-input" type="checkbox" value="" id="always_hash_{{mod.id}}" aria-label="Always hash managed files for {{mod.name}}" title="Require SolderPy Modpack Loader to hash launcher-owned mods and Loader-owned files on every launch" onclick="submitecheckedpress('modid', '{{mod.id}}', 'check', 'always_hash_{{mod.id}}', 'always_hash_submit')" {% if mod.always_hash_files %}checked{% endif %}></td>
                 <td>
                     <a href=" ./modpack/{{mod.id}}"><button type="button" class="btn btn-primary buttonwidth">Manage</button></a>
                 </td>
@@ -48,6 +50,7 @@
         <input class="btn btn-danger invisible" type="submit" name="optional_submit" id="optional_submit" value="Delete">
         <input class="btn btn-danger invisible" type="submit" name="server_submit" id="server_submit" value="Delete">
         <input class="btn btn-danger invisible" type="submit" name="cleanup_submit" id="cleanup_submit" value="Delete">
+        <input class="btn btn-danger invisible" type="submit" name="always_hash_submit" id="always_hash_submit" value="Delete">
     </form>
 </div>
 {% endblock %}

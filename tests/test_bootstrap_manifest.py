@@ -30,13 +30,14 @@ def package(identifier, membership_id, slug, state=0):
     )
 
 
-def modpack(remove_unlisted_mod_files=False):
+def modpack(remove_unlisted_mod_files=False, always_hash_files=False):
     return SimpleNamespace(
         id=1,
         slug="example",
         name="Example",
         optional_mode=1,
         remove_unlisted_mod_files=remove_unlisted_mod_files,
+        always_hash_files=always_hash_files,
     )
 
 
@@ -90,6 +91,18 @@ class BootstrapManifestTests(unittest.TestCase):
         self.assertTrue(
             manifest["update_policy"]["remove_unlisted_mod_files"]
         )
+
+    def test_modpack_can_require_full_file_hashing(self):
+        manifest = BootstrapManifest.render(
+            modpack(always_hash_files=True),
+            build(1, "1.0"),
+            [package(4, 10, "example-mod")],
+            [],
+            "https://cdn.example.test/mods/",
+            {},
+        )
+
+        self.assertTrue(manifest["update_policy"]["always_hash_files"])
 
     def test_launcher_owned_dependency_stays_in_the_complete_graph(self):
         dependent = package(4, 10, "dependent")

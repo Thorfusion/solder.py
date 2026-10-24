@@ -629,12 +629,16 @@ all signed-in users:
 
 ```dotenv
 SECRET_KEY=replace-with-a-long-random-application-secret
-SESSION_COOKIE_SECURE=True
+# Optional: inferred from APP_URL when omitted.
+SESSION_COOKIE_SECURE=
 ```
 
-Management session cookies are HTTPS-only by default. Set
-`SESSION_COOKIE_SECURE=False` only when developing locally over plain HTTP;
-never disable it on a public deployment.
+When `SESSION_COOKIE_SECURE` is omitted or empty, solder.py follows the actual
+management request scheme: HTTPS receives a Secure cookie and HTTP receives a
+plain cookie. When `PROXY_IP` enables reverse-proxy support, the trusted
+proxy's forwarded scheme is used. An explicit value overrides this detection.
+Use `SESSION_COOKIE_SECURE=False` only for local or private plain-HTTP
+deployments; never disable it on a public HTTPS deployment.
 
 `PUBLIC_REPO_LOCATION` is the HTTP(S) prefix written into launcher manifests.
 It must be reachable by players and should include its trailing slash:

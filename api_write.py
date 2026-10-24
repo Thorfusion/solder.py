@@ -285,7 +285,7 @@ def _modpack_json(row):
     fields = (
         "id", "name", "slug", "recommended", "latest", "order", "hidden",
         "private", "pinned", "enable_optionals", "enable_server", "created_at",
-        "updated_at", "remove_unlisted_mod_files",
+        "updated_at", "remove_unlisted_mod_files", "always_hash_files",
     )
     result = {field: row.get(field) for field in fields}
     for field in (
@@ -295,6 +295,7 @@ def _modpack_json(row):
         "enable_optionals",
         "enable_server",
         "remove_unlisted_mod_files",
+        "always_hash_files",
     ):
         result[field] = bool(result[field])
     return result
@@ -390,6 +391,7 @@ def _modpack_values(data, *, partial=False):
         ("enable_optionals", _MISSING if partial else False),
         ("enable_server", _MISSING if partial else False),
         ("remove_unlisted_mod_files", _MISSING if partial else False),
+        ("always_hash_files", _MISSING if partial else False),
     ):
         _include(values, field, _boolean(data, field, default))
     _include(values, "order", _integer(data, "order", _MISSING if partial else 0))

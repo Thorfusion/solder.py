@@ -2,7 +2,7 @@ import re
 import unittest
 from unittest.mock import Mock, patch
 
-from flask import Blueprint, Flask
+from flask import Blueprint, Flask, request, session
 
 from tests.environment import configure_test_environment
 
@@ -12,6 +12,32 @@ configure_test_environment()
 from models.cache_revision import CacheRevision  # noqa: E402
 from models.csrf import CsrfProtection  # noqa: E402
 from models.login_throttle import LoginThrottle  # noqa: E402
+from models.session_cookie import RequestSchemeSessionInterface  # noqa: E402
+
+
+class SessionCookieTests(unittest.TestCase):
+    def setUp(self):
+        self.app = Flask(__name__)
+        self.app.secret_key = "session-cookie-test-key"
+        self.app.config["SESSION_COOKIE_SECURE"] = None
+        self.app.session_interface = RequestSchemeSessionInterface()
+
+        @self.app.route("/session")
+        def create_session():
+            session["request_scheme"] = request_scheme = (
+                "https" if request.is_secure else "http"
+            )
+            return request_scheme
+
+        self.client = self.app.test_client()
+
+    def test_http_request_receives_a_non_secure_cookie(self):
+        response = self.client.get("/session", base_url="http://solder.test")
+        self.assertNotIn("; Secure", response.headers["Set-Cookie"])
+
+    def test_https_request_receives_a_secure_cookie(self):
+        response = self.client.get("/session", base_url="https://solder.test")
+        self.assertIn("; Secure", response.headers["Set-Cookie"])
 
 
 class CsrfProtectionTests(unittest.TestCase):
