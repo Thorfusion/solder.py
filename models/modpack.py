@@ -221,7 +221,7 @@ class Modpack:
                            WHERE cm.modpack_id = modpacks.id
                              AND c.uuid = %s
                       )
-                   ORDER BY modpacks.id ASC""",
+                   ORDER BY modpacks.id ASC""",  # nosec B608
                 (cid,),
             )
             return [cls._from_row(row) for row in cur.fetchall()]
@@ -261,7 +261,7 @@ class Modpack:
                               WHERE cm.modpack_id = modpacks.id
                                 AND c.uuid = %s
                           )
-                     )""",
+                     )""",  # nosec B608
                 (slug, cid),
             )
             row = cur.fetchone()

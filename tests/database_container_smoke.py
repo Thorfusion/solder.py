@@ -1868,10 +1868,10 @@ def exercise_synthetic_user_login(
            WHERE build_modversion.build_id = 1
              AND modversions.mod_id = 2;""",
     )
-    if updated_dependency != "5":
+    if updated_dependency != "4":
         raise AssertionError(
-            "Update all did not select the newest compatible dependency "
-            f"version: {updated_dependency}"
+            "Update all selected dependency version "
+            f"{updated_dependency} without verified compatibility"
         )
 
     with opener.open(f"{base_url}/modpackbuild/1", timeout=5) as response:

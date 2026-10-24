@@ -33,7 +33,7 @@ jobs:
     name: solder.py tests
     # The Docker smoke tests probe ports published to runner-local loopback.
     # Keep this job on the same host as its Docker daemon for every event.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       PIPENV_DONT_LOAD_ENV: "1"
@@ -119,7 +119,7 @@ jobs:
   dependency-review:
     name: Review dependency changes
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
