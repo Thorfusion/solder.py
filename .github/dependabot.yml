@@ -24,3 +24,16 @@ updates:
       docker:
         patterns:
           - "*"
+
+  # These packages are vendored into static/; Node.js is not used in production.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "04:15"
+      timezone: Europe/Oslo
+    groups:
+      frontend:
+        patterns:
+          - "*"

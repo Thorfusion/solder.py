@@ -47,6 +47,8 @@ def login():
             LoginThrottle.success(username, request.remote_addr)
             # if new_user:
             # return render_template("login.html", failed=True)
+            session.clear()
+            session.permanent = True
             session["token"] = Session.new_session(
                 request.remote_addr, User.get_userid(username)
             )

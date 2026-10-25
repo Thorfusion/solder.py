@@ -1,10 +1,12 @@
 import datetime
 import hashlib
+import io
 import re
 import tempfile
 import unittest
 import zipfile
 
+from contextlib import redirect_stdout
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
@@ -162,6 +164,10 @@ class SessionTests(unittest.TestCase):
         )
         self.assertIn("expiry > NOW()", cursor.execute.call_args_list[0].args[0])
         self.assertIn("users.night_mode", cursor.execute.call_args_list[0].args[0])
+        self.assertEqual(
+            cursor.execute.call_args_list[1].args[1],
+            (86400, "token"),
+        )
         connection.commit.assert_called_once_with()
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
@@ -192,6 +198,10 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(token, "new-token")
         cursor.execute.assert_any_call(
             "DELETE FROM sessions WHERE user_id = %s", (17,)
+        )
+        self.assertIn(
+            ("new-token", "10.0.0.1", 86400, 17),
+            [call.args[1] for call in cursor.execute.call_args_list],
         )
         self.assertNotIn("DELETE FROM sessions WHERE ip", str(cursor.mock_calls))
 
@@ -1159,12 +1169,28 @@ class ModelBehaviorTests(unittest.TestCase):
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
 
-    def test_failed_database_probe_is_safe_outside_a_request(self):
-        with patch(
-            "models.database.connector.connect",
-            side_effect=ConnectionError("database unavailable"),
+    def test_failed_database_probe_logs_details_but_flashes_a_generic_error(self):
+        error = ConnectionError(
+            "database unavailable at secret-host for secret-user using secret-password"
+        )
+        output = io.StringIO()
+        with (
+            patch("models.database.connector.connect", side_effect=error),
+            patch("models.database.has_request_context", return_value=True),
+            patch("models.database.flash") as flash,
+            redirect_stdout(output),
         ):
             self.assertIsNone(Database.get_connection())
+
+        log = output.getvalue()
+        self.assertIn("Database connection failed", log)
+        self.assertIn("secret-host", log)
+        self.assertIn("secret-user", log)
+        self.assertIn("secret-password", log)
+        flash.assert_called_once_with("Error connecting to database", "error")
+        self.assertNotIn("secret-host", flash.call_args.args[0])
+        self.assertNotIn("secret-user", flash.call_args.args[0])
+        self.assertNotIn("secret-password", flash.call_args.args[0])
 
     def test_failed_setup_query_is_safe_outside_a_request(self):
         connection = Mock()

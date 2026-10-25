@@ -886,8 +886,8 @@ class Database:
                 password=db_pass,
                 database=db_name,
             )
-        except Exception as e:
-            ErrorPrinter.message("Error connecting to database", e)
+        except Exception as error:
+            ErrorPrinter.message("Database connection failed.", error)
             # Connections are also checked while the application is importing,
             # before Flask has established a request context.
             if has_request_context():
@@ -906,8 +906,8 @@ class Database:
             cur = conn.cursor()
             cur.execute("SHOW TABLES")
             tables_found = cur.fetchall()
-        except Exception as e:
-            ErrorPrinter.message("An error occurred whilst trying to check database setup", e)
+        except Exception as error:
+            ErrorPrinter.message("Database setup check failed.", error)
             if has_request_context():
                 flash("An error occurred whilst trying to check database setup", "error")
             return 2
@@ -1107,7 +1107,7 @@ class Database:
             con.commit()
             return True
         except Exception as error:
-            ErrorPrinter.message("Error creating tables", error)
+            ErrorPrinter.message("Database schema creation failed.", error)
             if has_request_context():
                 flash("Error creating tables", "error")
             return False
@@ -1222,7 +1222,7 @@ class Database:
             print("technic database migrated!")
             return True
         except Exception as error:
-            ErrorPrinter.message("Error migrating Technic Solder tables", error)
+            ErrorPrinter.message("Technic Solder database migration failed.", error)
             if has_request_context():
                 flash("Error migrating Technic Solder tables", "error")
             return False
@@ -1272,7 +1272,7 @@ class Database:
             con.commit()
             return True
         except Exception as error:
-            ErrorPrinter.message("Error updating solder.py database schema", error)
+            ErrorPrinter.message("solder.py database schema update failed.", error)
             return False
         finally:
             if cur is not None:
@@ -1293,7 +1293,7 @@ class Database:
             con.commit()
             return True
         except Exception as error:
-            ErrorPrinter.message("Error making session table", error)
+            ErrorPrinter.message("Session table creation failed.", error)
             if has_request_context():
                 flash("Error making session table", "error")
             return False

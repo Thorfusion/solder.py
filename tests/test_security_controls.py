@@ -1,5 +1,6 @@
 import re
 import unittest
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 from flask import Blueprint, Flask, request, session
@@ -12,7 +13,10 @@ configure_test_environment()
 from models.cache_revision import CacheRevision  # noqa: E402
 from models.csrf import CsrfProtection  # noqa: E402
 from models.login_throttle import LoginThrottle  # noqa: E402
-from models.session_cookie import RequestSchemeSessionInterface  # noqa: E402
+from models.session_cookie import (  # noqa: E402
+    RequestSchemeSessionInterface,
+    resolve_session_idle_timeout,
+)
 
 
 class SessionCookieTests(unittest.TestCase):
@@ -20,10 +24,12 @@ class SessionCookieTests(unittest.TestCase):
         self.app = Flask(__name__)
         self.app.secret_key = "session-cookie-test-key"
         self.app.config["SESSION_COOKIE_SECURE"] = None
+        self.app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=24)
         self.app.session_interface = RequestSchemeSessionInterface()
 
         @self.app.route("/session")
         def create_session():
+            session.permanent = True
             session["request_scheme"] = request_scheme = (
                 "https" if request.is_secure else "http"
             )
@@ -38,6 +44,22 @@ class SessionCookieTests(unittest.TestCase):
     def test_https_request_receives_a_secure_cookie(self):
         response = self.client.get("/session", base_url="https://solder.test")
         self.assertIn("; Secure", response.headers["Set-Cookie"])
+
+    def test_permanent_session_cookie_has_an_expiry(self):
+        response = self.client.get("/session")
+        self.assertIn("Expires=", response.headers["Set-Cookie"])
+
+    def test_session_idle_timeout_is_configurable(self):
+        self.assertEqual(
+            resolve_session_idle_timeout(None),
+            timedelta(hours=24),
+        )
+        self.assertEqual(
+            resolve_session_idle_timeout("6"),
+            timedelta(hours=6),
+        )
+        with self.assertRaises(ValueError):
+            resolve_session_idle_timeout("0")
 
 
 class CsrfProtectionTests(unittest.TestCase):

@@ -1,4 +1,6 @@
 class ErrorPrinter:
     @staticmethod
     def message(message, e=""):
-        print("-" * 70 + "\n" + str(message) + "\n" + str(e) + "+\n" + "-" * 70)
+        print(f"[solder.py] ERROR: {message}", flush=True)
+        if e not in (None, ""):
+            print(f"[solder.py] ERROR DETAIL: {e}", flush=True)

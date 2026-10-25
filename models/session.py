@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+import os
 import secrets
 import threading
 import time
 from datetime import datetime
 
-from flask import flash, g, has_request_context
+from flask import flash, g, has_request_context, session
 
 from .database import Database
+from .session_cookie import resolve_session_idle_timeout
+
+
+SESSION_IDLE_TIMEOUT_SECONDS = int(
+    resolve_session_idle_timeout(
+        os.getenv("SESSION_IDLE_TIMEOUT_HOURS")
+    ).total_seconds()
+)
 
 
 class Session:
@@ -50,9 +59,10 @@ class Session:
             if stored_session is None:
                 return None
             cur.execute(
-                "UPDATE sessions SET expiry = DATE_ADD(NOW(), INTERVAL 1 DAY) "
+                "UPDATE sessions SET expiry = "
+                "DATE_ADD(NOW(), INTERVAL %s SECOND) "
                 "WHERE token = %s AND expiry > NOW()",
-                (token,),
+                (SESSION_IDLE_TIMEOUT_SECONDS, token),
             )
             conn.commit()
             return cls(
@@ -103,8 +113,8 @@ class Session:
             cur.execute("DELETE FROM sessions WHERE user_id = %s", (user,))
             cur.execute(
                 "INSERT INTO sessions (token, ip, expiry, user_id) "
-                "VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL 1 HOUR), %s)",
-                (token, ip, user),
+                "VALUES (%s, %s, DATE_ADD(NOW(), INTERVAL %s SECOND), %s)",
+                (token, ip, SESSION_IDLE_TIMEOUT_SECONDS, user),
             )
             conn.commit()
         except Exception:
@@ -138,6 +148,10 @@ class Session:
                 g.solder_user_id = stored_session.user_id
                 g.solder_night_mode = stored_session.night_mode
             return True
+        if has_request_context():
+            # Ensure Flask deletes an expired, revoked, or address-mismatched
+            # browser cookie instead of refreshing it during the redirect.
+            session.clear()
         return False
 
     def __eq__(self, other):

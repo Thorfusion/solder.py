@@ -87,6 +87,9 @@ jobs:
   python-security:
     # Keep this name stable if it is selected as a required status check.
     name: Python security
+    # Dependency advisories can appear without any repository change. Report them
+    # from scheduled/manual scans instead of failing an unrelated pull request.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     needs: select-runner
     runs-on: ${{ needs.select-runner.outputs.runner }}
     timeout-minutes: 20
@@ -132,7 +135,9 @@ jobs:
   container-security:
     # Keep this name stable if it is selected as a required status check.
     name: Container security
-    if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    # Base-image advisories are external state, so keep this informative scan out
+    # of ordinary pull requests and merge queues.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     needs: select-runner
     runs-on: ${{ needs.select-runner.outputs.runner }}
     timeout-minutes: 45
