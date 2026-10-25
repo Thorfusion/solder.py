@@ -752,6 +752,21 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(remote_health[1]["detail"], "Remote source configured")
         self.assertEqual(remote_health[2]["detail"], "Enabled")
 
+    def test_mod_library_download_uses_native_blob_api(self):
+        project_root = Path(__file__).resolve().parents[1]
+        template_source = (project_root / "templates" / "modlibrary.html").read_text(
+            encoding="utf-8"
+        )
+        script_source = (project_root / "static" / "js" / "solderpy.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertNotIn("FileSaver", template_source)
+        self.assertNotIn("saveAs(", script_source)
+        self.assertIn("function download_blob(file, filename)", script_source)
+        self.assertIn("URL.createObjectURL(file)", script_source)
+        self.assertIn("URL.revokeObjectURL(objectUrl)", script_source)
+
     def test_modloader_controls_and_dependency_search_use_existing_ui_styles(self):
         template_root = Path(__file__).resolve().parents[1] / "templates"
         project_root = Path(__file__).resolve().parents[1]
