@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 
 from models.database import Database
+from models.errorPrinter import ErrorPrinter
 
 ## Solderpy version
 solderpy_version = "1.10.2"
@@ -97,6 +98,14 @@ if DB_IS_UP == 1 and (not api_only or write_api):
         schema_ready = Database.repair_schema()
     if not schema_ready:
         DB_IS_UP = 2
+if DB_IS_UP == 2:
+    ErrorPrinter.message(
+        "The database was unavailable during startup. Management routes, "
+        "including / and /login, are disabled and will return 404. Verify the "
+        "DB_* environment settings, network access, and MySQL readiness, then "
+        "restart solder.py. For Docker or TrueNAS, also inspect the database "
+        "container logs and confirm both containers share a network."
+    )
 
 if (os.getenv("CACHE_SIZE")):
     cache_size = int(os.getenv("CACHE_SIZE"))

@@ -789,6 +789,14 @@ Check `docker compose logs solderpy mysql`, correct the database connection,
 and restart the services. On an existing database, `/setup` is closed when a
 user already exists unless `NEW_USER=True` was deliberately enabled.
 
+If `/` or `/login` returns solder.py's 404 page, check the container logs before
+assuming that the URL is wrong. Management and login routes are deliberately
+not registered when the database cannot be verified during startup. Container
+logs include the underlying connector exception for administrators, while the
+web response remains generic and does not expose those details. Keep container
+logs private. Confirm the `DB_*` settings, MySQL network access, and MySQL
+readiness, then restart solder.py.
+
 After the first login:
 
 1. Verify the public URL and repository paths under **Settings > Env Settings**.
