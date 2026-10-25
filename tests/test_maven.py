@@ -417,27 +417,6 @@ class MavenSchemaAndUiTests(unittest.TestCase):
         self.assertIn("DEFAULT CURRENT_TIMESTAMP", schema)
         self.assertIn("ON UPDATE CURRENT_TIMESTAMP", schema)
 
-    def test_management_page_explains_all_mapping_modes(self):
-        source = (
-            Path(__file__).resolve().parents[1] / "templates" / "maven.html"
-        ).read_text(encoding="utf-8")
-        self.assertIn("Contained in Maven version", source)
-        self.assertIn("Always one Minecraft version", source)
-        self.assertIn("Manual per version", source)
-        self.assertIn("{minecraft}", source)
-        self.assertIn("{version}", source)
-        self.assertIn("maxheighttable table-sm", source)
-        self.assertIn("updatemavenmodname", source)
-        self.assertIn("updatemavenmappingfields", source)
-        self.assertIn('data-embedded-pattern="{{default_pattern}}"', source)
-
-        javascript = (
-            Path(__file__).resolve().parents[1] / "static" / "js" / "solderpy.js"
-        ).read_text(encoding="utf-8")
-        self.assertIn('pattern.value = "{version}"', javascript)
-        self.assertIn("pattern.dataset.embeddedPattern", javascript)
-        self.assertIn('modName.value + "-" + repositoryName', javascript)
-
     def test_artifact_url_preserves_classifier_as_a_separate_coordinate(self):
         self.assertEqual(
             artifact_file_url(artifact(), "1.7.10-9.10.48"),

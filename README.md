@@ -395,6 +395,8 @@ SOLDER_IMAGE=thorfusion/solderpy:1.10.2
 SOLDER_DB_PASSWORD=replace-with-a-long-random-password
 MYSQL_ROOT_PASSWORD=replace-with-another-long-random-password
 SOLDER_SECRET_KEY=replace-with-a-long-random-application-secret
+# Optional; defaults to 24 hours without a management request.
+SESSION_IDLE_TIMEOUT_HOURS=24
 # Optional; enables automatic CurseForge matching and downloader lookup.
 CURSEFORGE_API_KEY=
 ```
@@ -433,6 +435,7 @@ services:
     environment:
       APP_URL: https://solder.example.com/
       SECRET_KEY: ${SOLDER_SECRET_KEY}
+      SESSION_IDLE_TIMEOUT_HOURS: ${SESSION_IDLE_TIMEOUT_HOURS:-24}
       DB_HOST: mysql
       DB_PORT: "3306"
       DB_USER: solderpy
@@ -515,6 +518,7 @@ PUBLIC_REPO_LOCATION=https://solder.example.com/mods/
 MD5_REPO_LOCATION=/app/mods/
 APP_URL=https://solder.example.com/
 SECRET_KEY=replace-with-a-long-random-application-secret
+SESSION_IDLE_TIMEOUT_HOURS=24
 # Used for automatic CurseForge file and downloader-version lookup.
 CURSEFORGE_API_KEY=
 ```
@@ -524,7 +528,9 @@ local path used by solder.py for hashing and file inspection, so those internal
 operations do not need to download the file again through Caddy. `APP_URL` is
 the trusted public base URL used in generated FileDirector remote pointers.
 `SECRET_KEY` signs management login cookies and must remain private and stable
-across restarts and replicas.
+across restarts and replicas. `SESSION_IDLE_TIMEOUT_HOURS` controls how long a
+management login may remain unused before both its cookie and server-side token
+expire.
 `CURSEFORGE_API_KEY` is a CurseForge third-party API key used only to list and
 verify files while generating CurseForge archives. A manually entered
 CurseForge file ID on a synced Modrinth version bypasses that version's lookup;
@@ -624,11 +630,14 @@ use it instead of deriving a URL from the incoming request:
 APP_URL=https://solder.example.com/
 ```
 
-Set a stable random secret for management login sessions. Changing it logs out
-all signed-in users:
+Set a stable random secret and an idle timeout for management login sessions.
+The default timeout is 24 hours. Each authenticated request refreshes the
+expiry; after that many hours without a request, the browser cookie and matching
+server-side session token are no longer accepted.
 
 ```dotenv
 SECRET_KEY=replace-with-a-long-random-application-secret
+SESSION_IDLE_TIMEOUT_HOURS=24
 # Optional: inferred from APP_URL when omitted.
 SESSION_COOKIE_SECURE=
 ```

@@ -164,6 +164,10 @@ class SessionTests(unittest.TestCase):
         )
         self.assertIn("expiry > NOW()", cursor.execute.call_args_list[0].args[0])
         self.assertIn("users.night_mode", cursor.execute.call_args_list[0].args[0])
+        self.assertEqual(
+            cursor.execute.call_args_list[1].args[1],
+            (86400, "token"),
+        )
         connection.commit.assert_called_once_with()
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
@@ -194,6 +198,10 @@ class SessionTests(unittest.TestCase):
         self.assertEqual(token, "new-token")
         cursor.execute.assert_any_call(
             "DELETE FROM sessions WHERE user_id = %s", (17,)
+        )
+        self.assertIn(
+            ("new-token", "10.0.0.1", 86400, 17),
+            [call.args[1] for call in cursor.execute.call_args_list],
         )
         self.assertNotIn("DELETE FROM sessions WHERE ip", str(cursor.mock_calls))
 

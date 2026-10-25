@@ -282,6 +282,7 @@ def logout():
         return redirect(url_for('alogin.login'))
 
     Session.delete_session(session["token"])
+    session.clear()
     return redirect(url_for("alogin.login"))
 
 

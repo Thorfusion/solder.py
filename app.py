@@ -10,7 +10,10 @@ from flask import Flask, jsonify, render_template, request
 from models.common import debug, host, port, api_only, management_only, migratetechnic, new_user, DB_IS_UP, database_needs_setup, reverse_proxy, write_api, session_cookie_secure
 from models.csrf import CsrfProtection
 from models.cache_revision import CacheRevision
-from models.session_cookie import RequestSchemeSessionInterface
+from models.session_cookie import (
+    RequestSchemeSessionInterface,
+    resolve_session_idle_timeout,
+)
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 __version__ = solderpy_version
@@ -42,6 +45,10 @@ if not api_only:
     # multiple workers. The random fallback preserves zero-config development.
     app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
     app.config.update(
+        PERMANENT_SESSION_LIFETIME=resolve_session_idle_timeout(
+            os.getenv("SESSION_IDLE_TIMEOUT_HOURS")
+        ),
+        SESSION_REFRESH_EACH_REQUEST=True,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=session_cookie_secure,

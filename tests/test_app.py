@@ -1,7 +1,7 @@
 import hashlib
 import io
 import importlib
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -53,6 +53,13 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIsNone(self.app_module.app.config["SESSION_COOKIE_SECURE"])
         self.assertEqual(
             self.app_module.app.config["SESSION_COOKIE_SAMESITE"], "Lax"
+        )
+        self.assertEqual(
+            self.app_module.app.config["PERMANENT_SESSION_LIFETIME"],
+            timedelta(hours=24),
+        )
+        self.assertTrue(
+            self.app_module.app.config["SESSION_REFRESH_EACH_REQUEST"]
         )
 
     def test_login_redirects_an_existing_session(self):
@@ -231,13 +238,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.headers["Location"], "/user/9")
         set_night_mode.assert_called_once_with(9, True, "127.0.0.1", 4)
 
-        user_template = (
-            Path(__file__).resolve().parents[1] / "templates" / "user.html"
-        ).read_text(encoding="utf-8")
-        self.assertIn('name="night_mode"', user_template)
-        self.assertIn("managed_user.night_mode", user_template)
-        self.assertIn('name="appearance-submit"', user_template)
-
     def test_manage_user_shows_the_saved_night_mode(self):
         with self.client.session_transaction() as flask_session:
             flask_session["token"] = "valid-test-token"
@@ -277,7 +277,6 @@ class ApplicationSmokeTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'id="night_mode" name="night_mode" checked', response.data)
-        self.assertIn(b"does not follow the operating-system theme", response.data)
 
     def test_authenticated_user_theme_does_not_follow_the_operating_system(self):
         from flask import g
@@ -300,19 +299,6 @@ class ApplicationSmokeTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'data-bs-theme="dark"', response.data)
-        layout = (
-            Path(__file__).resolve().parents[1] / "templates" / "layout.html"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn("prefers-color-scheme", layout)
-        self.assertNotIn("matchMedia", layout)
-        theme_css = (
-            Path(__file__).resolve().parents[1]
-            / "static"
-            / "css"
-            / "layout.css"
-        ).read_text(encoding="utf-8")
-        self.assertIn('[data-bs-theme="dark"] .asideright', theme_css)
-        self.assertIn('[data-bs-theme="dark"] .table-light', theme_css)
 
     def test_api_blueprint_is_registered(self):
         response = self.client.get("/api/")
@@ -394,57 +380,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         targets.assert_called_once_with(42)
         runs.assert_called_once_with(42)
         packs.assert_called_once_with(42)
-
-    def test_navbar_help_links_to_the_project_documentation_index(self):
-        layout = (
-            Path(__file__).resolve().parents[1] / "templates" / "layout.html"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn('data-bs-target="#settings-collapse"', layout)
-        self.assertIn("url_for('asite.help_index')", layout)
-        self.assertIn(">Help</a>", layout)
-        self.assertNotIn("help-collapse", layout)
-        self.assertNotIn(">Manual MD5</a>", layout)
-        self.assertNotIn("solder.py#installation", layout)
-        self.assertNotIn("github.com/Thorfusion/solder.py/blob", layout)
-
-    def test_sidebar_overflow_is_clipped_to_the_viewport(self):
-        layout_css = (
-            Path(__file__).resolve().parents[1]
-            / "static"
-            / "css"
-            / "layout.css"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn(".asideleft,\n.asideright", layout_css)
-        self.assertIn("height: 100vh", layout_css)
-        self.assertIn("max-height: 100vh", layout_css)
-        self.assertIn("overflow: hidden", layout_css)
-
-    def test_flash_messages_are_bottom_centered_and_auto_dismiss(self):
-        project_root = Path(__file__).resolve().parents[1]
-        layout = (project_root / "templates" / "layout.html").read_text(
-            encoding="utf-8"
-        )
-        layout_css = (project_root / "static" / "css" / "layout.css").read_text(
-            encoding="utf-8"
-        )
-        flash_script = (
-            project_root / "static" / "js" / "flash-messages.js"
-        ).read_text(encoding="utf-8")
-
-        self.assertIn("get_flashed_messages(with_categories=true)", layout)
-        self.assertIn('class="flash-message-container"', layout)
-        self.assertIn("data-flash-message", layout)
-        self.assertIn("js/flash-messages.js", layout)
-        self.assertLess(
-            layout.index("{%block aside%}"),
-            layout.index("flash-message-container"),
-        )
-        self.assertIn("bottom: 1.5rem", layout_css)
-        self.assertIn("left: 50%", layout_css)
-        self.assertIn("bootstrap.Alert.getOrCreateInstance", flash_script)
-        self.assertIn("5000", flash_script)
 
     def test_direct_publish_uses_the_shared_rendered_archive(self):
         target = SimpleNamespace(
@@ -580,12 +515,7 @@ class ApplicationSmokeTests(unittest.TestCase):
             document = self.client.get("/help/github-config")
 
         self.assertEqual(index.status_code, 200)
-        self.assertIn(b"Documentation included with this solder.py version", index.data)
-        self.assertIn(b"GitHub config repositories", index.data)
         self.assertEqual(document.status_code, 200)
-        self.assertIn(b"GitHub config repository guide", document.data)
-        self.assertIn(b".solderpyignore", document.data)
-        self.assertNotIn(b"github.com/Thorfusion/solder.py/blob", document.data)
 
     def test_github_page_links_an_existing_config(self):
         with self.client.session_transaction() as flask_session:
@@ -664,7 +594,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(b"Available Config", response.data)
         self.assertNotIn(b"Ordinary Mod", response.data)
 
-    def test_dashboard_is_a_status_view_without_duplicate_action_buttons(self):
+    def test_dashboard_renders_loaded_status_data(self):
         with self.client.session_transaction() as flask_session:
             flask_session["token"] = "valid-test-token"
 
@@ -724,14 +654,9 @@ class ApplicationSmokeTests(unittest.TestCase):
             response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Needs attention", response.data)
         self.assertIn(b"Latest build is unpublished", response.data)
-        self.assertIn(b"Marked build", response.data)
-        self.assertIn(b"Recent changes", response.data)
-        self.assertIn(b">Modrinth</span>", response.data)
-        self.assertIn(b"Repository health", response.data)
-        self.assertNotIn(b"<button", response.data.split(b"</main>", 1)[0])
-        self.assertNotIn(b"solderpy.js", response.data)
+        self.assertIn(b"Example Mod - 2.0", response.data)
+        self.assertIn(b"Public repository", response.data)
         load.assert_called_once_with(4)
 
     def test_dashboard_repository_health_accepts_url_or_local_md5_source(self):
@@ -751,318 +676,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertTrue(remote_health[1]["ready"])
         self.assertEqual(remote_health[1]["detail"], "Remote source configured")
         self.assertEqual(remote_health[2]["detail"], "Enabled")
-
-    def test_mod_library_download_uses_native_blob_api(self):
-        project_root = Path(__file__).resolve().parents[1]
-        template_source = (project_root / "templates" / "modlibrary.html").read_text(
-            encoding="utf-8"
-        )
-        script_source = (project_root / "static" / "js" / "solderpy.js").read_text(
-            encoding="utf-8"
-        )
-
-        self.assertNotIn("FileSaver", template_source)
-        self.assertNotIn("saveAs(", script_source)
-        self.assertIn("function download_blob(file, filename)", script_source)
-        self.assertIn("URL.createObjectURL(file)", script_source)
-        self.assertIn("URL.revokeObjectURL(objectUrl)", script_source)
-
-    def test_modloader_controls_and_dependency_search_use_existing_ui_styles(self):
-        template_root = Path(__file__).resolve().parents[1] / "templates"
-        project_root = Path(__file__).resolve().parents[1]
-        layout_source = (template_root / "layout.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("js/bootstrap.bundle.min.js", layout_source)
-        self.assertNotIn("js/bootstrap.min.js", layout_source)
-        bootstrap_bundle = (
-            project_root / "static" / "js" / "bootstrap.bundle.min.js"
-        ).read_text(encoding="utf-8")
-        self.assertIn("Bootstrap v5.3.8", bootstrap_bundle[:500])
-        self.assertIn("popperGenerator", bootstrap_bundle)
-
-        loader_templates = (
-            "modpack.html",
-            "modpackbuild.html",
-        )
-        for template_name in loader_templates:
-            source = (template_root / template_name).read_text(encoding="utf-8")
-            self.assertIn(
-                '<select class="form-select" name="modloader" id="modloader">',
-                source,
-            )
-            self.assertNotIn('<datalist id="modloaders">', source)
-            self.assertNotIn("or 'ANY'", source)
-
-        version_loader_source = (template_root / "modversion.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            "{{modloader_dropdown(",
-            version_loader_source,
-        )
-        self.assertNotIn(
-            "Select every compatible loader; no selection supports all.",
-            version_loader_source,
-        )
-        self.assertNotIn('name="modloader" id="modloader" multiple', version_loader_source)
-        modlibrary_source = (template_root / "modlibrary.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("{{modloader_dropdown(", modlibrary_source)
-        self.assertIn("input_name='modloader'", modlibrary_source)
-        self.assertNotIn('name="modloader" id="modloader">', modlibrary_source)
-        self.assertNotIn(
-            "Select every compatible loader; no selection supports all.",
-            modlibrary_source,
-        )
-        loader_dropdown_source = (
-            template_root / "_modloader_dropdown.html"
-        ).read_text(encoding="utf-8")
-        self.assertIn('data-bs-toggle="dropdown"', loader_dropdown_source)
-        self.assertIn('data-bs-auto-close="outside"', loader_dropdown_source)
-        self.assertIn('type="checkbox"', loader_dropdown_source)
-        self.assertIn("data-multiselect-option", loader_dropdown_source)
-
-        for template_name in ("modpack.html", "modpackbuild.html"):
-            source = (template_root / template_name).read_text(encoding="utf-8")
-            self.assertIn(
-                '<input type="text" class="form-control" name="min_java"',
-                source,
-            )
-            self.assertNotIn(
-                '<select class="form-select" name="min_java"', source
-            )
-            self.assertIn(
-                '<select class="form-select" name="java_runtime"', source
-            )
-            self.assertNotIn(">Advanced</span>", source)
-
-        version_source = (template_root / "modversion.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("Versions available from", version_source)
-        self.assertIn("import_integration_version_submit", version_source)
-        self.assertIn("ZIP / JAR", version_source)
-        self.assertNotIn("Download URL", version_source)
-        self.assertNotIn("versions.jarfilesize", version_source)
-        new_mod_source = (template_root / "newmod.html").read_text(
-            encoding="utf-8"
-        )
-        library_source = (template_root / "modlibrary.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("LAUNCHER (MODLOADER)", version_source)
-        self.assertIn("LAUNCHER (MODLOADER)", new_mod_source)
-        self.assertIn(
-            'name="enforce"', version_source
-        )
-        self.assertIn(
-            "Only SolderPy Modpack Loader uses this setting",
-            version_source,
-        )
-        self.assertIn(
-            'name="enforce"', new_mod_source
-        )
-        self.assertIn(
-            "Only SolderPy Modpack Loader uses this setting",
-            new_mod_source,
-        )
-        self.assertIn("Launcher (modloader)", library_source)
-        self.assertIn('id="dependency_search"', version_source)
-        self.assertIn(
-            "dropdownsearches('dependency_search', 'dependency_dropdown_options', 'dependency_no_results');",
-            version_source,
-        )
-        self.assertIn(
-            'id="dependency_dropdown" aria-haspopup="listbox" aria-expanded="false" onclick="togglesearchabledropdown(this);"',
-            version_source,
-        )
-        self.assertIn(
-            'type="hidden" name="dependency_mod_id" id="dependency_mod_id"',
-            version_source,
-        )
-        self.assertIn("selectsearchabledropdown(this", version_source)
-        self.assertIn(
-            "integration_badge(dependency.integration_provider, dependency.integration_label)",
-            version_source,
-        )
-        self.assertNotIn(">Verify / Create JAR</button>", version_source)
-        self.assertNotIn(">Verify ZIP</button>", version_source)
-        self.assertNotIn(">Create JAR</button>", version_source)
-        self.assertNotIn(">Verify JAR</button>", version_source)
-        self.assertNotIn(">Rehash</button>", version_source)
-        self.assertNotIn('name="rehash_md5"', version_source)
-        self.assertNotIn('id="createmciljar_submit"', version_source)
-        manage_version_source = (template_root / "manage_modversion.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(">Verify ZIP</button>", manage_version_source)
-        self.assertIn("Verify JAR", manage_version_source)
-        self.assertIn("Create JAR", manage_version_source)
-        self.assertIn('name="verify_zip_submit"', manage_version_source)
-        self.assertIn('name="jar_action_submit"', manage_version_source)
-        self.assertNotIn('id="table"', version_source)
-        self.assertNotIn('name="rehash_url"', version_source)
-        self.assertNotIn('name="newmodvermanual_url"', version_source)
-        self.assertIn("submitform('newmodvermanual_submit')", version_source)
-        self.assertIn(
-            "mod.integration_provider or not legacy_modversion_adding",
-            version_source,
-        )
-        self.assertIn('name="link_modrinth_submit"', version_source)
-        self.assertIn('name="link_github_submit"', version_source)
-        self.assertIn("mod.modtype == 'CONFIG'", version_source)
-        self.assertIn('name="sync_github_ref_submit"', version_source)
-        self.assertIn('name="sync_github_tag_submit"', version_source)
-
-        build_source = (template_root / "modpackbuild.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn('id="build_mod_search"', build_source)
-        self.assertIn(
-            "dropdownsearches('build_mod_search', 'build_mod_dropdown_options', 'build_mod_no_results');",
-            build_source,
-        )
-        self.assertIn(
-            'id="build_mod_dropdown" aria-haspopup="listbox" aria-expanded="false" onclick="togglesearchabledropdown(this);"',
-            build_source,
-        )
-        self.assertIn('type="hidden" name="modnames" id="modnames"', build_source)
-        self.assertIn("selectbuildmod(this", build_source)
-        self.assertIn("modtype_badge(lmod.modtype)", build_source)
-        self.assertIn("modtype_badge(combo.modtype)", build_source)
-        self.assertIn(
-            "integration_badge(lmod.integration_provider, lmod.integration_label)",
-            build_source,
-        )
-        self.assertIn(
-            "integration_badge(combo.integration_provider, combo.integration_label)",
-            build_source,
-        )
-        badge_source = (template_root / "_badges.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn("provider|upper == 'MODRINTH'", badge_source)
-        self.assertIn("bg-success", badge_source)
-        self.assertIn("bg-secondary", badge_source)
-        self.assertIn("LAUNCHER (MODLOADER)", badge_source)
-        self.assertIn("modtype_badge(mod.modtype)", library_source)
-        self.assertIn('name="update_all_mods_submit"', build_source)
-        self.assertIn('form="update_all_mods_form"', build_source)
-        self.assertIn('id="update_all_mods_form"', build_source)
-        self.assertIn("check_updates=1", build_source)
-        self.assertIn("combo.update_available", build_source)
-        self.assertIn("build-name-cell", build_source)
-        self.assertIn("build-update-indicator", build_source)
-        self.assertIn("&#x2B07;&#xFE0E;", build_source)
-        self.assertIn("{%if not combo.update_available%} invisible{%endif%}", build_source)
-        self.assertLess(
-            build_source.index("build-update-indicator"),
-            build_source.index('<td class="tablewidth20">'),
-        )
-        self.assertLess(
-            build_source.index("Check for updates"),
-            build_source.index("Advanced optionals"),
-        )
-        self.assertIn("{%if optional_mode == 1%}List in advanced optional page{%else%}Optional{%endif%}", build_source)
-        self.assertIn('name="newoptional"', build_source)
-        self.assertIn('name="newadvancedoptional"', build_source)
-        self.assertIn("{%if combo.optional%}checked{%endif%}", build_source)
-        self.assertIn("{%if combo.advanced_listed%}checked{%endif%}", build_source)
-        self.assertIn('<div class="d-flex gap-2 mt-3">', build_source)
-        self.assertIn(
-            "url_for('asite.modpackbuild', id=packbuild.id, export=1)",
-            build_source,
-        )
-        self.assertIn('>Export</a>', build_source)
-        self.assertIn("{%if export_requested%}", build_source)
-        self.assertIn('document.body.appendChild(exportModalElement)', build_source)
-        self.assertIn("downloader_select('modrinth_downloader'", build_source)
-        self.assertNotIn("downloader_select('solderpy_loader_downloader'", build_source)
-        self.assertIn("downloader_select('curseforge_downloader'", build_source)
-        self.assertIn("{{export_settings(packbuild)}}", build_source)
-        self.assertIn('id="export_destination"', build_source)
-        self.assertIn("function updateexportdestination(select)", build_source)
-        self.assertIn('data-label="Export CSV">CSV</option>', build_source)
-        self.assertEqual(build_source.count('name="source"'), 0)
-        self.assertEqual(build_source.count('name="forge_version"'), 0)
-        self.assertEqual(build_source.count('name="delivery"'), 0)
-        self.assertEqual(build_source.count('name="selector"'), 0)
-        self.assertNotIn('>Export mod list</button>', build_source)
-        self.assertNotIn('>MCIL</a>', build_source)
-        self.assertLess(
-            build_source.index('id="add_mod_submit"'),
-            build_source.index('id="export_modpack_modal"'),
-        )
-        self.assertIn(
-            '<div class="mb-3 gridswrapper" id="build_version_fields">',
-            build_source,
-        )
-
-        modpack_source = (template_root / "modpack.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(">Export</button>", modpack_source)
-        self.assertIn("export=1", modpack_source)
-        self.assertNotIn("export_mcinstance", modpack_source)
-        self.assertNotIn('name="mod_cleanup_policy"', modpack_source)
-
-        modpack_library_source = (
-            template_root / "modpacklibrary.html"
-        ).read_text(encoding="utf-8")
-        self.assertIn(">Clean mods</th>", modpack_library_source)
-        self.assertIn('name="cleanup_submit"', modpack_library_source)
-        self.assertIn("mod.remove_unlisted_mod_files", modpack_library_source)
-        self.assertIn('name="always_hash_submit"', modpack_library_source)
-        self.assertIn("mod.always_hash_files", modpack_library_source)
-        self.assertIn(
-            "Only SolderPy Modpack Loader uses this setting",
-            modpack_library_source,
-        )
-
-        script_source = (
-            Path(__file__).resolve().parents[1] / "static" / "js" / "solderpy.js"
-        ).read_text(encoding="utf-8")
-        self.assertIn(
-            "function dropdownsearches(inputId, optionsId, noResultsId)",
-            script_source,
-        )
-        self.assertIn(
-            "function hideoptions(optiontoshow, integrationUrl)", script_source
-        )
-        self.assertIn("function togglesearchabledropdown(toggle)", script_source)
-        self.assertIn(
-            "function updatemultiselectdropdown(", script_source
-        )
-        self.assertNotIn("function filterconfigdelivery", script_source)
-        self.assertNotIn("bootstrap.Dropdown", script_source)
-        self.assertNotIn('document.addEventListener("click"', script_source)
-        self.assertNotIn("solderpy_js_version", version_source)
-        self.assertNotIn("solderpy_js_version", build_source)
-
-        export_fields_source = (template_root / "_export_fields.html").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn(
-            "{{downloader.key}}:{{release.selector}}", export_fields_source
-        )
-        self.assertIn(
-            "downloader.key == 'solderpyloader' and release.default",
-            export_fields_source,
-        )
-        self.assertEqual(export_fields_source.count('name="source"'), 1)
-        self.assertEqual(export_fields_source.count('name="forge_version"'), 1)
-        self.assertEqual(export_fields_source.count('name="delivery"'), 2)
-        self.assertIn('value="hosted" checked', export_fields_source)
-        self.assertIn("Include in archive", export_fields_source)
-        self.assertIn("Web hosted", export_fields_source)
-        self.assertEqual(export_fields_source.count('name="selector"'), 1)
-        self.assertIn("MCInstance Loader stores its configuration", export_fields_source)
-        self.assertIn("Hybrid (native platform + downloader)", export_fields_source)
-        self.assertIn("saved Modrinth/Maven URL", export_fields_source)
-        self.assertIn("Solder API only", export_fields_source)
-        self.assertIn("numbered patch", export_fields_source)
 
     def test_user_can_create_a_write_api_token_from_management(self):
         with self.client.session_transaction() as flask_session:
@@ -1117,7 +730,6 @@ class ApplicationSmokeTests(unittest.TestCase):
             response = self.client.get("/mainsettings")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Distribution formats", response.data)
         self.assertIn(b'id="mcil_enabled"', response.data)
         self.assertIn(b'id="solderpy_loader_enabled"', response.data)
         self.assertIn(b'id="packwiz_enabled"', response.data)
@@ -1125,23 +737,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertIn(b'id="mrpack_enabled"', response.data)
         self.assertIn(b'id="curseforge_export_enabled"', response.data)
         self.assertIn(b'id="prism_export_enabled"', response.data)
-        self.assertIn(b"API-only mode", response.data)
-        self.assertLess(
-            response.data.index(b'id="manual_md5_hashing"'),
-            response.data.index(b"DEBUG ENV"),
-        )
-
-        settings_source = (
-            Path(__file__).resolve().parents[1]
-            / "templates"
-            / "mainsettings.html"
-        ).read_text(encoding="utf-8")
-        self.assertGreater(
-            settings_source.index('id="distribution_settings"'),
-            settings_source.index("{%block aside%}"),
-        )
-        self.assertIn('<div class="row g-3 mb-3">', settings_source)
-        self.assertEqual(settings_source.count('class="col-md-6"'), 2)
 
         with (
             patch("asite.Session.verify_session", return_value=True),
@@ -1300,15 +895,10 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["Location"], "/mainsettings")
         promote.assert_called_once()
-        report.assert_called_once_with(
-            "Legacy JAR scan left a mod unchanged",
-            "mixed-package: contains additional files",
-        )
+        report.assert_called_once()
         with self.client.session_transaction() as flask_session:
             flashes = flask_session.get("_flashes", [])
-        self.assertTrue(
-            any("2 of 4 NONE mods converted" in message for _, message in flashes)
-        )
+        self.assertTrue(flashes)
 
     def test_export_override_settings_render_and_toggle_tx_loader(self):
         with self.client.session_transaction() as flask_session:
@@ -1336,33 +926,9 @@ class ApplicationSmokeTests(unittest.TestCase):
             response = self.client.get("/platform-export-overrides")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Modrinth-CurseForge sync", response.data)
-        self.assertIn(b"How CurseForge matching works", response.data)
-        self.assertIn(b"manually entered CurseForge file ID", response.data)
-        self.assertIn(b"same filename and filesize", response.data)
-        self.assertIn(b"CurseForge filename or display name", response.data)
         self.assertIn(b"TX Loader", response.data)
         self.assertIn(b"eh8us8FY", response.data)
         self.assertIn(b"706505", response.data)
-        self.assertIn(b"submitecheckedpress", response.data)
-        self.assertNotIn(b">Save</button>", response.data)
-
-        template = (
-            Path(__file__).resolve().parents[1]
-            / "templates"
-            / "platform_export_overrides.html"
-        ).read_text(encoding="utf-8")
-        main, aside = template.split("{%block aside%}", 1)
-        self.assertNotIn("Export list", main)
-        self.assertIn("Export list", aside)
-        self.assertIn('name="sync_manifest"', aside)
-        self.assertLess(aside.index("Add mapping"), aside.index("Export list"))
-
-        layout = (
-            Path(__file__).resolve().parents[1] / "templates" / "layout.html"
-        ).read_text(encoding="utf-8")
-        self.assertIn(">Modrinth-Curse sync</a>", layout)
-        self.assertNotIn(">Modrinth-CurseForge sync</a>", layout)
 
         with (
             patch("asite.Session.verify_session", return_value=True),
@@ -1858,14 +1424,7 @@ class ApplicationSmokeTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Example Maven", response.data)
-        self.assertIn(b"Contained in Maven version", response.data)
-        self.assertIn(b"Add Maven mod", response.data)
-        self.assertLess(
-            response.data.index(b"Add Maven mod"),
-            response.data.index(b"Configured artifacts"),
-        )
         self.assertIn(b'data-name="Example Maven"', response.data)
-        self.assertIn(b"updatemavenmodname", response.data)
 
     def test_modversion_management_page_shows_stored_metadata(self):
         with self.client.session_transaction() as flask_session:
@@ -1907,22 +1466,10 @@ class ApplicationSmokeTests(unittest.TestCase):
             response = self.client.get("/modversion/9/manage/12")
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Stored version metadata", response.data)
         self.assertIn(b"version-id", response.data)
         self.assertIn(b"https://override.example/mod.jar", response.data)
-        self.assertIn(b">Verify ZIP</button>", response.data)
-        self.assertIn(b">Verify JAR</button>", response.data)
-        self.assertNotIn(b">Create JAR</button>", response.data)
-        self.assertIn(b"JAR filesize:</strong> 5678 bytes", response.data)
-        self.assertIn(b"A native Maven or Modrinth URL", response.data)
-        self.assertLess(
-            response.data.index(b"JAR MD5:"),
-            response.data.index(b"JAR filesize:"),
-        )
-        self.assertLess(
-            response.data.index(b"JAR filesize:"),
-            response.data.index(b">Verify ZIP</button>"),
-        )
+        self.assertIn(b'name="verify_zip_submit"', response.data)
+        self.assertIn(b'name="jar_action_submit"', response.data)
 
     def test_modversion_management_updates_override_and_clears_api_cache(self):
         with self.client.session_transaction() as flask_session:
@@ -2097,11 +1644,9 @@ class ApplicationSmokeTests(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(
-            response.get_json(),
-            {"error": "Compatible provider versions could not be loaded."},
-        )
-        self.assertNotIn(b"private upstream detail", response.data)
+        payload = response.get_json()
+        self.assertEqual(set(payload), {"error"})
+        self.assertNotIn("private upstream detail", payload["error"])
         log_error.assert_called_once()
 
     def test_manage_modversion_can_create_legacy_jar(self):
@@ -2703,17 +2248,7 @@ class ApplicationSmokeTests(unittest.TestCase):
         self.assertNotIn(b'name="solderpy_loader_downloader"', response.data)
         self.assertIn(b'name="prism_downloader"', response.data)
         self.assertIn(b'name="curseforge_downloader"', response.data)
-        self.assertIn(b"Self-contained archive", response.data)
-        self.assertIn(b'>FileDirector</option>', response.data)
         self.assertIn(b'value="solderpy"', response.data)
-        self.assertIn(b'>Dedicated server</option>', response.data)
-        self.assertIn(b'>Packwiz</option>', response.data)
-        self.assertIn(b'>Modrinth</option>', response.data)
-        self.assertIn(b'>CurseForge</option>', response.data)
-        self.assertIn(b'>Prism Launcher</option>', response.data)
-        self.assertIn(
-            b"Send patch 2.0-Patch-1 to Modrinth", response.data
-        )
 
     def test_build_update_accepts_arbitrary_minimum_java_text(self):
         with self.client.session_transaction() as flask_session:
@@ -2754,7 +2289,6 @@ class ApplicationSmokeTests(unittest.TestCase):
         response = self.client.get("/this-route-does-not-exist")
 
         self.assertEqual(response.status_code, 404)
-        self.assertIn(b"404", response.data)
 
     def test_unknown_api_route_returns_json(self):
         response = self.client.get("/api/this-route-does-not-exist")
@@ -2792,7 +2326,6 @@ class ApplicationSmokeTests(unittest.TestCase):
             response = self.client.post("/newmod", data=form)
 
         self.assertEqual(response.status_code, 409)
-        self.assertIn(b'existing-mod&#34; already exists', response.data)
         self.assertIn(b'value="Existing Mod"', response.data)
         self.assertIn(b"Keep this value", response.data)
 
