@@ -89,6 +89,15 @@ class ProviderTests(unittest.TestCase):
 
         self.assertFalse(http.get.call_args.kwargs["allow_redirects"])
 
+    def test_missing_modrinth_project_reports_that_it_may_not_be_public(self):
+        http = Mock()
+        http.get.return_value = json_response({}, status=404)
+
+        with self.assertRaisesRegex(
+            IntegrationError, "private or unpublished"
+        ):
+            ModrinthProvider(http=http).get_project("PROJECT")
+
     def test_modrinth_lists_all_versions_without_a_minecraft_filter(self):
         http = Mock()
         http.get.return_value = json_response(

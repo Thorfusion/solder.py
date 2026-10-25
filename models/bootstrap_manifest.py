@@ -362,6 +362,9 @@ class BootstrapManifest:
                 "remove_unlisted_mod_files": bool(
                     getattr(modpack, "remove_unlisted_mod_files", False)
                 ),
+                "always_hash_files": bool(
+                    getattr(modpack, "always_hash_files", False)
+                ),
             },
             "optional_mode": {
                 "id": optional_mode_id,
@@ -467,11 +470,17 @@ class BootstrapManifest:
             "removed": removed,
             "update_policy_changed": previous.get(
                 "update_policy",
-                {"remove_unlisted_mod_files": False},
+                {
+                    "remove_unlisted_mod_files": False,
+                    "always_hash_files": False,
+                },
             )
             != current.get(
                 "update_policy",
-                {"remove_unlisted_mod_files": False},
+                {
+                    "remove_unlisted_mod_files": False,
+                    "always_hash_files": False,
+                },
             ),
             "selection_changed": (
                 cls._selection_signature(previous)

@@ -19,12 +19,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  select-runner:
+    name: Select an available runner
+    uses: ./.github/workflows/select-runner.yml
+    with:
+      prefer_self_hosted: ${{ github.event_name != 'pull_request' && github.event_name != 'merge_group' }}
+    permissions:
+      actions: write
+      contents: read
+
   test:
     # Keep this name stable: branch protection requires this exact status check.
     name: solder.py tests
     # The Docker smoke tests probe ports published to runner-local loopback.
     # Keep this job on the same host as its Docker daemon for every event.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       PIPENV_DONT_LOAD_ENV: "1"
@@ -78,7 +87,8 @@ jobs:
   python-security:
     # Keep this name stable if it is selected as a required status check.
     name: Python security
-    runs-on: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ubuntu-latest' || 'self-hosted' }}
+    needs: select-runner
+    runs-on: ${{ needs.select-runner.outputs.runner }}
     timeout-minutes: 20
     env:
       PIPENV_DONT_LOAD_ENV: "1"
@@ -109,7 +119,7 @@ jobs:
   dependency-review:
     name: Review dependency changes
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
 
     steps:
@@ -123,7 +133,8 @@ jobs:
     # Keep this name stable if it is selected as a required status check.
     name: Container security
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ubuntu-latest' || 'self-hosted' }}
+    needs: select-runner
+    runs-on: ${{ needs.select-runner.outputs.runner }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -173,7 +184,8 @@ jobs:
 
   codeql:
     name: Analyze (${{ matrix.language }})
-    runs-on: ${{ (github.event_name == 'pull_request' || github.event_name == 'merge_group') && 'ubuntu-latest' || 'self-hosted' }}
+    needs: select-runner
+    runs-on: ${{ needs.select-runner.outputs.runner }}
     timeout-minutes: 90
     permissions:
       actions: read

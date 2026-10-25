@@ -1,0 +1,21 @@
+name: Self-hosted runner probe
+run-name: Self-hosted runner probe ${{ inputs.probe_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      probe_id:
+        description: Calling workflow run and attempt
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  probe:
+    name: Confirm self-hosted runner availability
+    runs-on: self-hosted
+    timeout-minutes: 2
+    steps:
+      - name: Runner accepted the probe
+        run: echo 'The self-hosted runner is available.'

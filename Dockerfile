@@ -38,7 +38,7 @@ ENV APP_HOST=0.0.0.0
 ENV APP_PORT=5000
 ENV APP_DEBUG=false
 EXPOSE 5000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget --quiet --tries=1 --output-document=- http://127.0.0.1:5000/api/ | grep --quiet '"api":"solder.py"' || exit 1
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=6 \
+    CMD python -c "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('APP_PORT', '5000') + '/api/', timeout=4).close()"
 
-CMD ["sh", "-c", "exec gunicorn -w 1 --threads 8 -b 0.0.0.0:5000 --forwarded-allow-ips=\"${PROXY_IP:-127.0.0.1}\" app:app"]
+CMD ["sh", "-c", "exec gunicorn -w 1 --threads 8 -b \"${APP_HOST:-0.0.0.0}:${APP_PORT:-5000}\" --forwarded-allow-ips=\"${PROXY_IP:-127.0.0.1}\" app:app"]

@@ -288,12 +288,17 @@ Loader and Relauncher themselves. The registered projects are Modrinth
 `5LpwENAj` and CurseForge `1702825`; its required Relauncher dependency is
 Modrinth `zCFNaupz` or CurseForge `1491728`.
 
-Saving distribution settings with SolderPy Modpack Loader, MCInstance Loader, or
-FileDirector enabled automatically imports the corresponding Modrinth projects
-into the mod library. SolderPy Modpack Loader also imports Relauncher. They are stored
-as `BOOTSTRAP`, so they can hold imported upstream versions and manual
-CurseForge file IDs without being treated as ordinary build content. The
-operation is idempotent: existing linked projects are reused.
+When SolderPy Modpack Loader, MCInstance Loader, or FileDirector changes from
+disabled to enabled, solder.py attempts to import the corresponding Modrinth
+projects into the mod library. SolderPy Modpack Loader also attempts to import
+Relauncher. They are stored as `BOOTSTRAP`, so they can hold imported upstream
+versions and manual CurseForge file IDs without being treated as ordinary build
+content. The operation is idempotent: existing linked projects are reused.
+Distribution settings are saved before this best-effort import, so an
+unavailable, private, or unpublished Modrinth project produces a warning but
+does not discard the settings change. Unrelated settings saves do not retry
+projects belonging to downloaders that were already enabled. Disable and
+re-enable an affected downloader to retry its automatic import.
 
 SolderPy Modpack Loader uses the dedicated bootstrap API, so it supports basic
 optionals and advanced independent or exact-one groups without generating a

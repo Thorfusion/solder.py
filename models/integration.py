@@ -208,6 +208,11 @@ class ExternalProvider:
                 raise IntegrationError(
                     f"{self.provider.title()} rejected the request."
                 )
+            if response.status_code == 404:
+                raise IntegrationError(
+                    f"{self.provider.title()} could not find the requested "
+                    "resource; it may be private or unpublished."
+                )
             response.raise_for_status()
             payload = response.json()
         except IntegrationError:

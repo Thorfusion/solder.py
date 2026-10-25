@@ -39,7 +39,15 @@ class CsrfProtection:
         if not expected or not supplied or not hmac.compare_digest(
             str(expected), str(supplied)
         ):
-            abort(400, description="The form expired or came from another site.")
+            abort(
+                400,
+                description=(
+                    "The form expired or its session cookie was not accepted. "
+                    "Reload the page and make sure cookies are enabled. If this "
+                    "server is intentionally accessed over plain HTTP, its "
+                    "SESSION_COOKIE_SECURE setting must be False."
+                ),
+            )
 
     @classmethod
     def inject_forms(cls, response):

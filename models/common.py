@@ -1,4 +1,5 @@
 import os
+
 from dotenv import load_dotenv
 
 from models.database import Database
@@ -17,20 +18,27 @@ write_api = False
 legacy_modversion_adding = False
 debug = False
 reverse_proxy = False
-session_cookie_secure = True
+
+
+def resolve_session_cookie_secure(configured_value):
+    """Return an explicit override, or None for request-scheme detection."""
+    if configured_value is not None and configured_value.strip():
+        return configured_value.strip().lower() in [
+            "true", "t", "1", "yes", "y"
+        ]
+    return None
+
 
 host = os.getenv("APP_HOST")
 port = os.getenv("APP_PORT")
 app_url = os.getenv("APP_URL")
 curseforge_api_key = os.getenv("CURSEFORGE_API_KEY")
+session_cookie_secure = resolve_session_cookie_secure(
+    os.getenv("SESSION_COOKIE_SECURE")
+)
 
 if os.getenv("PROXY_IP"):
     reverse_proxy = True
-
-if os.getenv("SESSION_COOKIE_SECURE"):
-    session_cookie_secure = os.getenv("SESSION_COOKIE_SECURE").lower() in [
-        "true", "t", "1", "yes", "y"
-    ]
 
 if os.getenv("NEW_USER"):
     new_user = os.getenv("NEW_USER").lower() in ["true", "t", "1", "yes", "y"]

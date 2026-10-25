@@ -195,11 +195,17 @@ class WriteApiStore:
         remove_unlisted_mod_files = values.pop(
             "remove_unlisted_mod_files", False
         )
+        always_hash_files = values.pop("always_hash_files", False)
         try:
             with _transaction() as cur:
                 modpack_id = cls._insert(cur, "modpacks", {**values, "user_id": user_id})
-                if remove_unlisted_mod_files:
-                    ModpackBootstrapSettings.apply(cur, modpack_id, True)
+                if remove_unlisted_mod_files or always_hash_files:
+                    ModpackBootstrapSettings.apply(
+                        cur,
+                        modpack_id,
+                        remove_unlisted_mod_files,
+                        always_hash_files,
+                    )
                 cls._grant_modpack_access(cur, user_id, modpack_id)
                 cur.execute(
                     MODPACK_WITH_BOOTSTRAP_SQL + " WHERE modpacks.id = %s",
@@ -215,14 +221,21 @@ class WriteApiStore:
         remove_unlisted_mod_files = values.pop(
             "remove_unlisted_mod_files", None
         )
+        always_hash_files = values.pop("always_hash_files", None)
         try:
             with _transaction() as cur:
                 cls._update(cur, "modpacks", modpack["id"], values)
-                if remove_unlisted_mod_files is not None:
+                if (remove_unlisted_mod_files is not None or
+                        always_hash_files is not None):
                     ModpackBootstrapSettings.apply(
                         cur,
                         modpack["id"],
-                        remove_unlisted_mod_files,
+                        modpack.get("remove_unlisted_mod_files", False)
+                        if remove_unlisted_mod_files is None
+                        else remove_unlisted_mod_files,
+                        modpack.get("always_hash_files", False)
+                        if always_hash_files is None
+                        else always_hash_files,
                     )
                 cur.execute(
                     MODPACK_WITH_BOOTSTRAP_SQL + " WHERE modpacks.id = %s",
@@ -238,6 +251,10 @@ class WriteApiStore:
         remove_unlisted_mod_files = values.pop(
             "remove_unlisted_mod_files",
             source.get("remove_unlisted_mod_files", False),
+        )
+        always_hash_files = values.pop(
+            "always_hash_files",
+            source.get("always_hash_files", False),
         )
         try:
             with _transaction() as cur:
@@ -260,8 +277,13 @@ class WriteApiStore:
                     "optional_mode": source.get("optional_mode", 0),
                 }
                 modpack_id = cls._insert(cur, "modpacks", new_values)
-                if remove_unlisted_mod_files:
-                    ModpackBootstrapSettings.apply(cur, modpack_id, True)
+                if remove_unlisted_mod_files or always_hash_files:
+                    ModpackBootstrapSettings.apply(
+                        cur,
+                        modpack_id,
+                        remove_unlisted_mod_files,
+                        always_hash_files,
+                    )
                 cls._grant_modpack_access(cur, user_id, modpack_id)
                 cur.execute(
                     "SELECT * FROM builds WHERE modpack_id = %s ORDER BY id",

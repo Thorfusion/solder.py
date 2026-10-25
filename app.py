@@ -10,6 +10,7 @@ from flask import Flask, jsonify, render_template, request
 from models.common import debug, host, port, api_only, management_only, migratetechnic, new_user, DB_IS_UP, database_needs_setup, reverse_proxy, write_api, session_cookie_secure
 from models.csrf import CsrfProtection
 from models.cache_revision import CacheRevision
+from models.session_cookie import RequestSchemeSessionInterface
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 __version__ = solderpy_version
@@ -19,7 +20,7 @@ app.json.sort_keys = False
 
 if reverse_proxy:
     app.wsgi_app = ProxyFix(
-        app.wsgi_app, x_for=1
+        app.wsgi_app, x_for=1, x_proto=1
     )
 
 if management_only == False or DB_IS_UP != 2:
@@ -45,6 +46,7 @@ if not api_only:
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=session_cookie_secure,
     )
+    app.session_interface = RequestSchemeSessionInterface()
 
     @app.before_request
     def verify_management_csrf():

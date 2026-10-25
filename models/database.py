@@ -228,6 +228,7 @@ class Database:
     MODPACK_BOOTSTRAP_SETTINGS_TABLE_SQL = """CREATE TABLE IF NOT EXISTS modpack_bootstrap_settings (
         modpack_id INT NOT NULL PRIMARY KEY,
         remove_unlisted_mod_files TINYINT(1) NOT NULL DEFAULT 0,
+        always_hash_files TINYINT(1) NOT NULL DEFAULT 0,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     )""" + TABLE_OPTIONS
@@ -469,6 +470,16 @@ class Database:
         ),
     )
 
+    MODPACK_BOOTSTRAP_SETTINGS_COLUMN_MIGRATIONS = (
+        (
+            "modpack_bootstrap_settings",
+            "always_hash_files",
+            "ALTER TABLE modpack_bootstrap_settings "
+            "ADD COLUMN always_hash_files TINYINT(1) NOT NULL DEFAULT 0 "
+            "AFTER remove_unlisted_mod_files",
+        ),
+    )
+
     NOTES_COLUMN_MIGRATIONS = (
         (
             "mods",
@@ -504,6 +515,7 @@ class Database:
         *INTEGRATION_COLUMN_MIGRATIONS,
         *MAVEN_COLUMN_MIGRATIONS,
         *TECHNIC_SOLDERPY_LOADER_COLUMN_MIGRATIONS,
+        *MODPACK_BOOTSTRAP_SETTINGS_COLUMN_MIGRATIONS,
         (
             "modpacks",
             "optional_mode",

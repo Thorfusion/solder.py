@@ -34,6 +34,7 @@ from models.mod_dependency import (  # noqa: E402
 )
 from models.mod_bootstrap_settings import ModBootstrapSettings  # noqa: E402
 from models.modpack import Modpack  # noqa: E402
+from models.modpack_bootstrap_settings import ModpackBootstrapSettings  # noqa: E402
 from models.modversion import (  # noqa: E402
     IncompatibleModVersionError,
     MissingDependencyVersionError,
@@ -958,6 +959,19 @@ class ModelBehaviorTests(unittest.TestCase):
             "remove_unlisted_mod_files TINYINT(1) NOT NULL DEFAULT 0",
             schema,
         )
+        self.assertIn(
+            "always_hash_files TINYINT(1) NOT NULL DEFAULT 0",
+            schema,
+        )
+        self.assertIn(
+            "always_hash_files",
+            "\n".join(
+                query
+                for table, _column, query
+                in Database.MODPACK_BOOTSTRAP_SETTINGS_COLUMN_MIGRATIONS
+                if table == "modpack_bootstrap_settings"
+            ),
+        )
 
         modpack = Modpack._from_row(
             {
@@ -972,14 +986,20 @@ class ModelBehaviorTests(unittest.TestCase):
                 "hidden": 0,
                 "private": 0,
                 "remove_unlisted_mod_files": 1,
+                "always_hash_files": 1,
             }
         )
         self.assertTrue(modpack.remove_unlisted_mod_files)
+        self.assertTrue(modpack.always_hash_files)
 
     def test_user_modpack_list_includes_cleanup_policy(self):
         connection = Mock()
         cursor = connection.cursor.return_value
-        cursor.fetchall.return_value = [{"id": 1, "remove_unlisted_mod_files": 1}]
+        cursor.fetchall.return_value = [{
+            "id": 1,
+            "remove_unlisted_mod_files": 1,
+            "always_hash_files": 1,
+        }]
 
         with patch(
             "models.modpack.Database.get_connection", return_value=connection
@@ -989,8 +1009,32 @@ class ModelBehaviorTests(unittest.TestCase):
         query, parameters = cursor.execute.call_args.args
         self.assertIn("LEFT JOIN modpack_bootstrap_settings", query)
         self.assertIn("AS remove_unlisted_mod_files", query)
+        self.assertIn("AS always_hash_files", query)
         self.assertEqual(parameters, (7, 7))
         self.assertTrue(rows[0]["remove_unlisted_mod_files"])
+        self.assertTrue(rows[0]["always_hash_files"])
+        cursor.close.assert_called_once_with()
+        connection.close.assert_called_once_with()
+
+    def test_saving_always_hash_policy_does_not_overwrite_cleanup_policy(self):
+        connection = Mock()
+        cursor = connection.cursor.return_value
+
+        with patch(
+            "models.modpack_bootstrap_settings.Database.get_connection",
+            return_value=connection,
+        ):
+            ModpackBootstrapSettings.save_always_hash_files(3, True)
+
+        update_query, update_parameters = cursor.execute.call_args_list[0].args
+        self.assertIn("always_hash_files", update_query)
+        self.assertNotIn("remove_unlisted_mod_files = VALUES", update_query)
+        self.assertEqual(update_parameters, (3, True))
+        self.assertIn(
+            "remove_unlisted_mod_files = 0",
+            cursor.execute.call_args_list[1].args[0],
+        )
+        connection.commit.assert_called_once_with()
         cursor.close.assert_called_once_with()
         connection.close.assert_called_once_with()
 

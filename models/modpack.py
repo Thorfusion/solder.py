@@ -8,7 +8,11 @@ MODPACK_WITH_BOOTSTRAP_SQL = """SELECT modpacks.*,
           COALESCE(
               modpack_bootstrap_settings.remove_unlisted_mod_files,
               0
-          ) AS remove_unlisted_mod_files
+          ) AS remove_unlisted_mod_files,
+          COALESCE(
+              modpack_bootstrap_settings.always_hash_files,
+              0
+          ) AS always_hash_files
    FROM modpacks
    LEFT JOIN modpack_bootstrap_settings
        ON modpack_bootstrap_settings.modpack_id = modpacks.id"""
@@ -32,6 +36,7 @@ class Modpack:
         enable_server=0,
         optional_mode=0,
         remove_unlisted_mod_files=False,
+        always_hash_files=False,
     ):
         self.id = id
         self.name = name
@@ -48,6 +53,7 @@ class Modpack:
         self.enable_server = enable_server
         self.optional_mode = int(optional_mode or 0)
         self.remove_unlisted_mod_files = bool(remove_unlisted_mod_files)
+        self.always_hash_files = bool(always_hash_files)
 
     @classmethod
     def _from_row(cls, row):
@@ -68,6 +74,7 @@ class Modpack:
             row.get("enable_server", 0),
             row.get("optional_mode", 0),
             row.get("remove_unlisted_mod_files", 0),
+            row.get("always_hash_files", 0),
         )
 
     @staticmethod
@@ -214,7 +221,7 @@ class Modpack:
                            WHERE cm.modpack_id = modpacks.id
                              AND c.uuid = %s
                       )
-                   ORDER BY modpacks.id ASC""",
+                   ORDER BY modpacks.id ASC""",  # nosec B608
                 (cid,),
             )
             return [cls._from_row(row) for row in cur.fetchall()]
@@ -254,7 +261,7 @@ class Modpack:
                               WHERE cm.modpack_id = modpacks.id
                                 AND c.uuid = %s
                           )
-                     )""",
+                     )""",  # nosec B608
                 (slug, cid),
             )
             row = cur.fetchone()
@@ -299,7 +306,11 @@ class Modpack:
                           COALESCE(
                               modpack_bootstrap_settings.remove_unlisted_mod_files,
                               0
-                          ) AS remove_unlisted_mod_files
+                          ) AS remove_unlisted_mod_files,
+                          COALESCE(
+                              modpack_bootstrap_settings.always_hash_files,
+                              0
+                          ) AS always_hash_files
                    FROM modpacks
                    LEFT JOIN modpack_bootstrap_settings
                        ON modpack_bootstrap_settings.modpack_id = modpacks.id

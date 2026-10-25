@@ -988,6 +988,7 @@ class ApiTests(unittest.TestCase):
             optional_mode=1,
             enable_server=1,
             remove_unlisted_mod_files=True,
+            always_hash_files=True,
             get_build_api=Mock(return_value=build),
         )
         get_modpack.return_value = modpack
@@ -1054,6 +1055,7 @@ class ApiTests(unittest.TestCase):
         self.assertTrue(
             payload["update_policy"]["remove_unlisted_mod_files"]
         )
+        self.assertTrue(payload["update_policy"]["always_hash_files"])
         self.assertEqual(payload["groups"][0]["key"], "World style")
         self.assertEqual(payload["groups"][0]["minimum"], 1)
         self.assertEqual(payload["groups"][0]["maximum"], 1)
@@ -1179,6 +1181,7 @@ class ApiTests(unittest.TestCase):
             optional_mode=0,
             enable_server=1,
             remove_unlisted_mod_files=False,
+            always_hash_files=False,
             get_build_api=Mock(return_value=build),
         )
         self.sign_bootstrap_manifest.side_effect = (
