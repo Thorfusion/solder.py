@@ -456,7 +456,9 @@ function zipfile_md5(file) {
 function download_blob(file, filename) {
     const objectUrl = URL.createObjectURL(file);
     const link = document.createElement("a");
-    link.href = objectUrl;
+    // Keep DOM-derived file data behind a URI-encoding boundary before it is
+    // assigned to a URL-valued DOM property.
+    link.href = encodeURI(objectUrl);
     link.download = filename;
     link.hidden = true;
 
