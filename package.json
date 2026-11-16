@@ -5,7 +5,7 @@
   "description": "Version tracking for browser libraries vendored in static; Node.js is not used at runtime.",
   "license": "UNLICENSED",
   "dependencies": {
-    "bootstrap": "5.3.8",
+    "bootstrap": "5.3.9",
     "js-md5": "0.9.2",
     "jszip": "3.10.2"
   }
