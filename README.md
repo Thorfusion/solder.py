@@ -818,11 +818,17 @@ After the first login:
 
 ## Development environment
 
+Use Python 3.14.
+
 ```bash
 python -m pip install pipenv
-python -m pipenv install
+python -m pipenv sync
 python -m pipenv run app
+```
 
+To update the dependency versions in `Pipfile.lock`, run:
+
+```bash
 python -m pipenv lock
 ```
 
@@ -841,7 +847,7 @@ python -m pipenv run python -m unittest discover -s tests -v
 The production container and both MySQL fixtures can be tested locally with:
 
 ```bash
-docker build --tag solderpy:database-test .
+docker build --pull --tag solderpy:database-test .
 python -m pipenv run python tests/database_container_smoke.py solderpy:database-test
 ```
 
@@ -852,15 +858,8 @@ GitHub Actions also verifies the lock file, imports/compiles the Python sources,
 checks the installed dependency set, and runs the same suite on every pull
 request and trusted branch push.
 
-The weekly dependency updater needs a repository secret named
-`DEPENDENCY_UPDATE_TOKEN`. Use a fine-grained token from an automation account
-with access only to this repository and only **Contents: read/write** and
-**Pull requests: read/write**. This separate token ensures the updater's pull
-request triggers the required checks; the workflow never approves or merges it.
-
-To prevent an untested pull request from being merged, add a branch rule for
-`main`, enable **Require status checks to pass before merging**, and select the
-`solder.py tests` check. The workflow also supports GitHub's merge queue.
+Dependabot checks Python, Docker, and GitHub Actions dependencies weekly.
+Routine updates merge after required CI checks pass.
 
 ## Security checks
 

@@ -5,7 +5,8 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 12 * * 2'
+    - cron: '0 12 * * *'
+  workflow_dispatch:
 
 jobs:
   select-runner:
@@ -36,5 +37,8 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          pull: true
+          # Rerun apk upgrade even when the floating base tag has not changed.
+          no-cache: ${{ github.event_name == 'schedule' }}
           push: true
           tags: thorfusion/solderpy:latest

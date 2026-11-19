@@ -34,5 +34,6 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          pull: true
           push: true
           tags: thorfusion/solderpy:${{ github.ref_name }}

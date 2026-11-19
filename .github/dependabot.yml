@@ -1,6 +1,21 @@
 version: 2
 updates:
-  # Python updates are grouped, tested, and proposed by update_dependencies.yml.
+  # Keep routine updates together; major upgrades remain separate for review.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "03:30"
+      timezone: Europe/Oslo
+    groups:
+      python:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -12,6 +27,9 @@ updates:
       actions:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: docker
     directory: /
@@ -24,16 +42,7 @@ updates:
       docker:
         patterns:
           - "*"
+        update-types:
+          - patch
 
-  # These packages are vendored into static/; Node.js is not used in production.
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday
-      time: "04:15"
-      timezone: Europe/Oslo
-    groups:
-      frontend:
-        patterns:
-          - "*"
+  # Browser libraries in static/ are updated manually, together with package.json.

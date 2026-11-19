@@ -4,3 +4,11 @@
 **/.gitignore
 **/readme.md
 **/test.jar
+.git
+.cache
+.venv
+node_modules
+Lib
+Scripts
+**/__pycache__
+**/*.pyc

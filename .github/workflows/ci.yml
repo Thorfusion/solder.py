@@ -74,6 +74,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          pull: true
           load: true
           push: false
           tags: solderpy:test-${{ github.sha }}
@@ -155,12 +156,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version-file: Pipfile
 
       - name: Build image
         uses: docker/build-push-action@v7
         with:
           context: .
+          pull: true
           load: true
           push: false
           tags: solderpy:security-${{ github.sha }}
@@ -219,3 +221,68 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: /language:${{ matrix.language }}
+
+  dependency-automerge:
+    name: Merge tested routine dependency updates
+    needs: [test, dependency-review, codeql]
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      checks: read
+      statuses: read
+    steps:
+      # No checkout: this job only reads GitHub metadata and never executes PR code.
+      - name: Verify Dependabot update metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v3
+
+      - name: Merge passing patch and minor updates
+        id: merge
+        if: >-
+          ((steps.metadata.outputs.package-ecosystem == 'pip' ||
+            steps.metadata.outputs.package-ecosystem == 'github_actions') &&
+           (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+            steps.metadata.outputs.update-type == 'version-update:semver-minor')) ||
+          (steps.metadata.outputs.package-ecosystem == 'docker' &&
+           steps.metadata.outputs.update-type == 'version-update:semver-patch')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # A maintainer adding commits changes this into a manually reviewed PR.
+          other_commits=$(gh api --paginate "repos/$GH_REPO/pulls/$PR_NUMBER/commits" \
+            --jq '.[] | select(.author.login != "dependabot[bot]" or .commit.verification.verified != true) | .sha')
+          if [[ -n "$other_commits" ]]; then
+            echo 'Additional or unverified commits require manual review.'
+            exit 0
+          fi
+          # CodeQL's final result can arrive shortly after its analysis jobs finish.
+          gh pr checks "$PR_URL" --required --watch --fail-fast --interval 10
+          # Merge this tested commit now; never queue approval for a future head.
+          gh pr merge "$PR_URL" --squash --match-head-commit "$PR_HEAD_SHA"
+          echo 'merged=true' >> "$GITHUB_OUTPUT"
+
+      - name: Rebuild latest after an automatic merge
+        if: steps.merge.outputs.merged == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          # A merge made with GITHUB_TOKEN does not trigger push workflows.
+          # Dispatch explicitly; the scheduled rebuild also refreshes the base image.
+          merged_at=$(gh pr view "$PR_URL" --json mergedAt --jq '.mergedAt // empty')
+          base=$(gh pr view "$PR_URL" --json baseRefName --jq '.baseRefName')
+          if [[ -n "$merged_at" && "$base" == 'main' ]]; then
+            gh workflow run deploy_docker_latest.yml --ref main
+          fi

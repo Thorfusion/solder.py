@@ -1,4 +1,4 @@
-FROM python:3.13-alpine AS dependencies
+FROM python:3.14-alpine AS dependencies
 
 WORKDIR /build
 COPY /Pipfile /build/
@@ -8,7 +8,7 @@ RUN python -m pip install --no-cache-dir pipenv \
     && PIPENV_DONT_LOAD_ENV=1 pipenv requirements --hash > requirements.txt \
     && python -m pip install --no-cache-dir --ignore-installed --prefix=/install --require-hashes --requirement requirements.txt
 
-FROM python:3.13-alpine
+FROM python:3.14-alpine
 
 RUN apk upgrade --no-cache \
     && python -m pip uninstall --yes pip
